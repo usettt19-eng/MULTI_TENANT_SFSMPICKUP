@@ -110,6 +110,12 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.user_tenant_ids(), public.is_super_admin(),
                            public.is_staff_of(uuid), public.is_parent_of(uuid) FROM PUBLIC;
+-- Supabase concede EXECUTE a `anon` por privilegios por defecto, así que
+-- revocar de PUBLIC no basta: hay que revocárselo al rol explícitamente. Si no,
+-- quedan expuestas como endpoints en /rest/v1/rpc/ sin iniciar sesión.
+REVOKE EXECUTE ON FUNCTION public.user_tenant_ids(), public.is_super_admin(),
+                           public.is_staff_of(uuid), public.is_parent_of(uuid) FROM anon;
+-- `authenticated` sí lo necesita: las políticas invocan estas funciones.
 GRANT  EXECUTE ON FUNCTION public.user_tenant_ids(), public.is_super_admin(),
                            public.is_staff_of(uuid), public.is_parent_of(uuid) TO authenticated;
 
