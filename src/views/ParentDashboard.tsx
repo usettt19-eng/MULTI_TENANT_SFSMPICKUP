@@ -1,0 +1,979 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { supabase, logActivity } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { QRCodeSVG } from 'qrcode.react';
+import { 
+  MapPin, Navigation, CheckCircle2, AlertTriangle, 
+  Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
+  Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
+  UserPlus, QrCode, Share2, Trash2, MessageSquare
+} from 'lucide-react';
+
+export function ParentDashboard() {
+  const { profile, profiles, switchProfile, signOut } = useAuth();
+  const [students, setStudents] = useState<any[]>([]);
+  const [pendingForms, setPendingForms] = useState<any[]>([]);
+  const [activeForm, setActiveForm] = useState<any | null>(null);
+  const [answers, setAnswers] = useState<any>({});
+  
+  const [distance, setDistance] = useState<number | null>(null);
+  const [isInside, setIsInside] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'announced' | 'pickup_active' | 'released'>('idle');
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // School selector state
+  const [showSchoolSelector, setShowSchoolSelector] = useState(false);
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showReplacementModal, setShowReplacementModal] = useState(false);
+  const [replacementName, setReplacementName] = useState('');
+  const [replacementPhone, setReplacementPhone] = useState('');
+  const [isSubmittingReplacement, setIsSubmittingReplacement] = useState(false);
+
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [deliveryMessage, setDeliveryMessage] = useState('');
+  const [deliveryLink, setDeliveryLink] = useState('');
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+  
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  // Geofencing states from Database
+  const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
+  const [parentPos, setParentPos] = useState<{lat: number, lng: number} | null>(null);
+  const [isLocationEnabled, setIsLocationEnabled] = useState(false);
+  const watchId = useRef<number | null>(null);
+
+  const playBeep = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+      
+      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.error("Audio playback failed", e);
+    }
+  };
+
+  useEffect(() => {
+    if (profile) {
+      initDashboard();
+
+      // Listen for TEACHER AUTHORIZATIONS & NEW NOTIFICATIONS
+      const channel = supabase
+        .channel(`parent-feed-${profile.id}-${Math.random()}`)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'pickup_events',
+          filter: `parent_id=eq.${profile.id}`
+        }, (payload) => {
+          const record = payload.new || payload.old;
+          if (record && record.tenant_id && record.tenant_id !== profile.tenant_id) return;
+          console.log('Pickup event update received:', payload);
+          checkActivePickups();
+        })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`
+        }, (payload) => {
+          const record = payload.new;
+          if (record && record.tenant_id && record.tenant_id !== profile.tenant_id) return;
+          console.log('New notification received:', payload);
+          setNotifications(prev => [payload.new, ...prev]);
+          playBeep();
+          checkActivePickups();
+          
+          if (payload.new.title.includes('camino') || payload.new.title.includes('Autorizado')) {
+            setSuccessMessage(payload.new.message);
+            setTimeout(() => setSuccessMessage(null), 10000);
+          }
+        })
+        .subscribe((status) => {
+          console.log(`Real-time channel status for parent ${profile.id}:`, status);
+        });
+
+      return () => {
+        stopLocationWatch();
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [profile]);
+
+  const initDashboard = async () => {
+    setLoading(true);
+    await fetchStudents();
+    await fetchSchoolSettings();
+    await checkActivePickups();
+    await fetchPendingForms();
+    await fetchNotifications();
+    setLoading(false);
+  };
+
+  const handleRequestReplacement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replacementName || !replacementPhone) return;
+    
+    setIsSubmittingReplacement(true);
+    try {
+      // 1. Insert via API to bypass RLS limits for parents
+      const response = await fetch('/api/requests/replacement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parent_id: profile.id,
+          replacement_name: replacementName,
+          replacement_phone: replacementPhone,
+          tenant_id: profile?.tenant_id
+        })
+      });
+
+      if (!response.ok) {
+         const errorData = await response.json();
+         throw new Error(errorData.error || 'Error al enviar la solicitud');
+      }
+
+      // 2. Also log it for history
+      await logActivity(
+        'REPLACEMENT_REQUEST',
+        `SOLICITUD DE REEMPLAZO: ${profile.first_name} solicita autorizar a ${replacementName}.`,
+        profile.first_name,
+        { replacement_name: replacementName },
+        profile?.tenant_id
+      );
+
+      alert("Solicitud enviada. La recepción revisará y autorizará el reemplazo en breve.");
+      setShowReplacementModal(false);
+      setReplacementName('');
+      setReplacementPhone('');
+    } catch (err: any) {
+      console.error(err);
+      alert("Error al enviar solicitud: " + (err.message || String(err)));
+    } finally {
+      setIsSubmittingReplacement(false);
+    }
+  };
+
+  const handleRequestDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliveryMessage) return;
+    
+    setIsSubmittingReplacement(true);
+    try {
+      const response = await fetch('/api/requests/replacement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parent_id: profile.id,
+          replacement_name: `[MENSAJE] ${deliveryMessage}`,
+          replacement_phone: deliveryLink || 'N/A',
+          tenant_id: profile?.tenant_id
+        })
+      });
+
+      if (!response.ok) {
+         const errorData = await response.json();
+         throw new Error(errorData.error || 'Error al enviar la solicitud');
+      }
+
+      await logActivity(
+        'REPLACEMENT_REQUEST',
+        `MENSAJE/DELIVERY: ${profile.first_name} envió un aviso: ${deliveryMessage}.`,
+        profile.first_name,
+        { delivery: true, message: deliveryMessage },
+        profile?.tenant_id
+      );
+
+      alert("Aviso enviado correctamente a recepción.");
+      setShowDeliveryModal(false);
+      setDeliveryMessage('');
+      setDeliveryLink('');
+    } catch (err: any) {
+      console.error(err);
+      alert("Error al enviar aviso: " + (err.message || String(err)));
+    } finally {
+      setIsSubmittingReplacement(false);
+    }
+  };
+
+  const authorizedReplacements = React.useMemo(() => {
+    try {
+      const data = JSON.parse(profile?.additional_tutor_name || '{}');
+      return data.replacements || [];
+    } catch (e) {
+      return [];
+    }
+  }, [profile?.additional_tutor_name]);
+
+  const handleShareQR = (replacement: any) => {
+    const qrData = JSON.stringify({
+      type: 'replacement_pickup',
+      parent_id: profile.id,
+      parent_name: `${profile.first_name} ${profile.last_name}`,
+      replacement_name: replacement.name,
+      token: replacement.token,
+      students: students.map(s => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }))
+    });
+    
+    if (navigator.share) {
+      navigator.share({
+        title: 'Pase de Recogida - Safe SmartPickUP',
+        text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
+        url: window.location.origin + '/external?qr=' + encodeURIComponent(qrData)
+      }).catch(console.error);
+    } else {
+      alert("QR listo para ser escaneado desde tu pantalla.");
+    }
+  };
+
+  const fetchSchoolSettings = async () => {
+    const { data } = await supabase.from('school_settings').select('*').single();
+    if (data) {
+      setSchoolPos({ 
+        lat: Number(data.latitude), 
+        lng: Number(data.longitude), 
+        radius: data.pickup_radius_meters 
+      });
+    }
+  };
+
+  const fetchStudents = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('parent_students')
+      .select('students(*)')
+      .eq('parent_id', profile.id)
+      .eq('students.tenant_id', profile.tenant_id);
+    
+    if (data) setStudents(data.map(d => d.students).filter(Boolean));
+  };
+
+  const fetchNotifications = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', profile.id)
+      .eq('tenant_id', profile.tenant_id)
+      .order('created_at', { ascending: false });
+    if (data) setNotifications(data);
+  };
+
+  const markAsRead = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  };
+
+  const deleteNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const { data, error } = await supabase.from('notifications').delete().eq('id', id).select();
+    if (error) {
+      console.error('Error deleting notification:', error);
+    } else if (data && data.length > 0) {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } else {
+      console.warn('No notification was deleted. Check RLS policies.');
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    const { data, error } = await supabase.from('notifications').delete().eq('user_id', profile.id).select();
+    if (error) {
+      console.error('Error clearing notifications:', error);
+    } else if (data && data.length > 0) {
+      setNotifications([]);
+    } else {
+      console.warn('No notifications were deleted. Check RLS policies.');
+    }
+  };
+
+  const fetchPendingForms = async () => {
+    if (!profile?.tenant_id) return;
+    // 1. Get student grades for THIS tenant
+    const { data: stdData } = await supabase
+      .from('parent_students')
+      .select('students(grade, tenant_id)')
+      .eq('parent_id', profile.id)
+      .eq('students.tenant_id', profile.tenant_id);
+    
+    const grades = stdData?.map(d => (d.students as any)?.grade).filter(Boolean) || [];
+    if (grades.length === 0) return;
+
+    // 2. Fetch active forms targeted to these grades in this tenant
+    const { data: formsData } = await supabase
+      .from('forms')
+      .select('*, form_questions(*)')
+      .eq('is_active', true)
+      .eq('tenant_id', profile.tenant_id)
+      .overlaps('target_grades', grades);
+
+    // 3. Filter forms NOT answered yet
+    const { data: responses } = await supabase
+      .from('form_responses')
+      .select('form_id')
+      .eq('parent_id', profile.id)
+      .eq('tenant_id', profile.tenant_id);
+    
+    const answeredIds = responses?.map(r => r.form_id) || [];
+    setPendingForms(formsData?.filter(f => !answeredIds.includes(f.id)) || []);
+  };
+
+  const checkActivePickups = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('pickup_events')
+      .select('*, student:students(first_name, tenant_id)')
+      .eq('parent_id', profile.id)
+      .eq('tenant_id', profile.tenant_id)
+      .in('status', ['announced', 'in_queue', 'released']);
+
+    if (data && data.length > 0) {
+      // Prioritize 'released' status: if any child is released, show the released UI
+      const hasReleased = data.some(event => event.status === 'released');
+      if (hasReleased) {
+        setStatus('released');
+      } else {
+        setStatus('pickup_active');
+      }
+    } else {
+      setStatus('idle');
+    }
+  };
+
+  const handleFinalConfirm = async () => {
+    setLoading(true);
+    const { error } = await supabase
+      .from('pickup_events')
+      .update({ status: 'completed', completed_at: new Date() })
+      .eq('parent_id', profile.id)
+      .eq('status', 'released');
+
+    if (!error) {
+      await logActivity(
+        'PICKUP', 
+        `CICLO COMPLETADO: ${profile.first_name} confirmó reunión con el alumno en el vehículo.`,
+        profile.first_name,
+        {},
+        profile?.tenant_id
+      );
+      setStatus('idle');
+      alert("¡Ciclo de recogida terminado! Buen viaje.");
+    }
+    setLoading(false);
+  };
+
+  const handleSubmitForm = async () => {
+    if (!activeForm || students.length === 0) return;
+    
+    setLoading(true);
+    try {
+      // 1. We link the response to the context of the children
+      const firstStudentId = students[0]?.id;
+      
+      const { data, error } = await supabase
+        .from('form_responses')
+        .insert({
+          form_id: activeForm.id,
+          parent_id: profile.id,
+          student_id: firstStudentId,
+          answers: answers,
+          tenant_id: profile?.tenant_id
+        })
+        .select();
+
+      if (error) throw error;
+
+      await logActivity(
+        'FORM', 
+        `AUTORIZACIÓN FIRMADA: ${profile.first_name} firmó "${activeForm.title}" para su hijo.`,
+        profile.first_name,
+        {},
+        profile?.tenant_id
+      );
+
+      setActiveForm(null);
+      setAnswers({});
+      await fetchPendingForms();
+      alert("¡Respuesta enviada con éxito!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Error al enviar: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleLocation = () => {
+    if (!isLocationEnabled) startLocationWatch();
+    else stopLocationWatch();
+    setIsLocationEnabled(!isLocationEnabled);
+  };
+
+  const startLocationWatch = () => {
+    if ("geolocation" in navigator) {
+      watchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setParentPos({ lat: latitude, lng: longitude });
+          const dist = calculateDistance(latitude, longitude, schoolPos.lat, schoolPos.lng);
+          setDistance(dist);
+          setIsInside(dist <= schoolPos.radius);
+          setErrorMessage(null);
+        },
+        (error) => {
+          setErrorMessage("Permiso de ubicación denegado.");
+          setIsLocationEnabled(false);
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+  };
+
+  const stopLocationWatch = () => {
+    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    setParentPos(null);
+    setDistance(null);
+    setIsInside(false);
+    setErrorMessage(null);
+  };
+
+  // Auto-refresh every 3 seconds when inside perimeter
+  useEffect(() => {
+    let interval: number | null = null;
+    
+    if (isInside && isLocationEnabled) {
+      interval = window.setInterval(() => {
+        console.log('Parent inside school perimeter: Auto-refreshing status...');
+        checkActivePickups();
+        fetchNotifications();
+        fetchPendingForms();
+      }, 3000);
+    } else {
+      // General fallback polling every 10 seconds when outside or location disabled
+      interval = window.setInterval(() => {
+        console.log('Parent fallback polling...');
+        checkActivePickups();
+        fetchNotifications();
+        fetchPendingForms();
+      }, 10000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isInside, isLocationEnabled]);
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  const handleAnnounceArrival = async () => {
+    if (!isInside) return;
+    setLoading(true);
+    for (const student of students) {
+      const { error: insertError } = await supabase.from('pickup_events').insert({
+        parent_id: profile.id,
+        student_id: student.id,
+        status: 'announced',
+        announced_at: new Date().toISOString(),
+        tenant_id: profile.tenant_id
+      });
+      
+      if (insertError) {
+        console.error('Error inserting pickup event:', insertError);
+        setErrorMessage(`Error al anunciar: ${insertError.message}`);
+        setLoading(false);
+        return;
+      }
+    }
+
+    await logActivity(
+      'PICKUP', 
+      `ANUNCIO DE LLEGADA: ${profile.first_name} llegó a la escuela mediante GPS.`,
+      profile.first_name,
+      { coords: [parentPos?.lat, parentPos?.lng] },
+      profile?.tenant_id
+    );
+
+    setStatus('pickup_active');
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-body pb-10">
+      {/* Header */}
+      <div className="bg-gradient-to-br from-indigo-700 to-violet-800 text-white p-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden">
+        <div className="relative z-10 flex justify-between items-center mb-6">
+          <div className="flex items-center gap-4">
+            <img src={profile?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-16 h-16 rounded-[1.25rem] object-cover border-2 border-white" />
+            <div>
+              {profiles.length > 1 ? (
+                <button 
+                  onClick={() => setShowSchoolSelector(!showSchoolSelector)}
+                  className="flex items-center gap-1 group"
+                >
+                  <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest opacity-80 group-hover:opacity-100">
+                    {profile?.tenant?.name || 'Cambiar Colegio'}
+                  </p>
+                  <ChevronRight className={`w-3 h-3 text-indigo-100 transition-transform ${showSchoolSelector ? 'rotate-90' : ''}`} />
+                </button>
+              ) : (
+                <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest opacity-80">
+                  {profile?.tenant?.name || 'Safe SmartPickUP'}
+                </p>
+              )}
+              <h1 className="text-2xl font-black">{profile?.first_name} {profile?.last_name}</h1>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 relative transition-all active:scale-95"
+            >
+              <Bell className="w-5 h-5 text-white" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-indigo-700 animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <button onClick={signOut} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95">
+              <LogOut className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* School Selector Dropdown */}
+        {showSchoolSelector && (
+          <div className="absolute top-24 left-6 right-6 z-50 bg-white rounded-3xl shadow-2xl border border-indigo-100 p-2 animate-in slide-in-from-top-4 duration-300">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] p-3">Selecciona tu colegio</p>
+            {profiles.map((p: any) => (
+              <button
+                key={p.tenant_id}
+                onClick={() => {
+                  switchProfile(p.tenant_id);
+                  setShowSchoolSelector(false);
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${p.tenant_id === profile?.tenant_id ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-50 text-slate-600 font-bold'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${p.tenant_id === profile?.tenant_id ? 'bg-white/20' : 'bg-slate-100'}`}>
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm">{p.tenant?.name || 'Sede Alterna'}</span>
+                </div>
+                {p.tenant_id === profile?.tenant_id && <CheckCircle2 className="w-4 h-4" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div onClick={toggleLocation} className={`p-4 rounded-2xl flex items-center justify-between border cursor-pointer ${isLocationEnabled ? 'bg-emerald-500/20 border-emerald-400/30' : 'bg-white/10 border-white/10'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${isLocationEnabled ? 'bg-emerald-500 text-white' : 'bg-white/20'}`}>
+              <Navigation className="w-4 h-4" />
+            </div>
+            <span className="text-xs font-black">Compartir Ubicación GPS</span>
+          </div>
+          <div className={`w-12 h-6 rounded-full relative border-2 ${isLocationEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-400/20 border-white/10'}`}>
+             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isLocationEnabled ? 'left-6' : 'left-0.5'}`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-md mx-auto p-6 space-y-6">
+        
+        {errorMessage && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 border border-red-100 animate-in slide-in-from-top-2">
+            <AlertTriangle className="w-5 h-5" />
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="bg-emerald-50 text-emerald-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 border border-emerald-100 animate-in slide-in-from-top-2">
+            <CheckCircle2 className="w-5 h-5" />
+            {successMessage}
+          </div>
+        )}
+
+        {/* Pending Autorizations Alert */}
+        {pendingForms.length > 0 && (
+          <section className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-indigo-100 overflow-hidden relative group animate-in slide-in-from-top-4">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 blur-2xl" />
+            <div className="flex items-center gap-3 mb-4">
+               <div className="p-2 bg-indigo-600 rounded-xl">
+                  <Bell className="w-4 h-4 text-white animate-ring" />
+               </div>
+               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Autorización Pendiente</h3>
+            </div>
+            <div className="space-y-3">
+              {pendingForms.map(form => (
+                <button 
+                  key={form.id} 
+                  onClick={() => setActiveForm(form)}
+                  className="w-full bg-slate-50 p-4 rounded-2xl flex items-center justify-between border border-transparent hover:border-indigo-200 transition-all text-left"
+                >
+                  <div>
+                    <h4 className="font-bold text-slate-700 text-xs">{form.title}</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Grados: {form.target_grades?.join(', ')}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-indigo-400" />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <div className={`p-6 rounded-[2.5rem] shadow-xl border-2 ${isInside ? 'bg-white border-emerald-500/30' : 'bg-slate-50 border-slate-200'}`}>
+          <div className="flex items-center gap-4 mb-4">
+            <div className={`p-4 rounded-2xl ${isInside ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200'}`}>
+              <MapPin className="w-7 h-7" />
+            </div>
+            <div>
+              <h2 className={`font-black uppercase text-[10px] tracking-widest ${isInside ? 'text-emerald-600' : 'text-slate-400'}`}>
+                Sede: {profile?.tenant?.name || 'Colegio'}
+              </h2>
+              <p className="text-xl font-black">{isInside ? '¡Llegaste!' : `${Math.round(distance || 0)}m de distancia`}</p>
+            </div>
+          </div>
+        </div>
+
+        {status === 'released' ? (
+          <div className="bg-amber-500 p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden animate-bounce-short">
+             <div className="flex items-center gap-4 mb-6">
+               <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center border border-white/10">
+                 <UserCheck className="w-7 h-7 text-white" />
+               </div>
+               <div>
+                  <h3 className="text-xl font-black">¡Alumno en camino!</h3>
+                  <p className="text-[10px] font-bold text-amber-100 uppercase">El maestro ha autorizado la salida</p>
+               </div>
+             </div>
+             <button 
+               onClick={handleFinalConfirm}
+               disabled={loading}
+               className="w-full bg-white text-amber-600 font-black py-5 rounded-[2rem] shadow-xl active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
+             >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'CONFIRMAR REUNIÓN / FINALIZAR'}
+             </button>
+          </div>
+        ) : status === 'pickup_active' ? (
+          <div className="bg-indigo-900 p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
+             <div className="flex items-center gap-4 mb-6">
+               <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-white/10">
+                 <Bell className="w-7 h-7 text-emerald-400 animate-bounce" />
+               </div>
+               <h3 className="text-xl font-black">Maestro Notificado</h3>
+             </div>
+             <div className="bg-white/10 p-6 rounded-3xl flex flex-col items-center">
+               <span className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-2">Tu PIN</span>
+               <span className="text-4xl font-black tracking-[0.3em]">{profile?.pin_code}</span>
+             </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <button 
+              onClick={handleAnnounceArrival}
+              disabled={!isInside || !isLocationEnabled || loading}
+              className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && isLocationEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
+            >
+               <ShieldCheck className="w-10 h-10" />
+               <span className="text-2xl font-black">ANUNCIAR LLEGADA</span>
+            </button>
+            
+            <button 
+              onClick={() => setShowReplacementModal(true)}
+              className="w-full p-6 bg-white border-2 border-dashed border-indigo-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-indigo-600 font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all"
+            >
+              <UserPlus className="w-5 h-5" />
+              Solicitar Reemplazo de Recogida
+            </button>
+            <button 
+              onClick={() => setShowDeliveryModal(true)}
+              className="w-full p-6 bg-white border-2 border-dashed border-amber-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-amber-600 font-black text-xs uppercase tracking-widest hover:bg-amber-50 transition-all"
+            >
+              <MessageSquare className="w-5 h-5" />
+              Enviar Mensaje / Delivery
+            </button>
+          </div>
+        )}
+
+        {/* Authorized Replacements Section */}
+        {authorizedReplacements.length > 0 && (
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Reemplazos Autorizados</h3>
+            <div className="grid grid-cols-1 gap-4">
+              {authorizedReplacements.map((rep: any, idx: number) => (
+                <div key={idx} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6">
+                  <div className="bg-slate-50 p-3 rounded-2xl">
+                    <QRCodeSVG 
+                      value={JSON.stringify({
+                        type: 'replacement_pickup',
+                        parent_id: profile.id,
+                        token: rep.token,
+                        replacement_name: rep.name
+                      })} 
+                      size={64}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-black text-slate-800 text-sm">{rep.name}</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">{rep.phone}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-emerald-100">Activo</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleShareQR(rep)}
+                    className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <div className="space-y-4">
+           {students.map(s => (
+             <div key={s.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
+                <img src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"} className="w-16 h-16 rounded-2xl object-cover" />
+                <div className="flex-1">
+                   <h5 className="font-bold text-slate-800">{s.first_name} {s.last_name}</h5>
+                   <p className="text-[11px] text-slate-500 font-black uppercase">{s.grade || 'Grado no asignado'}</p>
+                </div>
+             </div>
+           ))}
+        </div>
+      </div>
+
+      {/* FORM MODAL */}
+      {activeForm && (
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+           <div className="bg-white w-full max-w-lg rounded-t-[3rem] sm:rounded-[3rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10">
+              <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                 <div className="flex items-center gap-4">
+                    <div className="p-3 bg-indigo-600 rounded-2xl text-white">
+                       <FileText className="w-6 h-6" />
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900">{activeForm.title}</h2>
+                 </div>
+                 <button onClick={() => setActiveForm(null)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto">
+                 <p className="text-slate-500 text-sm font-medium">{activeForm.description}</p>
+                 <div className="space-y-6">
+                    {activeForm.form_questions.map((q: any) => (
+                      <div key={q.id} className="space-y-4">
+                         <label className="text-sm font-black text-slate-800 leading-tight block">{q.question_text}</label>
+                         {q.question_type === 'boolean' ? (
+                           <div className="grid grid-cols-2 gap-4">
+                             <button
+                               onClick={() => setAnswers({...answers, [q.id]: 'SI'})}
+                               className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'SI' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                             >SÍ, AUTORIZO</button>
+                             <button
+                               onClick={() => setAnswers({...answers, [q.id]: 'NO'})}
+                               className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'NO' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                             >NO AUTORIZO</button>
+                           </div>
+                         ) : (
+                           <input 
+                             placeholder="Escribe tu respuesta..."
+                             onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
+                             className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium outline-none focus:ring-2 ring-indigo-500/20"
+                           />
+                         )}
+                      </div>
+                    ))}
+                 </div>
+              </div>
+              <div className="p-8 border-t border-slate-50 flex gap-4">
+                 <button onClick={handleSubmitForm} disabled={loading} className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4" /> ENVIAR FIRMA DIGITAL</>}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+      {/* REPLACEMENT REQUEST MODAL */}
+      {showReplacementModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+               <div className="flex items-center gap-3">
+                 <div className="p-2 bg-indigo-600 rounded-xl text-white">
+                   <UserPlus className="w-5 h-5" />
+                 </div>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Solicitar Reemplazo</h3>
+               </div>
+               <button onClick={() => setShowReplacementModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+             </div>
+             <form onSubmit={handleRequestReplacement} className="p-8 space-y-6">
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Ingresa los datos de la persona que recogerá a los niños hoy. El administrador recibirá tu solicitud y generará un código QR seguro.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre Completo</label>
+                    <input 
+                      required
+                      value={replacementName}
+                      onChange={e => setReplacementName(e.target.value)}
+                      placeholder="Ej. Juan Pérez"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">WhatsApp / Teléfono</label>
+                    <input 
+                      required
+                      value={replacementPhone}
+                      onChange={e => setReplacementPhone(e.target.value)}
+                      placeholder="+507 ..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={isSubmittingReplacement}
+                  className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR SOLICITUD'}
+                </button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELIVERY MODAL */}
+      {showDeliveryModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+               <div className="flex items-center gap-3">
+                 <div className="p-2 bg-amber-600 rounded-xl text-white">
+                   <MessageSquare className="w-5 h-5" />
+                 </div>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Aviso / Delivery</h3>
+               </div>
+               <button onClick={() => setShowDeliveryModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+             </div>
+             <form onSubmit={handleRequestDelivery} className="p-8 space-y-6">
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Envía un mensaje a recepción. Ejemplo: "Enviaré un pedido por Uber Eats" o "Pasaré dejando una encomienda". Puedes incluir un enlace si lo tienes.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Mensaje / Detalle</label>
+                    <textarea 
+                      required
+                      value={deliveryMessage}
+                      onChange={e => setDeliveryMessage(e.target.value)}
+                      placeholder="Ej. Mi hijo olvidó su termo, enviaré un Uber Flash a dejarlo."
+                      className="w-full min-h-[100px] bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enlace / Link (Opcional)</label>
+                    <input 
+                      value={deliveryLink}
+                      onChange={e => setDeliveryLink(e.target.value)}
+                      placeholder="Ej. https://ubereats.com/..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={isSubmittingReplacement}
+                  className="w-full bg-amber-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-amber-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR AVISO'}
+                </button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* NOTIFICATIONS MODAL */}
+      {showNotifications && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+             <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+               <div>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Centro de Mensajes</h3>
+                 {notifications.length > 0 && (
+                   <button 
+                    onClick={clearAllNotifications}
+                    className="text-[10px] font-black text-rose-500 uppercase mt-1 hover:text-rose-600 transition-colors"
+                   >
+                     Limpiar todo
+                   </button>
+                 )}
+               </div>
+               <button onClick={() => setShowNotifications(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+             </div>
+             <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3">
+               {notifications.length === 0 ? (
+                 <div className="py-12 text-center">
+                   <Bell className="w-10 h-10 text-slate-100 mx-auto mb-2" />
+                   <p className="text-slate-300 font-bold italic text-xs">Buzón vacío</p>
+                 </div>
+               ) : (
+                 notifications.map(n => (
+                   <div 
+                    key={n.id} 
+                    onClick={() => markAsRead(n.id)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer group relative ${n.is_read ? 'bg-white border-slate-100 opacity-60' : 'bg-indigo-50 border-indigo-100 shadow-sm'}`}
+                   >
+                     <div className="flex justify-between items-start mb-1 pr-6">
+                        <h4 className="text-xs font-black text-slate-800">{n.title}</h4>
+                        {!n.is_read && <span className="w-2 h-2 bg-rose-500 rounded-full" />}
+                     </div>
+                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{n.message}</p>
+                     <span className="text-[8px] font-black text-slate-300 uppercase mt-2 block">{new Date(n.created_at).toLocaleString()}</span>
+                     
+                     {n.is_read && (
+                       <button 
+                          onClick={(e) => deleteNotification(e, n.id)}
+                          className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                     )}
+                   </div>
+                 ))
+               )}
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

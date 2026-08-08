@@ -1,0 +1,278 @@
+import React, { useEffect, useState } from 'react';
+import { supabase, logActivity } from '../lib/supabase';
+import { TopNav } from '../components/TopNav';
+import { 
+  UserPlus, Check, X, Loader2, MessageSquare, 
+  Clock, Shield, UserCheck, Trash2, Bell
+} from 'lucide-react';
+
+export function RequestsCenter() {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const playArrivalSound = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.error("Audio failed", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests(true);
+
+    const channel = supabase
+      .channel(`replacement_requests_${Math.random()}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'replacement_requests'
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          playArrivalSound();
+        }
+        fetchRequests(false);
+      })
+      .subscribe();
+
+    // Fallback polling every 10 seconds
+    const pollInterval = window.setInterval(() => {
+      console.log('RequestsCenter fallback polling...');
+      fetchRequests(false);
+    }, 10000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, []);
+
+  const fetchRequests = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    const { data } = await supabase
+      .from('replacement_requests')
+      .select('*, parent:profiles(first_name, last_name, tenant_id)')
+      .order('created_at', { ascending: false });
+    
+    if (data) setRequests(data);
+    setLoading(false);
+  };
+
+  const handleProcessRequest = async (req: any, status: 'approved' | 'rejected') => {
+    setProcessingId(req.id);
+    try {
+      const parentId = req.parent_id;
+
+      if (status === 'approved' && parentId) {
+        // 1. Fetch parent profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('additional_tutor_name')
+          .eq('id', parentId)
+          .single();
+
+        if (profile) {
+          let additionalData: any = {};
+          try {
+            additionalData = JSON.parse(profile.additional_tutor_name || '{}');
+          } catch (e) {
+            additionalData = { is_staff: false, replacements: [] };
+          }
+
+          if (!additionalData.replacements) additionalData.replacements = [];
+
+          // Add the new replacement
+          const newReplacement = {
+            name: req.replacement_name,
+            phone: req.replacement_phone,
+            token: crypto.randomUUID().slice(0, 8),
+            created_at: new Date().toISOString()
+          };
+
+          additionalData.replacements.push(newReplacement);
+
+          // 2. Update profile
+          await supabase
+            .from('profiles')
+            .update({ additional_tutor_name: JSON.stringify(additionalData) })
+            .eq('id', parentId);
+
+          // 3. Notify parent
+          await supabase.from('notifications').insert({
+            user_id: parentId,
+            title: 'Reemplazo Autorizado',
+            message: `Tu solicitud para ${req.replacement_name} ha sido aprobada. El código QR ya está disponible en tu panel.`,
+            type: 'success'
+          });
+        }
+      } else if (status === 'rejected' && parentId) {
+        // Notify parent of rejection
+        await supabase.from('notifications').insert({
+          user_id: parentId,
+          title: 'Solicitud de Reemplazo Rechazada',
+          message: `Tu solicitud para ${req.replacement_name} no pudo ser procesada en este momento. Por favor contacta a recepción.`,
+          type: 'error'
+        });
+      }
+
+      // 4. Update request status
+      await supabase
+        .from('replacement_requests')
+        .update({ status: status })
+        .eq('id', req.id);
+
+      // 5. Log the action
+      await logActivity(
+        'SECURITY',
+        `${status === 'approved' ? 'APROBACIÓN' : 'RECHAZO'} DE REEMPLAZO: Solicitud de ${req.parent?.first_name} para ${req.replacement_name}.`,
+        'Recepcionista',
+        {},
+        req.parent?.tenant_id
+      );
+
+      fetchRequests();
+    } catch (error) {
+      console.error('Error processing request:', error);
+      alert('Error al procesar la solicitud.');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+      <TopNav title="Centro de Solicitudes" subtitle="Gestión de Reemplazos y Permisos Especiales" />
+
+      <div className="p-6 max-w-5xl mx-auto w-full space-y-8 animate-in slide-in-from-bottom-4">
+        <header className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              Bandeja de Entrada <MessageSquare className="w-8 h-8 text-indigo-600" />
+            </h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">Procesa las solicitudes de reemplazo enviadas por los padres.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monitoreo en Vivo</span>
+          </div>
+        </header>
+
+        {loading && requests.length === 0 ? (
+          <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
+        ) : requests.length === 0 ? (
+          <div className="bg-white rounded-[2.5rem] p-16 text-center shadow-sm border border-slate-100">
+            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Check className="w-10 h-10 text-slate-300" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800">¡Todo al día!</h3>
+            <p className="text-slate-400 font-medium mt-2">No hay solicitudes pendientes de procesamiento.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {requests.map((req) => {
+              const isPending = req.status === 'pending';
+              const isApproved = req.status === 'approved';
+              const isRejected = req.status === 'rejected';
+
+              return (
+                <div 
+                  key={req.id} 
+                  className={`bg-white rounded-[2rem] p-6 shadow-sm border transition-all ${isPending ? 'border-indigo-100 hover:border-indigo-300' : 'border-slate-100 opacity-75'}`}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex items-start gap-5">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isPending ? 'bg-indigo-50 text-indigo-600' : isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                        {isPending && !req.replacement_name?.startsWith('[MENSAJE]') && <UserPlus className="w-7 h-7" />}
+                        {isPending && req.replacement_name?.startsWith('[MENSAJE]') && <MessageSquare className="w-7 h-7" />}
+                        {isApproved && <UserCheck className="w-7 h-7" />}
+                        {isRejected && <X className="w-7 h-7" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-black text-slate-800 text-lg">{req.parent?.first_name} {req.parent?.last_name}</h3>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest ${isPending ? 'bg-amber-100 text-amber-700' : isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {isPending ? 'Pendiente' : isApproved ? 'Aprobado/Leído' : 'Rechazado/Archivado'}
+                          </span>
+                        </div>
+                        {req.replacement_name?.startsWith('[MENSAJE]') ? (
+                          <div className="text-sm text-slate-500 font-medium leading-relaxed">
+                            <span className="inline-block bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-black tracking-widest mb-1">MENSAJE / AVISO</span><br/>
+                            <p className="whitespace-pre-wrap">{req.replacement_name.replace('[MENSAJE] ', '')}</p>
+                            {req.replacement_phone && req.replacement_phone !== 'N/A' && (
+                              <p className="mt-2"><a href={req.replacement_phone} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{req.replacement_phone}</a></p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                            Solicita autorizar a <span className="text-slate-900 font-bold">{req.replacement_name}</span> con teléfono <span className="text-slate-900 font-bold">{req.replacement_phone}</span> para la recogida de hoy.
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 mt-3">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(req.created_at).toLocaleString()}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
+                            <Shield className="w-3.5 h-3.5" />
+                            ID: {req.id.slice(0, 8)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isPending && (
+                      <div className="flex items-center gap-3 shrink-0">
+                        {req.replacement_name?.startsWith('[MENSAJE]') ? (
+                          <button 
+                            onClick={() => handleProcessRequest(req, 'approved')}
+                            disabled={processingId === req.id}
+                            className="px-6 py-3 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 flex items-center gap-2"
+                          >
+                            {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            MARCAR COMO LEÍDO
+                          </button>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleProcessRequest(req, 'rejected')}
+                              disabled={processingId === req.id}
+                              className="px-6 py-3 bg-slate-100 text-slate-600 font-black text-xs rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all flex items-center gap-2"
+                            >
+                              {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                              RECHAZAR
+                            </button>
+                            <button 
+                              onClick={() => handleProcessRequest(req, 'approved')}
+                              disabled={processingId === req.id}
+                              className="px-6 py-3 bg-indigo-600 text-white font-black text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
+                            >
+                              {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              APROBAR Y GENERAR QR
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,9 @@
+{
+  "name": "  Safe_Smart_Pickup Multi Tenant ",
+  "description": "Student pickup management system with guardian verification and real-time parent notifications. Multitenant",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": []
+}
