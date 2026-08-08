@@ -1,246 +1,339 @@
 -- ============================================================================
--- AISLAMIENTO ENTRE COLEGIOS (multi-tenant RLS)
+-- AISLAMIENTO ENTRE COLEGIOS + CIERRE DE ACCESO PÚBLICO
 -- ============================================================================
 --
--- Completa lo que quedó comentado en multi_tenant_migration.sql y
--- multi_profile_support.sql: aplica las políticas de aislamiento a las tablas
--- de datos, no solo a `tenants`.
+-- Estado que corrige (verificado contra la base de producción):
 --
--- Soporta el caso de un padre con hijos en VARIOS colegios: la comprobación es
--- de PERTENENCIA (¿existe una fila en profiles que te vincule a este tenant?),
--- no de igualdad contra un único tenant. La subconsulta escalar del template
--- original —`tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid())`—
--- lanzaría "more than one row returned by a subquery" en ese escenario.
+--  1. ~30 políticas con `TO public USING (true)`. En Postgres `public` incluye
+--     al rol `anon`, o sea la clave que viaja en el bundle JS. Cualquiera que
+--     abriera la aplicación podía leer alertas de salud, medicación, incidentes,
+--     perfiles y auditoría de LOS TRES COLEGIOS — y escribir en pickup_events,
+--     medication_schedule, forms y school_settings.
 --
--- ¡¡LEE EL PASO 0 ANTES DE EJECUTAR!! Aplicar esto con datos sin tenant_id
--- hace que esos datos desaparezcan de la aplicación.
+--  2. Sin aislamiento por tenant: is_admin() devuelve true si eres admin en
+--     CUALQUIER colegio.
+--
+--  3. La política de `tenants` usa una subconsulta escalar que lanzará
+--     "more than one row" en cuanto un padre tenga hijos en dos colegios.
+--
+-- IMPORTANTE: las políticas PERMISSIVE se combinan con OR. Por eso este script
+-- ELIMINA las existentes antes de crear las nuevas: añadir una política
+-- estricta junto a una `USING (true)` no cierra nada.
+--
+-- ORDEN DE EJECUCIÓN:  Paso 0 (pre-vuelo) -> rellenar tenant_id -> Pasos 1..8
 --
 -- ============================================================================
 
 
 -- ============================================================================
--- PASO 0 — PRE-VUELO (solo lectura, no modifica nada)
+-- PASO 0 — PRE-VUELO. Solo lectura.
 -- ============================================================================
--- 0.a  Filas huérfanas: tenant_id se añadió como NULLABLE, así que las filas
---      anteriores a la migración multi-tenant lo tienen en NULL. Con RLS
---      activo, `tenant_id IN (...)` sobre NULL da NULL -> la fila NO se ve.
---      Si esta consulta devuelve conteos > 0, RELLENA tenant_id ANTES de seguir.
+-- Con RLS activo, `tenant_id IN (...)` sobre NULL da NULL: la fila NO se ve.
+-- En la última revisión había 11 pickup_events, 39 audit_logs y 1 profile sin
+-- tenant_id. RELLÉNALOS ANTES DE SEGUIR o desaparecerán de la aplicación.
 
 DO $$
-DECLARE
-  t text;
-  n bigint;
+DECLARE t text; n bigint;
   tablas text[] := ARRAY[
     'audit_logs','camera_detections','compliance_action_items','compliance_resources',
     'compliance_status','daily_visitors','exit_doors','form_questions','form_responses',
     'forms','grade_doors','health_alerts','medication_schedule','notifications',
     'pickup_events','profiles','regulation_status','replacement_requests','school_grades',
-    'school_settings','student_incidents','students','vehicles','wellness_logs'
-  ];
+    'school_settings','student_incidents','students','vehicles','wellness_logs'];
 BEGIN
-  RAISE NOTICE '--- Filas con tenant_id NULL (quedarían invisibles tras activar RLS) ---';
+  RAISE NOTICE '--- Filas sin tenant_id (quedarían invisibles) ---';
   FOREACH t IN ARRAY tablas LOOP
     EXECUTE format('SELECT count(*) FROM public.%I WHERE tenant_id IS NULL', t) INTO n;
-    IF n > 0 THEN
-      RAISE NOTICE '  %: % filas SIN tenant_id', rpad(t, 26), n;
-    END IF;
+    IF n > 0 THEN RAISE NOTICE '  %  %', rpad(t,26), n; END IF;
   END LOOP;
 END $$;
 
--- 0.b  Políticas permisivas ya existentes. IMPORTANTE: las políticas PERMISSIVE
---      se combinan con OR. Añadir una política estricta NO cierra un agujero
---      abierto por otra ya existente — hay que ELIMINAR la vieja.
---      Revisa el resultado y borra a mano cualquier `qual` que sea `true`.
-
-SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual
-FROM pg_policies
-WHERE schemaname = 'public'
-ORDER BY tablename, policyname;
+-- Plantilla de relleno. Los colegios existentes son:
+--   3cc8eb07-a7f8-40bd-9886-23ae86bf505f  Colegio Loyola
+--   11d93213-5e22-430c-beb8-2f730cba3a97  Colegio Loyola 2
+--   9543ac45-f058-4596-a7ee-e29191494190  The Casco School
+--
+-- Los datos huérfanos son anteriores a la migración multi-tenant, así que casi
+-- con seguridad pertenecen al primer colegio. VERIFÍCALO antes de ejecutar:
+--
+--   UPDATE public.pickup_events SET tenant_id = '<colegio>' WHERE tenant_id IS NULL;
+--   UPDATE public.audit_logs    SET tenant_id = '<colegio>' WHERE tenant_id IS NULL;
+--   UPDATE public.profiles      SET tenant_id = '<colegio>' WHERE tenant_id IS NULL;
 
 
 -- ============================================================================
 -- PASO 1 — FUNCIONES AUXILIARES
 -- ============================================================================
--- SECURITY DEFINER: necesario para leer `profiles` desde una política sobre
---   `profiles` sin provocar recursión infinita.
--- STABLE: permite al planificador evaluarlas una vez por consulta (InitPlan)
---   en lugar de una vez por fila. Es la diferencia entre escalar y no escalar.
--- SET search_path: obligatorio en SECURITY DEFINER. Sin esto la función es
---   manipulable vía search_path — es el aviso que da el Security Advisor de
---   Supabase sobre is_admin() e is_admin_of() actuales.
+-- SECURITY DEFINER: para poder leer `profiles` desde una política sobre
+--   `profiles` sin recursión infinita.
+-- STABLE: el planificador las evalúa una vez por consulta (InitPlan), no por
+--   fila. Es la diferencia entre escalar y no escalar.
+-- SET search_path: obligatorio en SECURITY DEFINER; sin él la función es
+--   manipulable. Es el aviso del Security Advisor sobre el is_admin() actual.
 
--- Tenants a los que pertenece el usuario actual (0, 1 o N).
 CREATE OR REPLACE FUNCTION public.user_tenant_ids()
-RETURNS SETOF uuid
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public, pg_temp
-AS $$
-  SELECT tenant_id
-  FROM public.profiles
-  WHERE id = auth.uid()
-    AND tenant_id IS NOT NULL;
+RETURNS SETOF uuid LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public, pg_temp AS $$
+  SELECT tenant_id FROM public.profiles
+  WHERE id = auth.uid() AND tenant_id IS NOT NULL;
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_super_admin()
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public, pg_temp
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'super_admin'
-  );
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public, pg_temp AS $$
+  SELECT EXISTS (SELECT 1 FROM public.profiles
+                 WHERE id = auth.uid() AND role = 'super_admin');
 $$;
 
--- Reemplaza a is_admin(): aquel devolvía true si el usuario era admin en
--- CUALQUIER colegio, lo que permitía a un admin del Colegio A operar sobre
--- los datos del Colegio B.
-CREATE OR REPLACE FUNCTION public.is_admin_of(p_tenant_id uuid)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public, pg_temp
-AS $$
+-- Personal del colegio: admin, super_admin, o el flag is_staff que la
+-- aplicación guarda dentro de additional_tutor_name (replicado tal cual de la
+-- política "Staff can manage all requests" para no romper a esos usuarios).
+CREATE OR REPLACE FUNCTION public.is_staff_of(p_tenant_id uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public, pg_temp AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid()
-      AND tenant_id = p_tenant_id
-      AND role IN ('admin', 'super_admin')
-  );
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = auth.uid()
+      AND p.tenant_id = p_tenant_id
+      AND (p.role IN ('admin','super_admin')
+        OR ((p.additional_tutor_name)::jsonb ->> 'is_staff')::boolean IS TRUE)
+  ) OR public.is_super_admin();
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.user_tenant_ids()      FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.is_super_admin()       FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.is_admin_of(uuid)      FROM PUBLIC;
-GRANT  EXECUTE ON FUNCTION public.user_tenant_ids()      TO authenticated;
-GRANT  EXECUTE ON FUNCTION public.is_super_admin()       TO authenticated;
-GRANT  EXECUTE ON FUNCTION public.is_admin_of(uuid)      TO authenticated;
+-- ¿El usuario actual es tutor de este alumno? (vía parent_students)
+CREATE OR REPLACE FUNCTION public.is_parent_of(p_student_id uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public, pg_temp AS $$
+  SELECT EXISTS (SELECT 1 FROM public.parent_students
+                 WHERE student_id = p_student_id AND parent_id = auth.uid());
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.user_tenant_ids(), public.is_super_admin(),
+                           public.is_staff_of(uuid), public.is_parent_of(uuid) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.user_tenant_ids(), public.is_super_admin(),
+                           public.is_staff_of(uuid), public.is_parent_of(uuid) TO authenticated;
 
 
 -- ============================================================================
--- PASO 2 — POLÍTICAS PELIGROSAS QUE HAY QUE ELIMINAR PRIMERO
+-- PASO 2 — ELIMINAR TODAS LAS POLÍTICAS EXISTENTES DE LAS TABLAS AFECTADAS
 -- ============================================================================
-
--- camera_detections: hoy cualquier usuario autenticado de CUALQUIER colegio
--- puede leer todas las fotos de las puertas de TODOS los colegios (USING true),
--- y cualquiera con la clave anon —que viaja en el bundle público— puede
--- insertar registros arbitrarios (TO anon WITH CHECK true).
-DROP POLICY IF EXISTS "Permitir lectura a usuarios autenticados" ON public.camera_detections;
-DROP POLICY IF EXISTS "Permitir inserción desde el backend"      ON public.camera_detections;
-
--- profiles: is_admin() no comprueba tenant.
-DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.profiles;
-DROP POLICY IF EXISTS "Admins read all profiles"       ON public.profiles;
-
-
--- ============================================================================
--- PASO 3 — AISLAMIENTO EN LAS TABLAS DE DATOS (23 tablas)
--- ============================================================================
--- `profiles` se trata aparte en el paso 4.
+-- Necesario: con OR entre políticas permisivas, dejar una `USING (true)` viva
+-- anula todo lo demás.
 
 DO $$
-DECLARE
-  t text;
+DECLARE r record; t text;
   tablas text[] := ARRAY[
     'audit_logs','camera_detections','compliance_action_items','compliance_resources',
     'compliance_status','daily_visitors','exit_doors','form_questions','form_responses',
     'forms','grade_doors','health_alerts','medication_schedule','notifications',
-    'pickup_events','regulation_status','replacement_requests','school_grades',
-    'school_settings','student_incidents','students','vehicles','wellness_logs'
-  ];
+    'parent_students','pickup_events','profiles','regulation_status','replacement_requests',
+    'school_grades','school_settings','student_incidents','students','tenants',
+    'vehicles','wellness_logs'];
 BEGIN
+  FOR r IN SELECT tablename, policyname FROM pg_policies
+           WHERE schemaname='public' AND tablename = ANY(tablas)
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
+  END LOOP;
+
   FOREACH t IN ARRAY tablas LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON public.%I', t);
-    EXECUTE format(
-      'CREATE POLICY tenant_isolation ON public.%I
-         FOR ALL TO authenticated
-         USING      (tenant_id IN (SELECT public.user_tenant_ids()) OR public.is_super_admin())
-         WITH CHECK (tenant_id IN (SELECT public.user_tenant_ids()) OR public.is_super_admin())',
-      t);
-
-    -- Sin este índice, RLS fuerza escaneos que crecen con el total GLOBAL de
-    -- filas, no con el tamaño del colegio.
-    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (tenant_id)',
-                   'idx_' || t || '_tenant_id', t);
   END LOOP;
 END $$;
 
 
 -- ============================================================================
--- PASO 4 — profiles
+-- PASO 3 — CONFIGURACIÓN DEL COLEGIO
 -- ============================================================================
--- Con PK (id, tenant_id), un mismo usuario tiene una fila por colegio. El
--- admin del Colegio A debe ver SOLO la fila de su tenant: no debe enterarse
--- de que ese padre también tiene hijos en el Colegio B (son responsables de
--- datos distintos).
---
--- Las políticas "Users can read/update/insert own profile" de
--- add_user_profile_policies.sql se conservan: son las que permiten el cambio
--- de colegio en la interfaz y el flujo de reclamar cuentas pre-creadas.
+-- Lee cualquier miembro del colegio; escribe solo el personal.
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Admins manage profiles of their tenant" ON public.profiles;
-CREATE POLICY "Admins manage profiles of their tenant" ON public.profiles
-  FOR ALL TO authenticated
-  USING      (public.is_admin_of(tenant_id) OR public.is_super_admin())
-  WITH CHECK (public.is_admin_of(tenant_id) OR public.is_super_admin());
-
-CREATE INDEX IF NOT EXISTS idx_profiles_tenant_id ON public.profiles (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_profiles_id        ON public.profiles (id);
+DO $$
+DECLARE t text;
+  tablas text[] := ARRAY[
+    'exit_doors','grade_doors','school_grades','school_settings','forms','form_questions',
+    'compliance_action_items','compliance_resources','compliance_status','regulation_status'];
+BEGIN
+  FOREACH t IN ARRAY tablas LOOP
+    EXECUTE format(
+      'CREATE POLICY tenant_read ON public.%I FOR SELECT TO authenticated
+         USING (tenant_id IN (SELECT public.user_tenant_ids()))', t);
+    EXECUTE format(
+      'CREATE POLICY staff_write ON public.%I FOR ALL TO authenticated
+         USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id))', t);
+  END LOOP;
+END $$;
 
 
 -- ============================================================================
--- PASO 5 — VERIFICACIÓN
+-- PASO 4 — DATOS DE ALUMNOS (vinculados por student_id)
+-- ============================================================================
+-- El personal ve todo su colegio; el padre SOLO a sus hijos. El aislamiento por
+-- colegio no basta: un padre del Colegio A tampoco debe ver la medicación de
+-- los demás alumnos del Colegio A.
+
+DO $$
+DECLARE t text;
+  tablas text[] := ARRAY['health_alerts','medication_schedule','wellness_logs','student_incidents'];
+BEGIN
+  FOREACH t IN ARRAY tablas LOOP
+    EXECUTE format(
+      'CREATE POLICY parent_read_own_children ON public.%I FOR SELECT TO authenticated
+         USING (tenant_id IN (SELECT public.user_tenant_ids())
+                AND public.is_parent_of(student_id))', t);
+    EXECUTE format(
+      'CREATE POLICY staff_manage ON public.%I FOR ALL TO authenticated
+         USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id))', t);
+  END LOOP;
+END $$;
+
+
+-- ============================================================================
+-- PASO 5 — DATOS PROPIOS DEL PADRE (vinculados por parent_id / user_id)
 -- ============================================================================
 
--- 5.a  Ninguna tabla con tenant_id debe quedarse sin RLS.
-SELECT c.relname AS tabla, c.relrowsecurity AS rls_activo
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public'
-  AND c.relkind = 'r'
-  AND EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = c.relname AND column_name = 'tenant_id'
-  )
-  AND c.relrowsecurity = false;
+DO $$
+DECLARE t text;
+  tablas text[] := ARRAY['pickup_events','form_responses','vehicles','replacement_requests'];
+BEGIN
+  FOREACH t IN ARRAY tablas LOOP
+    EXECUTE format(
+      'CREATE POLICY parent_own_rows ON public.%I FOR ALL TO authenticated
+         USING (parent_id = auth.uid() AND tenant_id IN (SELECT public.user_tenant_ids()))
+         WITH CHECK (parent_id = auth.uid() AND tenant_id IN (SELECT public.user_tenant_ids()))', t);
+    EXECUTE format(
+      'CREATE POLICY staff_manage ON public.%I FOR ALL TO authenticated
+         USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id))', t);
+  END LOOP;
+END $$;
 
--- 5.b  Políticas que siguen abiertas de par en par (qual = true).
-SELECT tablename, policyname, cmd, roles, qual
+CREATE POLICY own_notifications ON public.notifications FOR ALL TO authenticated
+  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY staff_manage ON public.notifications FOR ALL TO authenticated
+  USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id));
+
+
+-- ============================================================================
+-- PASO 6 — SOLO PERSONAL
+-- ============================================================================
+-- camera_detections guarda fotos de las puertas: nunca debe ser legible por
+-- padres ni por anon. El webhook de las cámaras debe escribir con service_role
+-- (que salta RLS), no con la clave anon.
+
+CREATE POLICY staff_only ON public.camera_detections FOR ALL TO authenticated
+  USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id));
+
+CREATE POLICY staff_only ON public.daily_visitors FOR ALL TO authenticated
+  USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id));
+
+-- audit_logs: la aplicación escribe desde el navegador (logActivity), así que
+-- cualquier miembro del colegio puede INSERTAR, pero solo el personal LEE.
+CREATE POLICY member_insert ON public.audit_logs FOR INSERT TO authenticated
+  WITH CHECK (tenant_id IN (SELECT public.user_tenant_ids()));
+CREATE POLICY staff_read ON public.audit_logs FOR SELECT TO authenticated
+  USING (public.is_staff_of(tenant_id));
+
+
+-- ============================================================================
+-- PASO 7 — students, parent_students, profiles, tenants
+-- ============================================================================
+
+CREATE POLICY parent_read_own_children ON public.students FOR SELECT TO authenticated
+  USING (tenant_id IN (SELECT public.user_tenant_ids()) AND public.is_parent_of(id));
+CREATE POLICY staff_manage ON public.students FOR ALL TO authenticated
+  USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id));
+
+-- parent_students no tiene tenant_id: el colegio se deduce del alumno.
+CREATE POLICY parent_read_own_links ON public.parent_students FOR SELECT TO authenticated
+  USING (parent_id = auth.uid());
+CREATE POLICY staff_manage ON public.parent_students FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.students s
+                 WHERE s.id = parent_students.student_id AND public.is_staff_of(s.tenant_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.students s
+                 WHERE s.id = parent_students.student_id AND public.is_staff_of(s.tenant_id)));
+
+-- profiles: el admin del Colegio A ve SOLO la fila de su tenant. No debe
+-- enterarse de que ese padre también tiene hijos en el Colegio B (son
+-- responsables de datos distintos).
+CREATE POLICY own_profile ON public.profiles FOR ALL TO authenticated
+  USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+CREATE POLICY staff_manage_tenant_profiles ON public.profiles FOR ALL TO authenticated
+  USING (public.is_staff_of(tenant_id)) WITH CHECK (public.is_staff_of(tenant_id));
+
+-- tenants: sustituye la subconsulta escalar por pertenencia (IN), que es lo que
+-- permite al padre con hijos en varios colegios ver ambos sin que reviente.
+CREATE POLICY member_read ON public.tenants FOR SELECT TO authenticated
+  USING (id IN (SELECT public.user_tenant_ids()));
+CREATE POLICY super_admin_manage ON public.tenants FOR ALL TO authenticated
+  USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+
+
+-- ============================================================================
+-- PASO 8 — ÍNDICES
+-- ============================================================================
+-- Sin índice por tenant_id, RLS fuerza escaneos que crecen con el total GLOBAL
+-- de filas, no con el tamaño del colegio.
+
+DO $$
+DECLARE t text;
+  tablas text[] := ARRAY[
+    'audit_logs','camera_detections','compliance_action_items','compliance_resources',
+    'compliance_status','daily_visitors','exit_doors','form_questions','form_responses',
+    'forms','grade_doors','health_alerts','medication_schedule','notifications',
+    'pickup_events','profiles','regulation_status','replacement_requests','school_grades',
+    'school_settings','student_incidents','students','vehicles','wellness_logs'];
+BEGIN
+  FOREACH t IN ARRAY tablas LOOP
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (tenant_id)',
+                   'idx_'||t||'_tenant_id', t);
+  END LOOP;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_parent_students_parent  ON public.parent_students (parent_id);
+CREATE INDEX IF NOT EXISTS idx_parent_students_student ON public.parent_students (student_id);
+CREATE INDEX IF NOT EXISTS idx_health_alerts_student       ON public.health_alerts (student_id);
+CREATE INDEX IF NOT EXISTS idx_medication_schedule_student ON public.medication_schedule (student_id);
+CREATE INDEX IF NOT EXISTS idx_wellness_logs_student       ON public.wellness_logs (student_id);
+CREATE INDEX IF NOT EXISTS idx_student_incidents_student   ON public.student_incidents (student_id);
+
+
+-- ============================================================================
+-- PASO 9 — VERIFICACIÓN
+-- ============================================================================
+
+-- 9.a  No debe quedar NINGUNA política abierta a `public`/anon.
+SELECT tablename, policyname, cmd, roles, qual, with_check
 FROM pg_policies
-WHERE schemaname = 'public'
-  AND (qual = 'true' OR with_check = 'true');
+WHERE schemaname='public'
+  AND ('public' = ANY(roles) OR 'anon' = ANY(roles));
 
--- 5.c  Políticas que todavía usan la función sin tenant.
-SELECT tablename, policyname, qual
+-- 9.b  No debe quedar ninguna con USING(true) o WITH CHECK(true).
+SELECT tablename, policyname, cmd, qual, with_check
 FROM pg_policies
-WHERE schemaname = 'public'
-  AND (qual ILIKE '%is_admin()%' OR with_check ILIKE '%is_admin()%');
+WHERE schemaname='public' AND (qual='true' OR with_check='true');
+
+-- 9.c  Ninguna tabla con tenant_id sin RLS.
+SELECT c.relname, c.relrowsecurity
+FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity=false
+  AND EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name=c.relname AND column_name='tenant_id');
+
+-- 9.d  Ninguna política usando todavía is_admin() (sin comprobación de tenant).
+SELECT tablename, policyname FROM pg_policies
+WHERE schemaname='public' AND (qual ILIKE '%is_admin()%' OR with_check ILIKE '%is_admin()%');
 
 
 -- ============================================================================
--- PENDIENTE (requiere las columnas de parent_students)
+-- PASO 10 — OPCIONAL: habilitar de verdad el padre multi-colegio
 -- ============================================================================
--- El aislamiento por colegio NO basta para los padres: un padre del Colegio A
--- tampoco debe ver a TODOS los alumnos del Colegio A, solo a sus hijos.
--- Falta una segunda capa sobre parent_students, del estilo:
+-- Hoy profiles tiene PRIMARY KEY (id), así que un usuario NO PUEDE tener una
+-- fila por colegio: la funcionalidad multi-colegio que contempla AuthContext
+-- no existe en la base. Esto lo habilita.
 --
---   CREATE POLICY students_parent_scope ON public.students
---     FOR SELECT TO authenticated
---     USING (
---       public.is_admin_of(tenant_id)                 -- personal: todo su colegio
---       OR EXISTS (                                   -- padre: solo sus hijos
---         SELECT 1 FROM public.parent_students ps
---         WHERE ps.student_id = students.id AND ps.parent_id = auth.uid()
---       )
---     );
+-- EJECUTAR SOLO DESPUÉS de rellenar el profile con tenant_id NULL: las
+-- columnas de una PK son implícitamente NOT NULL y el ALTER fallaría.
 --
--- Y entonces `tenant_isolation` en `students` debería pasar de FOR ALL a los
--- comandos de escritura, dejando el SELECT a la política de arriba.
+--   ALTER TABLE public.profiles DROP CONSTRAINT profiles_pkey;
+--   ALTER TABLE public.profiles ADD PRIMARY KEY (id, tenant_id);
+--   ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_email_key;
+--   ALTER TABLE public.profiles ADD CONSTRAINT profiles_email_tenant_key UNIQUE (email, tenant_id);
