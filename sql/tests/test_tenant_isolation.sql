@@ -1,4 +1,7 @@
 \pset pager off
+-- Limpieza para que el test sea re-ejecutable sobre la misma base.
+TRUNCATE parent_students, medication_schedule, health_alerts, pickup_events,
+         students, profiles, tenants RESTART IDENTITY CASCADE;
 CREATE OR REPLACE FUNCTION chk(d text, got bigint, want bigint) RETURNS text LANGUAGE sql AS $$
   SELECT CASE WHEN $2=$3 THEN '  PASA  ' ELSE '  FALLA ' END||rpad($1,58)||' got='||$2||' want='||$3 $$;
 

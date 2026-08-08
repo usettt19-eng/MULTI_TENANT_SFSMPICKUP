@@ -227,8 +227,10 @@ CREATE POLICY staff_only ON public.daily_visitors FOR ALL TO authenticated
 
 -- audit_logs: la aplicación escribe desde el navegador (logActivity), así que
 -- cualquier miembro del colegio puede INSERTAR, pero solo el personal LEE.
+-- El super_admin no es miembro de todos los colegios, pero debe poder registrar
+-- actividad en cualquiera cuando entra a dar soporte.
 CREATE POLICY member_insert ON public.audit_logs FOR INSERT TO authenticated
-  WITH CHECK (tenant_id IN (SELECT public.user_tenant_ids()));
+  WITH CHECK (tenant_id IN (SELECT public.user_tenant_ids()) OR public.is_super_admin());
 CREATE POLICY staff_read ON public.audit_logs FOR SELECT TO authenticated
   USING (public.is_staff_of(tenant_id));
 
