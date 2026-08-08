@@ -299,6 +299,64 @@ CREATE INDEX IF NOT EXISTS idx_student_incidents_student   ON public.student_inc
 
 
 -- ============================================================================
+-- PASO 8.bis — VISTAS Y FUNCIONES QUE SALTAN RLS
+-- ============================================================================
+-- Detectado por el Security Advisor de Supabase. Las políticas de las tablas no
+-- sirven de nada si hay una vista o una función que las rodea.
+
+-- La vista active_critical_medications es SECURITY DEFINER: se ejecuta con los
+-- permisos de su dueño, ignorando las políticas de medication_schedule y
+-- students, y no filtra por tenant. Entregaría la medicación crítica de todos
+-- los colegios con nombre, curso y foto del alumno.
+-- security_invoker = on hace que respete el RLS de quien consulta.
+ALTER VIEW public.active_critical_medications SET (security_invoker = on);
+
+-- Funciones SECURITY DEFINER expuestas en /rest/v1/rpc/ a cualquiera.
+REVOKE EXECUTE ON FUNCTION public.is_admin()          FROM anon, authenticated, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user()   FROM anon, authenticated, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()   FROM anon, authenticated, PUBLIC;
+
+-- search_path fijo (aviso 0011 del linter).
+ALTER FUNCTION public.create_critical_alert_for_med_schedule() SET search_path = public, pg_temp;
+ALTER FUNCTION public.is_admin() SET search_path = public, pg_temp;
+
+
+-- ============================================================================
+-- PASO 8.ter — EL TRIGGER DE ALTA DEBE ASIGNAR COLEGIO
+-- ============================================================================
+-- handle_new_user() insertaba en profiles SIN tenant_id, así que cada usuario
+-- nuevo nacía sin colegio: tras activar RLS no vería nada, y con la PK compuesta
+-- del Paso 10 el alta fallaría (una columna de PK no admite NULL).
+--
+-- Ahora toma el colegio de los metadatos del usuario. QUIEN INVITA DEBE
+-- INCLUIRLO:
+--
+--   supabase.auth.admin.inviteUserByEmail(email, {
+--     data: { tenant_id: '<uuid del colegio>', first_name: '...', last_name: '...' }
+--   })
+--
+-- Si no viene tenant_id se conserva el comportamiento actual (NULL), para no
+-- romper ningún alta existente — pero ese usuario habrá que asignarlo a mano.
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
+BEGIN
+  INSERT INTO public.profiles (id, first_name, last_name, role, tenant_id)
+  VALUES (
+    new.id,
+    new.raw_user_meta_data->>'first_name',
+    new.raw_user_meta_data->>'last_name',
+    COALESCE((new.raw_user_meta_data->>'role')::public.user_role, 'parent'::public.user_role),
+    NULLIF(new.raw_user_meta_data->>'tenant_id','')::uuid
+  );
+  RETURN new;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM anon, authenticated, PUBLIC;
+
+
+-- ============================================================================
 -- PASO 9 — VERIFICACIÓN
 -- ============================================================================
 

@@ -95,6 +95,27 @@ CREATE POLICY "Admins can manage all profiles" ON public.profiles
 CREATE POLICY "Users can view their own tenant" ON public.tenants FOR SELECT USING (
   id = (SELECT profiles.tenant_id FROM public.profiles WHERE profiles.id = auth.uid()));
 
+
+-- Vista y funciones reales que el Security Advisor marcó
+CREATE VIEW public.active_critical_medications AS
+  SELECT ms.id, ms.nombre, s.id AS student_id, s.nombre AS alumno, ms.tenant_id
+  FROM public.medication_schedule ms JOIN public.students s ON s.id = ms.student_id;
+
+CREATE OR REPLACE FUNCTION public.create_critical_alert_for_med_schedule()
+RETURNS void LANGUAGE plpgsql AS $fn$ BEGIN NULL; END; $fn$;
+
+CREATE OR REPLACE FUNCTION public.rls_auto_enable() RETURNS event_trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $fn$ BEGIN NULL; END; $fn$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $fn$
+BEGIN
+  INSERT INTO public.profiles (id, role) VALUES (new.id, 'parent');
+  RETURN new;
+END; $fn$;
+
+GRANT SELECT ON public.active_critical_medications TO anon, authenticated;
+
 GRANT USAGE ON SCHEMA public, auth TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated;
