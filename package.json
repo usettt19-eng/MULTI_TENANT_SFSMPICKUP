@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
+    "@supabase/supabase-js": "^2.101.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/multer": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
@@ -43,8 +44,5 @@
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
-  },
-  "optionalDependencies": {
-    "@supabase/supabase-js": "^2.101.1"
   }
 }

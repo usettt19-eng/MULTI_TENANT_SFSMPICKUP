@@ -1,0 +1,24 @@
+services:
+  sfsmpickup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Vite empotra estas variables al construir. Cambiarlas exige
+      # `docker compose build`, no basta con reiniciar el contenedor.
+      args:
+        VITE_SUPABASE_URL:      ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_WELLNESS_API_URL:  ${VITE_WELLNESS_API_URL:-}
+        GEMINI_API_KEY:         ${GEMINI_API_KEY:-}
+    image: sfsmpickup:latest
+    container_name: sfsmpickup
+    restart: unless-stopped
+    ports:
+      # Verifica antes que el puerto esté libre:  ss -tulnp | grep 8095
+      - "${HOST_PORT:-8095}:80"
+    # Tope de memoria para que un pico aquí no afecte a Supabase ni a los
+    # demás proyectos de la máquina. nginx sirviendo estáticos consume poco.
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
