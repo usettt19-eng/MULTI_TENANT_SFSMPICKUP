@@ -14,8 +14,13 @@ services:
     container_name: sfsmpickup
     restart: unless-stopped
     ports:
+      # Escucha SOLO en localhost por defecto. Docker publica los puertos
+      # saltándose las reglas INPUT de iptables, así que un "8095:80" a secas
+      # deja la aplicación accesible desde internet por HTTP plano — y por ahí
+      # viajan las sesiones de padres y personal.
+      # Hacia fuera se publica con TLS a través del proxy inverso.
       # Verifica antes que el puerto esté libre:  ss -tulnp | grep 8095
-      - "${HOST_PORT:-8095}:80"
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-8095}:80"
     # Tope de memoria para que un pico aquí no afecte a Supabase ni a los
     # demás proyectos de la máquina. nginx sirviendo estáticos consume poco.
     mem_limit: 256m
