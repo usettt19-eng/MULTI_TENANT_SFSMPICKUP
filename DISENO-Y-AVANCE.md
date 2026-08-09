@@ -258,11 +258,12 @@ Notas de implementación:
   de nginx.
 - El contenedor `api` **no publica ningún puerto al host**: solo es alcanzable
   desde la red interna de Docker, a través de nginx.
-- El **autoregistro de colegios** (`POST /tenants/register`) es público por
-  diseño (se llama desde la landing antes de iniciar sesión). Se protege con
-  `TENANT_SIGNUP_TOKEN`: si la variable está definida, hace falta ese token —
-  o ser super_admin autenticado. Si se deja vacía, el autoregistro queda
-  abierto a cualquiera.
+- **Sin autoregistro público de colegios.** `POST /tenants/register` exige
+  `requireAuth` + `requireSuperAdmin`, igual que el resto de endpoints
+  sensibles — no hay bypass por token. La landing (`LandingPage.tsx`) dejó de
+  llevar un formulario de alta; ahora es una página informativa que enlaza a
+  login. Los colegios se dan de alta desde `SuperAdminDashboard`, ya
+  autenticado como super_admin.
 
 **Verificado:** `tsc --noEmit` limpio, build de producción, y arranque real del
 servidor con smoke test — endpoint público en 200, endpoints protegidos

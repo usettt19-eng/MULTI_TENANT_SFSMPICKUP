@@ -51,42 +51,22 @@ app.get(
 /**
  * Alta de colegio + su administrador.
  *
- * Se llama desde la landing (autoregistro) y desde el panel de super_admin.
- * Al ser público es un vector de abuso: cualquiera podría crear colegios en
- * bucle. Se protege con TENANT_SIGNUP_TOKEN — si la variable está definida,
- * hay que enviar ese token; si no lo está, el autoregistro queda abierto.
+ * Sin autoregistro público: solo el super_admin da de alta colegios, desde
+ * SuperAdminDashboard. requireAuth + requireSuperAdmin exigen una sesión
+ * válida de super_admin — igual que el resto de endpoints sensibles.
  */
 app.post(
   '/api/tenants/register',
+  requireAuth,
+  requireSuperAdmin,
   wrap(async (req, res) => {
-    const {schoolName, domain, firstName, lastName, email, password, signupToken} = req.body ?? {};
+    const {schoolName, domain, firstName, lastName, email, password} = req.body ?? {};
 
     if (!schoolName || !email || !password) {
       return fail(res, 400, 'Faltan nombre del colegio, correo o contraseña.');
     }
     if (String(password).length < 8) {
       return fail(res, 400, 'La contraseña debe tener al menos 8 caracteres.');
-    }
-
-    const expected = process.env.TENANT_SIGNUP_TOKEN;
-    if (expected) {
-      // Un super_admin autenticado también puede crear colegios sin el token.
-      const header = req.header('authorization') ?? '';
-      let isSuper = false;
-      if (header.toLowerCase().startsWith('bearer ')) {
-        const {data} = await admin.auth.getUser(header.slice(7).trim());
-        if (data?.user) {
-          const {data: p} = await admin
-            .from('profiles')
-            .select('role')
-            .eq('id', data.user.id)
-            .maybeSingle();
-          isSuper = p?.role === 'super_admin';
-        }
-      }
-      if (!isSuper && signupToken !== expected) {
-        return fail(res, 403, 'El autoregistro de colegios está restringido.');
-      }
     }
 
     const {data: tenant, error: tenantError} = await admin
@@ -128,21 +108,68 @@ app.post(
   }),
 );
 
+/**
+ * Estadísticas por colegio para el panel de super_admin.
+ *
+ * SuperAdminDashboard.tsx las indexa como `stats[tenant.id].students`,
+ * `.parents`, `.staff`, `.doors`, `.latitude/.longitude` — no es un conteo
+ * global, es un objeto por tenant. `staff` replica el criterio de
+ * StaffManagement.tsx: role='admin' Y el flag is_staff dentro del JSON de
+ * additional_tutor_name (así no cuenta doble a los admins fundadores).
+ */
 app.get(
   '/api/tenants/stats',
   requireAuth,
   requireSuperAdmin,
   wrap(async (_req, res) => {
-    const count = async (table: string) => {
-      const {count: n} = await admin.from(table).select('*', {count: 'exact', head: true});
-      return n ?? 0;
+    const [tenants, students, profiles, doors, settings] = await Promise.all([
+      admin.from('tenants').select('id'),
+      admin.from('students').select('tenant_id'),
+      admin.from('profiles').select('tenant_id, role, additional_tutor_name'),
+      admin.from('exit_doors').select('tenant_id'),
+      admin.from('school_settings').select('tenant_id, latitude, longitude'),
+    ]);
+
+    for (const [name, r] of Object.entries({tenants, students, profiles, doors, settings})) {
+      if (r.error) return fail(res, 500, `${name}: ${r.error.message}`);
+    }
+
+    const isStaff = (p: {role: string; additional_tutor_name: string | null}) => {
+      if (p.role !== 'admin') return false;
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_staff === true;
+      } catch {
+        return false;
+      }
     };
-    return ok(res, {
-      tenants: await count('tenants'),
-      students: await count('students'),
-      profiles: await count('profiles'),
-      pickups: await count('pickup_events'),
-    });
+
+    const stats: Record<
+      string,
+      {students: number; parents: number; staff: number; doors: number; latitude: number | null; longitude: number | null}
+    > = {};
+
+    for (const t of tenants.data ?? []) {
+      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, latitude: null, longitude: null};
+    }
+    for (const s of students.data ?? []) {
+      if (s.tenant_id && stats[s.tenant_id]) stats[s.tenant_id].students++;
+    }
+    for (const p of profiles.data ?? []) {
+      if (!p.tenant_id || !stats[p.tenant_id]) continue;
+      if (p.role === 'parent') stats[p.tenant_id].parents++;
+      else if (isStaff(p)) stats[p.tenant_id].staff++;
+    }
+    for (const d of doors.data ?? []) {
+      if (d.tenant_id && stats[d.tenant_id]) stats[d.tenant_id].doors++;
+    }
+    for (const s of settings.data ?? []) {
+      if (s.tenant_id && stats[s.tenant_id]) {
+        stats[s.tenant_id].latitude = s.latitude;
+        stats[s.tenant_id].longitude = s.longitude;
+      }
+    }
+
+    return ok(res, stats);
   }),
 );
 

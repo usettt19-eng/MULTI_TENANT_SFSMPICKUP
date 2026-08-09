@@ -49,11 +49,11 @@ HOST_PORT=8095
 # navegador. Esta es la llave maestra que salta toda política RLS.
 # Supabase -> Project Settings -> API -> service_role
 SUPABASE_SERVICE_ROLE_KEY=<la clave service_role>
-
-# Opcional: si se define, el autoregistro público de colegios (la landing)
-# exige este token. Vacío = cualquiera puede autoregistrar un colegio.
-TENANT_SIGNUP_TOKEN=
 ```
+
+No hay autoregistro público de colegios: `POST /api/tenants/register` exige
+sesión de super_admin. Los colegios se dan de alta desde
+**SuperAdminDashboard**, dentro de la aplicación ya autenticado.
 
 El `docker compose build` ahora construye **dos** imágenes: `sfsmpickup`
 (frontend) y `sfsmpickup-api` (backend). El backend no publica ningún puerto al
