@@ -41,13 +41,29 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   if (!token) return fail(res, 401, 'Falta la cabecera de autorización.');
 
-  const {data, error} = await admin.auth.getUser(token);
-  if (error || !data.user) return fail(res, 401, 'Sesión inválida o expirada.');
+  // admin.auth.getUser() no está envuelto por wrap() (es middleware, no la ruta
+  // final), así que sin este try/catch un fallo de RED al validar el token —
+  // service_role mal copiada, SUPABASE_URL incorrecta, sin salida a internet —
+  // queda como una promesa rechazada sin capturar. El mensaje al cliente se
+  // mantiene genérico por seguridad, pero el motivo real queda en el log del
+  // contenedor (`docker compose logs api`) para poder diagnosticarlo.
+  let data: Awaited<ReturnType<typeof admin.auth.getUser>>['data'] | undefined;
+  try {
+    const result = await admin.auth.getUser(token);
+    if (result.error || !result.data.user) {
+      console.error('[requireAuth] token rechazado:', result.error?.message ?? 'sin usuario');
+      return fail(res, 401, 'Sesión inválida o expirada.');
+    }
+    data = result.data;
+  } catch (err: any) {
+    console.error('[requireAuth] fallo al validar el token contra Supabase Auth:', err?.message ?? err);
+    return fail(res, 502, 'No se pudo verificar la sesión (fallo de conexión con Supabase).');
+  }
 
   const {data: profile, error: profileError} = await admin
     .from('profiles')
     .select('id, email, role, tenant_id, additional_tutor_name')
-    .eq('id', data.user.id)
+    .eq('id', data.user!.id)
     .maybeSingle();
 
   if (profileError) return fail(res, 500, profileError.message);

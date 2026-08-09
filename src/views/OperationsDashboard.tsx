@@ -190,12 +190,15 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   };
 
   const fetchHealthAlerts = async () => {
+    // health_alerts no tiene columna `status` (id, student_id, title, severity,
+    // action_plan, created_at, tenant_id) — nunca la tuvo. El .eq('status',
+    // 'active') hacía que PostgREST rechazara la consulta con 400 en cada
+    // carga, y el panel de alertas quedaba siempre vacío en silencio.
     const { data } = await supabase
       .from('health_alerts')
       .select('*')
-      .eq('status', 'active')
       .order('created_at', { ascending: false });
-    
+
     if (data) setHealthAlerts(data);
   };
 
