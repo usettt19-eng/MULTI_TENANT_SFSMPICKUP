@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState } from 'react';
 import { ShieldCheck, Building2, User, Mail, Lock, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -29,7 +30,7 @@ export function LandingPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/tenants/register`, {
+      const response = await apiFetch(`/api/tenants/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

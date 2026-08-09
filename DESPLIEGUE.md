@@ -40,10 +40,24 @@ Rellena en `.env`:
 ```bash
 VITE_SUPABASE_URL=https://fvzhfzogigewsvcyopel.supabase.co
 VITE_SUPABASE_ANON_KEY=<la clave anon del proyecto>
-VITE_WELLNESS_API_URL=            # vacío hasta que exista el backend
+VITE_WELLNESS_API_URL=            # vacío; no se usa desde que /api/ va por nginx
 GEMINI_API_KEY=<la clave de Gemini>
 HOST_PORT=8095
+
+# La API interna (server/) — ver DISENO-Y-AVANCE.md §6.
+# NUNCA con prefijo VITE_: si lo lleva, Vite la empotra en el bundle del
+# navegador. Esta es la llave maestra que salta toda política RLS.
+# Supabase -> Project Settings -> API -> service_role
+SUPABASE_SERVICE_ROLE_KEY=<la clave service_role>
+
+# Opcional: si se define, el autoregistro público de colegios (la landing)
+# exige este token. Vacío = cualquiera puede autoregistrar un colegio.
+TENANT_SIGNUP_TOKEN=
 ```
+
+El `docker compose build` ahora construye **dos** imágenes: `sfsmpickup`
+(frontend) y `sfsmpickup-api` (backend). El backend no publica ningún puerto al
+host — solo lo alcanza nginx, dentro de la red interna de Docker.
 
 Los valores exactos que usa hoy la app están en Vercel, en
 **Project → Settings → Environment Variables**.

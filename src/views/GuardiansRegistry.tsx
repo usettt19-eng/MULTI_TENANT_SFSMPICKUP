@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -216,7 +217,7 @@ export function GuardiansRegistry() {
 
       if (parentsToInsert.length > 0) {
         try {
-          const res = await fetch('/api/parents/bulk', {
+          const res = await apiFetch('/api/parents/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ parents: parentsToInsert })
@@ -289,7 +290,7 @@ export function GuardiansRegistry() {
 
       if (!editingGuardianId) {
         // Create new via API
-        const res = await fetch('/api/parents', {
+        const res = await apiFetch('/api/parents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -311,7 +312,7 @@ export function GuardiansRegistry() {
         userId = json.data.id;
       } else {
         // Update existing via API
-        const res = await fetch(`/api/parents/${userId}`, {
+        const res = await apiFetch(`/api/parents/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -391,7 +392,7 @@ export function GuardiansRegistry() {
       await supabase.from('vehicles').delete().eq('parent_id', id);
       
       // Delete profile via API
-      const res = await fetch(`/api/parents/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/parents/${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete parent');
       

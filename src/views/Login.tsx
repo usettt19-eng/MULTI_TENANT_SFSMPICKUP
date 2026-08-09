@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shield, User as UserIcon, Lock, Loader2, UserPlus, ArrowLeft } from 'lucide-react';
@@ -54,7 +55,7 @@ export function Login() {
         throw new Error("Por favor ingresa el código del colegio.");
       }
 
-      const tenantRes = await fetch(`/api/tenants/lookup?domain=${encodeURIComponent(schoolCode.trim())}`);
+      const tenantRes = await apiFetch(`/api/tenants/lookup?domain=${encodeURIComponent(schoolCode.trim())}`);
       const tenantData = await tenantRes.json();
       
       if (!tenantRes.ok || !tenantData.success) {

@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
@@ -86,7 +87,7 @@ export function StaffManagement() {
     try {
       if (editingId) {
         // Update permissions via API to keep logic centralized
-        const res = await fetch(`/api/staff/${editingId}`, {
+        const res = await apiFetch(`/api/staff/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ permissions: formData.permissions })
@@ -95,7 +96,7 @@ export function StaffManagement() {
         if (!res.ok || !json.success) throw new Error(json.error || 'API Error');
       } else {
         // Create new staff via API
-        const res = await fetch('/api/staff', {
+        const res = await apiFetch('/api/staff', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -134,7 +135,7 @@ export function StaffManagement() {
     setIsDeletingId(id);
     
     try {
-      const res = await fetch(`/api/staff/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/staff/${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete user');
       

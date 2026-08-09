@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff } from 'lucide-react';
@@ -48,7 +49,7 @@ export function SuperAdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/tenants/stats');
+      const response = await apiFetch('/api/tenants/stats');
       const data = await response.json();
       if (data.success) {
         setStats(data.data || {});
@@ -80,7 +81,7 @@ export function SuperAdminDashboard() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/tenants/register`, {
+      const response = await apiFetch(`/api/tenants/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newTenant)
@@ -145,7 +146,7 @@ export function SuperAdminDashboard() {
     }
     setIsResettingPassword(true);
     try {
-      const response = await fetch('/api/tenants/reset-admin-password', {
+      const response = await apiFetch('/api/tenants/reset-admin-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

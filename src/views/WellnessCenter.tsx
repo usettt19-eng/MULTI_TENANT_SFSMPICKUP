@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -176,7 +177,7 @@ export function WellnessCenter() {
     setIsSavingIncident(true);
     
     try {
-      const response = await fetch('/api/wellness/incident', {
+      const response = await apiFetch('/api/wellness/incident', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -314,7 +315,7 @@ export function WellnessCenter() {
     setIsSavingEvolution(true);
 
     try {
-      const response = await fetch(`/api/wellness/incident/${incidentId}`, {
+      const response = await apiFetch(`/api/wellness/incident/${incidentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ evolution: evolutionText })

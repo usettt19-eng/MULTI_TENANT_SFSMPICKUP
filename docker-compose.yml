@@ -1,4 +1,31 @@
 services:
+  # ── API interna ─────────────────────────────────────────────────────────────
+  # Implementa los 16 endpoints /api/... que el frontend necesita. Usa la clave
+  # service_role, que salta todas las políticas RLS, así que valida el JWT de
+  # cada petición y comprueba el colegio por su cuenta.
+  #
+  # NO publica ningún puerto al host: solo es accesible desde la red interna de
+  # Docker, a través del nginx del contenedor de la app.
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: sfsmpickup-api:latest
+    container_name: sfsmpickup-api
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${VITE_SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      TENANT_SIGNUP_TOKEN: ${TENANT_SIGNUP_TOKEN:-}
+      PORT: 3001
+    expose:
+      - "3001"
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # ── Frontend ────────────────────────────────────────────────────────────────
   sfsmpickup:
     build:
       context: .
@@ -6,13 +33,15 @@ services:
       # Vite empotra estas variables al construir. Cambiarlas exige
       # `docker compose build`, no basta con reiniciar el contenedor.
       args:
-        VITE_SUPABASE_URL:      ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-        VITE_WELLNESS_API_URL:  ${VITE_WELLNESS_API_URL:-}
-        GEMINI_API_KEY:         ${GEMINI_API_KEY:-}
+        VITE_WELLNESS_API_URL: ${VITE_WELLNESS_API_URL:-}
+        GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     image: sfsmpickup:latest
     container_name: sfsmpickup
     restart: unless-stopped
+    depends_on:
+      - api
     ports:
       # Escucha SOLO en localhost por defecto. Docker publica los puertos
       # saltándose las reglas INPUT de iptables, así que un "8095:80" a secas
@@ -26,4 +55,4 @@ services:
     mem_limit: 256m
     logging:
       driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+      options: {max-size: "10m", max-file: "3"}

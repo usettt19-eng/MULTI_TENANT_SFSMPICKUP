@@ -220,27 +220,70 @@ propio origen.
 
 ---
 
-## 6. El backend que falta
+## 6. El backend
 
-`package.json` apunta a `server.ts` y `server/index.ts`; **ninguno existe en el
-repositorio**, y `.gitignore` no los excluye. El build de Vercel es `vite build`,
-que solo compila la SPA — la hipótesis es que **en producción no hay backend** y
-las funciones que dependen de él están rotas.
+`package.json` apuntaba a `server.ts` y `server/index.ts`, que **no existían en
+este repositorio** (probablemente porque este fork es una copia parcial de lo
+que corre en Vercel). En producción, sin backend, el `PUT /api/parents/:id`
+desde `GuardiansRegistry.tsx` devolvía el `index.html` de nginx en vez de JSON,
+y el frontend lanzaba `Unexpected token '<'` al intentar parsearlo — igual en
+los otros 15 endpoints `/api/...` que el frontend llama.
 
-Comprobación rápida en la app en vivo: ¿funciona crear un usuario en
-StaffManagement? ¿carga la sección de medicamentos y alertas?
+**Se implementó en `server/`.** Node + Express + TypeScript, con la clave
+`service_role`. Como esa clave salta todas las políticas RLS, cada endpoint
+valida el JWT de la sesión (`server/src/auth.ts`) y comprueba el colegio del
+llamante contra el del recurso — nunca contra lo que envíe el cuerpo de la
+petición, o un admin podría operar sobre otro colegio pasando otro `tenant_id`.
 
-Lo que ese servicio tiene que hacer:
+| Ruta | Endpoints |
+|---|---|
+| Colegios | `GET /lookup` (público), `POST /register`, `GET /stats`, `POST /reset-admin-password` |
+| Padres | `POST /parents`, `PUT /parents/:id`, `DELETE /parents/:id`, `POST /parents/bulk` |
+| Personal | `POST /staff`, `PUT /staff/:id`, `DELETE /staff/:id` |
+| Bienestar | `POST /wellness/incident`, `PUT /wellness/incident/:id` |
+| Solicitudes | `POST /requests/replacement` |
 
-1. **Crear usuarios** con `service_role` — `StaffManagement.tsx:111`
-2. **API de wellness** — medicamentos y alertas críticas (`VITE_WELLNESS_API_URL`, `:3001`)
-3. **Webhook de cámaras** — ahora obligatorio: la migración cierra el `INSERT`
-   anónimo en `camera_detections`, así que debe escribir con `service_role`
-4. **Pregeneración de TTS con caché** — ver §7
-5. **Proxy de las llamadas a IA**, para sacar las claves del navegador
+Notas de implementación:
 
-> El webhook tiene un **contrato ya existente** con el sistema de cámaras. No se
-> puede reimplementar a ciegas: hace falta saber qué envía y cómo se autentica.
+- **`student_incidents` no tiene columna `evolution`**, aunque el frontend la
+  envía. Se añade al `description` con marca de tiempo, que es lo que la ficha
+  ya muestra — evita una migración de esquema por un campo que la UI no
+  llegaba a leer de vuelta.
+- **El frontend nunca mandaba el JWT.** Se creó `src/lib/apiFetch.ts`, que
+  adjunta `Authorization: Bearer <token>` a cada llamada; las 16 vistas se
+  migraron de `fetch('/api/...')` a `apiFetch(...)`.
+- **`nginx.conf`** enruta `/api/` al contenedor `api` antes del fallback de la
+  SPA — el orden importa, si no toda petición a `/api/` cae en `index.html`.
+  Si el backend está caído, devuelve JSON con 503 en vez de la página de error
+  de nginx.
+- El contenedor `api` **no publica ningún puerto al host**: solo es alcanzable
+  desde la red interna de Docker, a través de nginx.
+- El **autoregistro de colegios** (`POST /tenants/register`) es público por
+  diseño (se llama desde la landing antes de iniciar sesión). Se protege con
+  `TENANT_SIGNUP_TOKEN`: si la variable está definida, hace falta ese token —
+  o ser super_admin autenticado. Si se deja vacía, el autoregistro queda
+  abierto a cualquiera.
+
+**Verificado:** `tsc --noEmit` limpio, build de producción, y arranque real del
+servidor con smoke test — endpoint público en 200, endpoints protegidos
+rechazando sin JWT o con uno inválido (401), y 404 bajo `/api/` devolviendo
+JSON en vez del HTML que causaba el error original. **No probado**: una
+petición de punta a punta contra la Supabase real, porque el entorno donde se
+preparó esto bloquea la salida a `supabase.co`.
+
+**Pendiente, y ahora si tiene sentido priorizarlo** porque el servicio ya
+existe:
+
+1. **Webhook de cámaras** — la migración cerró el `INSERT` anónimo en
+   `camera_detections`; hace falta un endpoint aquí que reciba las detecciones
+   con una credencial propia. Tiene un **contrato ya existente** con el
+   sistema de cámaras: no se puede reimplementar a ciegas, hace falta saber
+   qué envía y cómo se autentica hoy.
+2. **Pregeneración de TTS con caché** — ver §7.
+3. **Proxy de las llamadas a Gemini**, para sacar la clave del navegador
+   (§5.2). El backend ya está montado; falta el endpoint y el cambio en
+   `audioManager.ts` y `SmartCheckIn.tsx` para llamarlo en vez de a Gemini
+   directo.
 
 ---
 

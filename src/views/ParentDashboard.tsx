@@ -1,3 +1,4 @@
+import {apiFetch} from '../lib/apiFetch';
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -135,7 +136,7 @@ export function ParentDashboard() {
     setIsSubmittingReplacement(true);
     try {
       // 1. Insert via API to bypass RLS limits for parents
-      const response = await fetch('/api/requests/replacement', {
+      const response = await apiFetch('/api/requests/replacement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -178,7 +179,7 @@ export function ParentDashboard() {
     
     setIsSubmittingReplacement(true);
     try {
-      const response = await fetch('/api/requests/replacement', {
+      const response = await apiFetch('/api/requests/replacement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
