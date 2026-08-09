@@ -138,7 +138,9 @@ export function GuardiansRegistry() {
     // reales). Si el admin abre y reguarda desde Excel, los acentos quedan
     // rotos de forma permanente en el archivo — "Pérez" pasa a "PÃ©rez".
     // handleExportCSV, más abajo, ya lo hacía bien; aquí faltaba.
-    const csvContent = "first_name,last_name,phone,pin_code,email\nJuan,Pérez,50760000000,1234,juan@ejemplo.com\nMaria,García,50761111111,5678,maria@ejemplo.com\n";
+    // vehicle_plate y vehicle_description son opcionales: si vienen vacías,
+    // el padre se crea igual, simplemente sin vehículo registrado.
+    const csvContent = "first_name,last_name,phone,pin_code,email,vehicle_plate,vehicle_description\nJuan,Pérez,50760000000,1234,juan@ejemplo.com,ABC-123,Sedán Blanco\nMaria,García,50761111111,5678,maria@ejemplo.com,,\n";
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -205,6 +207,10 @@ export function GuardiansRegistry() {
         const tel = cols[2]?.trim();
         const pin = cols[3]?.trim();
         const mail = cols[4]?.trim() || `${f_name.toLowerCase()}@example.com`;
+        // Opcionales: si el CSV no trae estas dos columnas, cols[5]/cols[6]
+        // son undefined y el padre se crea igual, sin vehículo.
+        const plate = cols[5]?.trim();
+        const vdesc = cols[6]?.trim();
 
         if (!f_name || !mail) continue;
 
@@ -215,6 +221,8 @@ export function GuardiansRegistry() {
           phone: tel,
           email: mail,
           pin_code: pin,
+          vehicle_plate: plate || undefined,
+          vehicle_description: vdesc || undefined,
           role: 'parent',
           tenant_id: profile?.tenant_id
         });

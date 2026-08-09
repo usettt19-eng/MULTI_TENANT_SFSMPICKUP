@@ -372,6 +372,18 @@ app.post(
         .update({...pick(p), role: 'parent', tenant_id: tenantId})
         .eq('id', user.user.id);
 
+      // Vehículo opcional, mismo patrón que el alta manual en
+      // GuardiansRegistry.tsx: una fila en `vehicles` por padre, solo si
+      // trae placa o descripción.
+      if (p.vehicle_plate || p.vehicle_description) {
+        await admin.from('vehicles').insert({
+          parent_id: user.user.id,
+          tenant_id: tenantId,
+          license_plate: p.vehicle_plate ?? '',
+          description: p.vehicle_description ?? '',
+        });
+      }
+
       created.push({id: user.user.id, email: p.email});
     }
 
