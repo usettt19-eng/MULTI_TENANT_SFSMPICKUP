@@ -133,10 +133,15 @@ export function GuardiansRegistry() {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,first_name,last_name,phone,pin_code,email\nJuan,Pérez,50760000000,1234,juan@ejemplo.com\nMaria,García,50761111111,5678,maria@ejemplo.com\n";
-    const encodedUri = encodeURI(csvContent);
+    // Sin BOM, Excel adivina la codificación del CSV y suele acertar mal con
+    // acentos (charset=utf-8 en la URI de datos NO añade el BOM a los bytes
+    // reales). Si el admin abre y reguarda desde Excel, los acentos quedan
+    // rotos de forma permanente en el archivo — "Pérez" pasa a "PÃ©rez".
+    // handleExportCSV, más abajo, ya lo hacía bien; aquí faltaba.
+    const csvContent = "first_name,last_name,phone,pin_code,email\nJuan,Pérez,50760000000,1234,juan@ejemplo.com\nMaria,García,50761111111,5678,maria@ejemplo.com\n";
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.href = URL.createObjectURL(blob);
     link.setAttribute("download", "plantilla_padres.csv");
     document.body.appendChild(link);
     link.click();
@@ -232,7 +237,7 @@ export function GuardiansRegistry() {
       setProcessing(false);
       fetchGuardians();
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleEdit = (guardian: any) => {

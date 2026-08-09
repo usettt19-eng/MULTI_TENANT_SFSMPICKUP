@@ -1,4 +1,10 @@
 import {createClient} from '@supabase/supabase-js';
+// supabase-js construye su RealtimeClient al llamar createClient(), aunque
+// este servicio nunca abra un canal. Sin WebSocket nativo (Node < 22) eso
+// lanza "Node.js detected but native WebSocket not found" y tumba el proceso
+// antes de que Express llegue a escuchar. Mismo workaround que
+// CRM-whatsapp-Softphone/server-db.ts.
+import ws from 'ws';
 
 const url = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,4 +25,5 @@ if (!url || !serviceKey) {
  */
 export const admin = createClient(url, serviceKey, {
   auth: {autoRefreshToken: false, persistSession: false},
+  realtime: {transport: ws as any},
 });
