@@ -237,6 +237,22 @@ export function GuardiansRegistry() {
           });
           const json = await res.json();
           if (!res.ok || !json.success) throw new Error(json.error || 'API Error al importar padres');
+
+          // El backend devuelve success:true aunque ALGUNAS filas fallen
+          // (correo duplicado, etc.) — success solo dice que la petición se
+          // procesó, no que cada padre se haya creado. Sin esto, una fila
+          // fallida no mostraba ningún aviso: el admin creía que había
+          // funcionado y el padre simplemente no aparecía en ningún lado.
+          const { created: createdCount, failed: failedRows } = json.data || {};
+          if (failedRows?.length > 0) {
+            const detalle = failedRows.map((f: any) => `• ${f.email}: ${f.error}`).join('\n');
+            alert(
+              `Importados ${createdCount} de ${parentsToInsert.length}.\n\n` +
+              `No se pudieron crear ${failedRows.length}:\n${detalle}`
+            );
+          } else {
+            alert(`Se importaron ${createdCount} padres correctamente.`);
+          }
         } catch (error: any) {
           alert('Error al importar: ' + error.message);
         }
