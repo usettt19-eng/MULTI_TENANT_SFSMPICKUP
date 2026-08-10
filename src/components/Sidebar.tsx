@@ -119,15 +119,15 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     { id: 'security', label: t('nav.security'), icon: ShieldCheck },
     { id: 'wellness', label: t('nav.wellness'), icon: Heart },
     { id: 'students', label: t('nav.students'), icon: Users },
-    { id: 'guardians', label: 'Padres / Tutores', icon: ShieldCheck },
+    { id: 'guardians', label: t('nav.guardians'), icon: ShieldCheck },
     { id: 'checkin', label: t('nav.checkin'), icon: MapPin },
     { id: 'forms', label: t('nav.forms'), icon: FileEdit },
-    { id: 'requests', label: 'Solicitudes', icon: MessageSquare },
-    { id: 'visitors', label: 'Visitantes', icon: Users },
-    { id: 'logs', label: 'Bitácora / Logs', icon: History },
+    { id: 'requests', label: t('nav.requests'), icon: MessageSquare },
+    { id: 'visitors', label: t('nav.visitors'), icon: Users },
+    { id: 'logs', label: t('nav.logs'), icon: History },
     { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
-    { id: 'external', label: 'Monitor Externo', icon: Monitor },
-    { id: 'staff', label: 'Gestión de Staff', icon: UserCog, adminOnly: true },
+    { id: 'external', label: t('nav.external'), icon: Monitor },
+    { id: 'staff', label: t('nav.staff'), icon: UserCog, adminOnly: true },
   ];
 
   let isStaff = false;
@@ -173,7 +173,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-black text-cyan-900 uppercase tracking-widest font-headline truncate" title={schoolInfo.name}>{schoolInfo.name}</h2>
             <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tighter truncate">
-              {profile?.role === 'admin' && !isStaff ? 'Admin Session Active' : isStaff ? 'Staff Session Active' : 'Parent Session Active'}
+              {profile?.role === 'admin' && !isStaff ? t('sidebar.adminSession') : isStaff ? t('sidebar.staffSession') : t('sidebar.parentSession')}
             </p>
           </div>
         </div>
@@ -209,7 +209,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
           className={`w-full mb-4 py-3 ${lockdownActive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-error hover:bg-red-700'} text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg`}
         >
           {lockdownActive ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-          {lockdownActive ? 'Permitir la Salida' : 'Emergency Lockdown'}
+          {lockdownActive ? t('sidebar.lockdownActive') : t('sidebar.lockdownInactive')}
         </button>
         {profile?.role === 'admin' && (
           <button 
@@ -232,7 +232,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
           className="w-full flex items-center gap-3 px-4 py-2 text-red-600 text-sm font-medium hover:bg-red-50 rounded-xl transition-colors"
         >
           <LogOut className="w-5 h-5" />
-          <span>Cerrar Sesión</span>
+          <span>{t('sidebar.signOut')}</span>
         </button>
       </div>
     </aside>

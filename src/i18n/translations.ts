@@ -10,12 +10,26 @@ export const translations = {
     'nav.compliance': 'Compliance',
     'nav.forms': 'Forms',
     'nav.students': 'Students',
-    
+    'nav.guardians': 'Parents / Guardians',
+    'nav.requests': 'Requests',
+    'nav.visitors': 'Visitors',
+    'nav.logs': 'Logs',
+    'nav.external': 'External Monitor',
+    'nav.staff': 'Staff Management',
+
     // TopNav
     'topnav.search': 'Search...',
     'topnav.notifications': 'Notifications',
     'topnav.settings': 'Settings',
-    
+
+    // Sidebar
+    'sidebar.adminSession': 'Admin Session Active',
+    'sidebar.staffSession': 'Staff Session Active',
+    'sidebar.parentSession': 'Parent Session Active',
+    'sidebar.lockdownActive': 'Allow Exit',
+    'sidebar.lockdownInactive': 'Emergency Lockdown',
+    'sidebar.signOut': 'Sign Out',
+
     // Dashboard
     'dashboard.title': 'Operations Dashboard',
     'dashboard.urgentAlert': 'Urgent Health Alert',
@@ -289,12 +303,26 @@ export const translations = {
     'nav.compliance': 'Cumplimiento',
     'nav.forms': 'Formularios',
     'nav.students': 'Alumnos',
-    
+    'nav.guardians': 'Padres / Tutores',
+    'nav.requests': 'Solicitudes',
+    'nav.visitors': 'Visitantes',
+    'nav.logs': 'Bitácora / Logs',
+    'nav.external': 'Monitor Externo',
+    'nav.staff': 'Gestión de Staff',
+
     // TopNav
     'topnav.search': 'Buscar...',
     'topnav.notifications': 'Notificaciones',
     'topnav.settings': 'Ajustes',
-    
+
+    // Sidebar
+    'sidebar.adminSession': 'Sesión de Administrador Activa',
+    'sidebar.staffSession': 'Sesión de Staff Activa',
+    'sidebar.parentSession': 'Sesión de Padre Activa',
+    'sidebar.lockdownActive': 'Permitir la Salida',
+    'sidebar.lockdownInactive': 'Bloqueo de Emergencia',
+    'sidebar.signOut': 'Cerrar Sesión',
+
     // Dashboard
     'dashboard.title': 'Panel de Operaciones',
     'dashboard.urgentAlert': 'Alerta de Salud Urgente',
