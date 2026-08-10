@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
+import { useLanguage } from '../contexts/LanguageContext';
 import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
 
 export function VerificationDisplay() {
+  const { t } = useLanguage();
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
@@ -213,10 +215,10 @@ export function VerificationDisplay() {
         // We could also trigger a pickup event here if needed, 
         // but for now we'll just show the verification UI for this replacement.
       } else {
-        alert("Código QR no válido para reemplazo.");
+        alert(t('monitor.invalidQR'));
       }
     } catch (e) {
-      alert("Error al procesar QR. Formato inválido.");
+      alert(t('monitor.qrProcessError'));
     }
   };
 
@@ -309,7 +311,7 @@ export function VerificationDisplay() {
         fetchPickups();
       } catch (error: any) {
         console.error("Error releasing pickup:", error);
-        alert("Error al confirmar salida: " + error.message);
+        alert(t('monitor.releaseErrorPrefix') + error.message);
         // Revert optimistic update on error
         fetchPickups();
       }
@@ -319,20 +321,20 @@ export function VerificationDisplay() {
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Usamos el TopNav estándar en lugar del header embebido para mantener consistencia */}
-      <TopNav title="SafePickup" subtitle="Pantalla de Verificación Externa" />
+      <TopNav title="SafePickup" subtitle={t('monitor.pageSubtitle')} />
 
       {/* Audio Activation Banner */}
       {!audioEnabled && (
         <div className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between animate-in slide-in-from-top duration-500">
           <div className="flex items-center gap-3">
             <Bell className="w-5 h-5 animate-pulse" />
-            <p className="text-xs font-bold uppercase tracking-widest">El sistema de anuncios por voz requiere activación manual</p>
+            <p className="text-xs font-bold uppercase tracking-widest">{t('monitor.audioActivationRequired')}</p>
           </div>
-          <button 
+          <button
             onClick={enableAudio}
             className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg"
           >
-            Activar Altavoces
+            {t('monitor.activateSpeakers')}
           </button>
         </div>
       )}
@@ -345,7 +347,7 @@ export function VerificationDisplay() {
               <Bell className="w-6 h-6 text-white animate-bounce" />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-widest opacity-80">Aviso de Llegada</p>
+              <p className="text-xs font-black uppercase tracking-widest opacity-80">{t('monitor.arrivalNotice')}</p>
               <p className="text-lg font-bold">{showArrivalToast}</p>
             </div>
           </div>
@@ -360,8 +362,8 @@ export function VerificationDisplay() {
               <ShieldCheck className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800">Puerta a Monitorear</h3>
-              <p className="text-xs text-slate-500">Selecciona la puerta para filtrar estudiantes</p>
+              <h3 className="text-sm font-bold text-slate-800">{t('monitor.doorToMonitor')}</h3>
+              <p className="text-xs text-slate-500">{t('monitor.selectDoorFilter')}</p>
             </div>
           </div>
           <select
@@ -369,7 +371,7 @@ export function VerificationDisplay() {
             onChange={(e) => setSelectedDoorId(e.target.value)}
             className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 font-medium outline-none"
           >
-            <option value="">Todas las puertas</option>
+            <option value="">{t('monitor.allDoors')}</option>
             {doors.map((door) => (
               <option key={door.id} value={door.id}>
                 {door.name}
@@ -387,10 +389,10 @@ export function VerificationDisplay() {
               </div>
               <div className="space-y-2">
                 <h1 className="text-6xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">
-                  Salida Restringida
+                  {t('monitor.restrictedExit')}
                 </h1>
                 <p className="text-xl font-bold text-white/90 uppercase tracking-[0.3em] bg-black/20 px-6 py-3 rounded-xl backdrop-blur-sm">
-                  Protocolo de Emergencia Activo
+                  {t('monitor.emergencyProtocolActive')}
                 </p>
               </div>
               <div className="mt-8 flex gap-3">
@@ -406,10 +408,10 @@ export function VerificationDisplay() {
           
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-extrabold tracking-tight text-primary">Guardian Verification</h2>
+              <h2 className="text-3xl font-extrabold tracking-tight text-primary">{t('security.title')}</h2>
               <div className="flex items-center gap-2 mt-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-secondary shadow-[0_0_0_rgba(43,103,103,0.4)] animate-[pulse_2s_infinite]"></div>
-                <span className="text-sm font-medium text-secondary">Real-time Biometric Link Active</span>
+                <span className="text-sm font-medium text-secondary">{t('monitor.realtimeLinkActive')}</span>
               </div>
             </div>
             <div className="flex gap-3">
@@ -425,25 +427,25 @@ export function VerificationDisplay() {
                 className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-emerald-200 active:scale-95 transition-all"
               >
                 <Bell className="w-5 h-5" />
-                Probar Voz
+                {t('monitor.testVoice')}
               </button>
-              <button 
+              <button
                 onClick={() => setShowQRScanner(true)}
                 className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 active:scale-95 transition-all"
               >
                 <QrCode className="w-5 h-5" />
-                Escanear Reemplazo
+                {t('monitor.scanReplacement')}
               </button>
               <button className="bg-error text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-error/20 active:scale-95 transition-all">
                 <AlertTriangle className="w-5 h-5" />
-                Alerta Discreta
+                {t('monitor.discreteAlert')}
               </button>
             </div>
           </div>
 
           {!currentPickup ? (
             <div className="bg-surface-container-lowest rounded-[2rem] p-12 text-center shadow-lg border border-outline-variant/10">
-              <h3 className="text-2xl font-bold text-slate-400">Esperando escaneo de representantes...</h3>
+              <h3 className="text-2xl font-bold text-slate-400">{t('monitor.waitingForScan')}</h3>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -467,7 +469,7 @@ export function VerificationDisplay() {
                         </div>
                       </div>
                       <h3 className="mt-4 text-xl font-black text-primary leading-tight">{currentPickup.students?.first_name} {currentPickup.students?.last_name}</h3>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">Sección: {currentPickup.students?.section || 'A'}</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{t('monitor.section')}: {currentPickup.students?.section || 'A'}</p>
                     </div>
 
                     {/* Verification Interface */}
@@ -475,10 +477,10 @@ export function VerificationDisplay() {
                       <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            {replacementData ? 'Representante Autorizado' : 'Padre/Tutor Principal'}
+                            {replacementData ? t('monitor.authorizedReplacement') : t('monitor.mainGuardian')}
                           </span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${replacementData ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}`}>
-                            {replacementData ? 'REEMPLAZO' : 'TITULAR'}
+                            {replacementData ? t('monitor.replacementBadge') : t('monitor.holderBadge')}
                           </span>
                         </div>
                         <div className="flex items-center gap-4">
@@ -500,15 +502,15 @@ export function VerificationDisplay() {
                               {replacementData ? replacementData.replacement_name : `${currentPickup.profiles?.first_name} ${currentPickup.profiles?.last_name}`}
                             </h4>
                             <p className="text-xs text-slate-500 font-medium">
-                              {replacementData ? `Solicitado por: ${replacementData.parent_name}` : (currentPickup.profiles?.phone || 'Contacto Verificado')}
+                              {replacementData ? `${t('monitor.requestedBy')}: ${replacementData.parent_name}` : (currentPickup.profiles?.phone || t('monitor.verifiedContact'))}
                             </p>
                             <div className="flex gap-2 mt-2">
                               <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg font-black uppercase">
-                                <ShieldCheck className="w-3 h-3" /> {replacementData ? 'QR VÁLIDO' : 'PIN OK'}
+                                <ShieldCheck className="w-3 h-3" /> {replacementData ? t('monitor.qrValid') : t('monitor.pinOk')}
                               </span>
                               {!replacementData && (
                                 <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg font-black uppercase">
-                                  <CheckCircle2 className="w-3 h-3" /> BIOMETRÍA OK
+                                  <CheckCircle2 className="w-3 h-3" /> {t('monitor.biometryOk')}
                                 </span>
                               )}
                             </div>
@@ -519,14 +521,14 @@ export function VerificationDisplay() {
                       {/* Final Action CTA */}
                       <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row gap-4 items-center">
                         <div className="flex-1">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Verifique identidad visualmente antes de autorizar.</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{t('monitor.verifyBeforeAuthorize')}</p>
                         </div>
-                        <button 
+                        <button
                           onClick={handleConfirmRelease}
                           className="w-full md:w-auto px-8 py-4 rounded-2xl font-black text-lg shadow-lg transition-all bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest"
                         >
                           <CheckCircle2 className="w-5 h-5" />
-                          AUTORIZAR
+                          {t('monitor.authorizeBtn')}
                         </button>
                       </div>
                     </div>
@@ -539,17 +541,17 @@ export function VerificationDisplay() {
                 <div className="bg-slate-50 rounded-[2rem] p-6 border border-slate-200 shadow-sm flex-1 flex flex-col min-h-0">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      En Cola de Salida
+                      {t('monitor.exitQueue')}
                     </h4>
                     <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      {pickups.length} total
+                      {pickups.length} {t('monitor.totalSuffix')}
                     </span>
                   </div>
-                  
+
                   <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                     {queue.length === 0 ? (
                       <div className="text-center text-slate-400 text-xs py-4">
-                        No hay más estudiantes en cola.
+                        {t('monitor.noMoreInQueue')}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-2">
@@ -583,16 +585,16 @@ export function VerificationDisplay() {
                 <div className="bg-red-50 rounded-[2rem] p-6 border border-red-100 flex-shrink-0">
                   <div className="flex items-center gap-3 mb-4">
                     <ShieldCheck className="w-6 h-6 text-error" />
-                    <h4 className="font-bold text-primary text-sm">Alerta Discreta Protocol</h4>
+                    <h4 className="font-bold text-primary text-sm">{t('monitor.discreteAlertProtocol')}</h4>
                   </div>
                   <ul className="space-y-2 text-[10px]">
                     <li className="flex gap-2">
                       <span className="font-bold text-error">01.</span>
-                      <span className="text-slate-600">Mantenga la calma. No confronte al individuo.</span>
+                      <span className="text-slate-600">{t('monitor.stayCalm')}</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="font-bold text-error">02.</span>
-                      <span className="text-slate-600">Contacte a seguridad inmediatamente.</span>
+                      <span className="text-slate-600">{t('monitor.contactSecurity')}</span>
                     </li>
                   </ul>
                 </div>
@@ -602,12 +604,12 @@ export function VerificationDisplay() {
                   <div className="bg-indigo-50 rounded-[2rem] p-6 border border-indigo-100 flex-shrink-0">
                     <div className="flex items-center gap-3 mb-4">
                       <Video className="w-5 h-5 text-indigo-600" />
-                      <h4 className="font-bold text-indigo-900 text-xs uppercase tracking-wider">Aproximándose</h4>
+                      <h4 className="font-bold text-indigo-900 text-xs uppercase tracking-wider">{t('monitor.approaching')}</h4>
                     </div>
                     <div className="space-y-2">
                       {latestDetections.map((det, i) => (
                         <div key={i} className="flex items-center justify-between text-[10px] bg-white/50 p-2 rounded-xl border border-indigo-100">
-                          <span className="font-bold text-indigo-700">{det.plate_number || 'Vehículo Detectado'}</span>
+                          <span className="font-bold text-indigo-700">{det.plate_number || t('monitor.vehicleDetected')}</span>
                           <span className="text-indigo-400 font-medium">{new Date(det.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       ))}
@@ -624,7 +626,7 @@ export function VerificationDisplay() {
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
              <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-               <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Escanear QR de Reemplazo</h3>
+               <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('monitor.scanReplacementQR')}</h3>
                <button onClick={() => setShowQRScanner(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
              <div className="p-8 space-y-6 text-center">
@@ -632,19 +634,19 @@ export function VerificationDisplay() {
                   <QrCode className="w-20 h-20 text-slate-300" />
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  En un entorno real, la cámara se activaría aquí. Para esta demo, pega los datos del QR generado:
+                  {t('monitor.demoQRNote')}
                 </p>
-                <textarea 
+                <textarea
                   value={manualQRData}
                   onChange={e => setManualQRData(e.target.value)}
                   placeholder='{"type":"replacement_pickup",...}'
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-mono outline-none focus:border-indigo-500 h-24"
                 />
-                <button 
+                <button
                   onClick={handleProcessQR}
                   className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
                 >
-                  VALIDAR CÓDIGO
+                  {t('monitor.validateCode')}
                 </button>
              </div>
           </div>

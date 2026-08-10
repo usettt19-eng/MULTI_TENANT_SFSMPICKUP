@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
-import { 
-  UserPlus, Check, X, Loader2, MessageSquare, 
+import { useLanguage } from '../contexts/LanguageContext';
+import {
+  UserPlus, Check, X, Loader2, MessageSquare,
   Clock, Shield, UserCheck, Trash2, Bell
 } from 'lucide-react';
 
 export function RequestsCenter() {
+  const { t } = useLanguage();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -146,7 +148,7 @@ export function RequestsCenter() {
       fetchRequests();
     } catch (error) {
       console.error('Error processing request:', error);
-      alert('Error al procesar la solicitud.');
+      alert(t('requests.processErrorAlert'));
     } finally {
       setProcessingId(null);
     }
@@ -154,19 +156,19 @@ export function RequestsCenter() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <TopNav title="Centro de Solicitudes" subtitle="Gestión de Reemplazos y Permisos Especiales" />
+      <TopNav title={t('requests.title')} subtitle={t('requests.subtitle')} />
 
       <div className="p-6 max-w-5xl mx-auto w-full space-y-8 animate-in slide-in-from-bottom-4">
         <header className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Bandeja de Entrada <MessageSquare className="w-8 h-8 text-indigo-600" />
+              {t('requests.inbox')} <MessageSquare className="w-8 h-8 text-indigo-600" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Procesa las solicitudes de reemplazo enviadas por los padres.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1">{t('requests.processDesc')}</p>
           </div>
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monitoreo en Vivo</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('requests.liveMonitoring')}</span>
           </div>
         </header>
 
@@ -177,8 +179,8 @@ export function RequestsCenter() {
             <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <Check className="w-10 h-10 text-slate-300" />
             </div>
-            <h3 className="text-xl font-black text-slate-800">¡Todo al día!</h3>
-            <p className="text-slate-400 font-medium mt-2">No hay solicitudes pendientes de procesamiento.</p>
+            <h3 className="text-xl font-black text-slate-800">{t('requests.allCaughtUp')}</h3>
+            <p className="text-slate-400 font-medium mt-2">{t('requests.noPending')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -204,12 +206,12 @@ export function RequestsCenter() {
                         <div className="flex items-center gap-3 mb-1">
                           <h3 className="font-black text-slate-800 text-lg">{req.parent?.first_name} {req.parent?.last_name}</h3>
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest ${isPending ? 'bg-amber-100 text-amber-700' : isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                            {isPending ? 'Pendiente' : isApproved ? 'Aprobado/Leído' : 'Rechazado/Archivado'}
+                            {isPending ? t('requests.pending') : isApproved ? t('requests.approvedRead') : t('requests.rejectedArchived')}
                           </span>
                         </div>
                         {req.replacement_name?.startsWith('[MENSAJE]') ? (
                           <div className="text-sm text-slate-500 font-medium leading-relaxed">
-                            <span className="inline-block bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-black tracking-widest mb-1">MENSAJE / AVISO</span><br/>
+                            <span className="inline-block bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-black tracking-widest mb-1">{t('requests.messageLabel')}</span><br/>
                             <p className="whitespace-pre-wrap">{req.replacement_name.replace('[MENSAJE] ', '')}</p>
                             {req.replacement_phone && req.replacement_phone !== 'N/A' && (
                               <p className="mt-2"><a href={req.replacement_phone} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{req.replacement_phone}</a></p>
@@ -217,7 +219,7 @@ export function RequestsCenter() {
                           </div>
                         ) : (
                           <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                            Solicita autorizar a <span className="text-slate-900 font-bold">{req.replacement_name}</span> con teléfono <span className="text-slate-900 font-bold">{req.replacement_phone}</span> para la recogida de hoy.
+                            {t('requests.requestsAuthPrefix')} <span className="text-slate-900 font-bold">{req.replacement_name}</span> {t('requests.withPhone')} <span className="text-slate-900 font-bold">{req.replacement_phone}</span> {t('requests.forTodayPickup')}
                           </p>
                         )}
                         <div className="flex items-center gap-4 mt-3">
@@ -242,25 +244,25 @@ export function RequestsCenter() {
                             className="px-6 py-3 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 flex items-center gap-2"
                           >
                             {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            MARCAR COMO LEÍDO
+                            {t('requests.markAsRead')}
                           </button>
                         ) : (
                           <>
-                            <button 
+                            <button
                               onClick={() => handleProcessRequest(req, 'rejected')}
                               disabled={processingId === req.id}
                               className="px-6 py-3 bg-slate-100 text-slate-600 font-black text-xs rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all flex items-center gap-2"
                             >
                               {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                              RECHAZAR
+                              {t('requests.reject')}
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleProcessRequest(req, 'approved')}
                               disabled={processingId === req.id}
                               className="px-6 py-3 bg-indigo-600 text-white font-black text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
                             >
                               {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                              APROBAR Y GENERAR QR
+                              {t('requests.approveGenerateQR')}
                             </button>
                           </>
                         )}

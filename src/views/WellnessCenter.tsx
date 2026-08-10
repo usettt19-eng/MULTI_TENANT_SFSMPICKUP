@@ -2,6 +2,7 @@ import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { TopNav } from '../components/TopNav';
 import {
   Heart, AlertTriangle, ShieldCheck, Clock, CheckCircle2,
@@ -12,6 +13,11 @@ import { Medication, MedicationAlert } from '../types/database';
 
 export function WellnessCenter() {
   const { profile } = useAuth();
+  const { t } = useLanguage();
+  const INCIDENT_TYPES = [
+    t('wellness.typeFall'), t('wellness.typeFever'), t('wellness.typeScrape'),
+    t('wellness.typePain'), t('wellness.typeBehavior'), t('wellness.typeOther'),
+  ];
   const [alerts, setAlerts] = useState<any[]>([]);
   const [meds, setMeds] = useState<any[]>([]);
   const [criticalMeds, setCriticalMeds] = useState<Medication[]>([]);
@@ -25,7 +31,7 @@ export function WellnessCenter() {
   // States for Incident Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [incidentType, setIncidentType] = useState('Caída');
+  const [incidentType, setIncidentType] = useState(INCIDENT_TYPES[0]);
   const [incidentDesc, setIncidentDesc] = useState('');
   const [isSavingIncident, setIsSavingIncident] = useState(false);
 
@@ -156,10 +162,10 @@ export function WellnessCenter() {
       .eq('id', medId);
 
     if (error) {
-      alert("Error al registrar: " + error.message);
+      alert(t('wellness.loggingErrorPrefix') + error.message);
     } else {
       await logActivity(
-        'WELLNESS', 
+        'WELLNESS',
         `MEDICAMENTO ADMINISTRADO: ${med?.medication_name} (${med?.dosage}) entregado a ${med?.students?.first_name}.`,
         'Enfermería',
         {},
@@ -172,7 +178,7 @@ export function WellnessCenter() {
 
   const handleSaveIncident = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudentId) return alert("Selecciona un alumno.");
+    if (!selectedStudentId) return alert(t('wellness.selectStudentAlert'));
 
     setIsSavingIncident(true);
     
@@ -199,16 +205,16 @@ export function WellnessCenter() {
       fetchWellnessData();
     } catch (error: any) {
       console.error("Error saving incident:", error);
-      alert("Error al guardar: " + error.message);
+      alert(t('wellness.savingErrorPrefix') + error.message);
     }
-    
+
     setIsSavingIncident(false);
   };
 
   const handleSaveMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!medForm.student_id || !medForm.medication_name || !medForm.dosage) {
-      return alert("Completa los campos requeridos.");
+      return alert(t('wellness.fillRequiredAlert'));
     }
 
     setIsSavingMedication(true);
@@ -230,7 +236,7 @@ export function WellnessCenter() {
       });
 
     if (error) {
-      alert("Error al guardar: " + error.message);
+      alert(t('wellness.savingErrorPrefix') + error.message);
     } else {
       await logActivity(
         'WELLNESS',
@@ -275,7 +281,7 @@ export function WellnessCenter() {
       .eq('id', medId);
 
     if (error) {
-      alert("Error al actualizar: " + error.message);
+      alert(t('wellness.updatingErrorPrefix') + error.message);
     } else {
       await logActivity(
         'WELLNESS',
@@ -333,23 +339,23 @@ export function WellnessCenter() {
       }
       fetchWellnessData(); // Refresh main dashboard too
     } catch (error: any) {
-      alert("Error al guardar evolución: " + error.message);
+      alert(t('wellness.evolutionErrorPrefix') + error.message);
     }
-    
+
     setIsSavingEvolution(false);
   };
 
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Centro de Bienestar Estudiantil" />
+      <TopNav title="SmartPickup" subtitle={t('wellness.title')} />
 
       <div className="p-6 max-w-7xl mx-auto space-y-8 w-full font-body animate-in fade-in duration-700">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Centro de Bienestar <Activity className="w-8 h-8 text-indigo-500" />
+              {t('wellness.title')} <Activity className="w-8 h-8 text-indigo-500" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium">Monitorea alergias, medicamentos y registros diarios.</p>
+            <p className="text-sm text-slate-500 font-medium">{t('wellness.subtitle')}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -357,21 +363,21 @@ export function WellnessCenter() {
               className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-200 active:scale-95 group"
             >
               <User className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              EXPEDIENTES
+              {t('wellness.records')}
             </button>
             <button
               onClick={() => setIsMedModalOpen(true)}
               className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95 group"
             >
               <Syringe className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-              AGREGAR MEDICAMENTO
+              {t('wellness.addMedicationBtn')}
             </button>
             <button
               onClick={() => setIsModalOpen(true)}
               className="flex items-center gap-2 bg-slate-900 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 active:scale-95 group"
             >
               <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-              REGISTRAR INCIDENTE
+              {t('wellness.reportIncidentBtn')}
             </button>
           </div>
         </header>
@@ -379,7 +385,7 @@ export function WellnessCenter() {
         {loading ? (
           <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
-            <p className="text-slate-400 font-bold italic animate-pulse">Sincronizando expedientes médicos...</p>
+            <p className="text-slate-400 font-bold italic animate-pulse">{t('wellness.syncing')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -392,14 +398,14 @@ export function WellnessCenter() {
                   <div className="p-2 bg-white rounded-xl shadow-sm">
                     <AlertTriangle className="w-5 h-5 text-rose-500" />
                   </div>
-                  <h2 className="text-xl font-black text-rose-900 tracking-tight">Alertas de Salud Activas</h2>
+                  <h2 className="text-xl font-black text-rose-900 tracking-tight">{t('wellness.activeAlerts')}</h2>
                 </div>
 
                 <div className="space-y-4">
                   {alerts.length === 0 ? (
                     <div className="bg-white/60 p-6 rounded-3xl text-center border-2 border-dashed border-rose-200">
                       <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                      <p className="text-slate-500 font-bold">No hay alertas críticas registradas.</p>
+                      <p className="text-slate-500 font-bold">{t('wellness.noAlerts')}</p>
                     </div>
                   ) : (
                     alerts.map(alert => (
@@ -419,7 +425,7 @@ export function WellnessCenter() {
                           </div>
                         </div>
                         <button className="bg-slate-50 text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black hover:bg-slate-100 transition-all flex items-center gap-1 group-hover:bg-rose-600 group-hover:text-white">
-                          VER PLAN <ChevronRight className="w-3 h-3" />
+                          {t('wellness.viewPlan')} <ChevronRight className="w-3 h-3" />
                         </button>
                       </div>
                     ))
@@ -434,9 +440,9 @@ export function WellnessCenter() {
                     <div className="p-2 bg-amber-100 rounded-xl">
                       <AlertTriangle className="w-5 h-5 text-amber-600" />
                     </div>
-                    <h2 className="text-xl font-black text-amber-900 tracking-tight">Medicamentos Críticos</h2>
+                    <h2 className="text-xl font-black text-amber-900 tracking-tight">{t('wellness.criticalMedsTitle')}</h2>
                     <span className="ml-auto bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
-                      {criticalMeds.length} {criticalMeds.length === 1 ? 'Activo' : 'Activos'}
+                      {criticalMeds.length} {t('wellness.activeCount')}
                     </span>
                   </div>
 
@@ -457,7 +463,7 @@ export function WellnessCenter() {
                               {med.medication_name} ({med.dosage})
                             </p>
                             <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                              {med.critical_reason || 'Requiere atención especial'} • {med.frequency}
+                              {med.critical_reason || t('wellness.specialAttention')} • {med.frequency}
                             </p>
                           </div>
                         </div>
@@ -466,7 +472,7 @@ export function WellnessCenter() {
                           onClick={() => toggleMedicationCritical(med.id, true)}
                           className="bg-amber-100 text-amber-700 px-4 py-2 rounded-xl text-[10px] font-black hover:bg-amber-200 transition-all flex items-center gap-1 disabled:opacity-50"
                         >
-                          <ToggleRight className="w-4 h-4" /> CRÍTICO
+                          <ToggleRight className="w-4 h-4" /> {t('wellness.criticalBadge')}
                         </button>
                       </div>
                     ))}
@@ -481,17 +487,17 @@ export function WellnessCenter() {
                     <div className="p-2 bg-indigo-50 rounded-xl">
                       <Clock className="w-5 h-5 text-indigo-500" />
                     </div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tight">Horario de Medicamentos de Hoy</h2>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('wellness.medSchedule')}</h2>
                   </div>
                   <span className="bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-sm border border-indigo-100">
-                    {meds.filter(m => m.status === 'pending').length} Pendientes
+                    {meds.filter(m => m.status === 'pending').length} {t('wellness.pending')}
                   </span>
                 </div>
 
                 <div className="space-y-4">
                   {meds.length === 0 ? (
                     <div className="py-10 text-center text-slate-300 italic font-medium">
-                      No hay medicamentos programados para hoy.
+                      {t('wellness.noMedsToday')}
                     </div>
                   ) : (
                     meds.map(med => (
@@ -499,7 +505,7 @@ export function WellnessCenter() {
                         <div className="flex items-center gap-6">
                           <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-black transition-colors ${med.status === 'administered' ? 'bg-slate-200 text-slate-400' : 'bg-indigo-50 text-indigo-600'}`}>
                             <span className="text-xs leading-none">{new Date(med.scheduled_time).getHours()}</span>
-                            <span className="text-[10px] opacity-70">HRS</span>
+                            <span className="text-[10px] opacity-70">{t('wellness.hrsLabel')}</span>
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
@@ -508,28 +514,28 @@ export function WellnessCenter() {
                               </h4>
                               {med.is_critical && (
                                 <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" /> Crítico
+                                  <AlertTriangle className="w-3 h-3" /> {t('wellness.criticalBadge')}
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-500 font-bold mt-0.5">{med.students?.first_name} {med.students?.last_name} <span className="mx-1.5 opacity-30">•</span> Prescrito: {med.notes || 'Routine'}</p>
+                            <p className="text-xs text-slate-500 font-bold mt-0.5">{med.students?.first_name} {med.students?.last_name} <span className="mx-1.5 opacity-30">•</span> {t('wellness.prescribedBy')}: {med.notes || 'Routine'}</p>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           {/* Toggle Critical Button */}
                           <button
                             disabled={processing === med.id}
                             onClick={() => toggleMedicationCritical(med.id, med.is_critical)}
                             className={`p-3 rounded-xl font-black text-[10px] uppercase transition-all active:scale-95 disabled:opacity-50 ${med.is_critical ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                            title={med.is_critical ? 'Quitar de críticos' : 'Marcar como crítico'}
+                            title={med.is_critical ? t('wellness.removeCriticalTitle') : t('wellness.markCriticalTitle')}
                           >
                             {med.is_critical ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                           </button>
 
                           {med.status === 'administered' ? (
                             <div className="flex items-center gap-2 text-emerald-500 font-black text-[10px] uppercase">
-                              <CheckCircle2 className="w-4 h-4" /> Hecho
+                              <CheckCircle2 className="w-4 h-4" /> {t('wellness.done')}
                             </div>
                           ) : (
                             <button
@@ -537,7 +543,7 @@ export function WellnessCenter() {
                               onClick={() => markMedAsDone(med.id)}
                               className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
                             >
-                              {processing === med.id ? 'Guardando...' : 'Administrar'}
+                              {processing === med.id ? t('wellness.savingEllipsis') : t('wellness.administerBtn')}
                             </button>
                           )}
                         </div>
@@ -555,24 +561,24 @@ export function WellnessCenter() {
               <div className="bg-indigo-900 rounded-[3rem] p-8 text-white shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl" />
                 <h3 className="text-xl font-black mb-8 flex items-center gap-3">
-                   <Activity className="w-5 h-5 text-indigo-300" /> Resumen Diario
+                   <Activity className="w-5 h-5 text-indigo-300" /> {t('wellness.dailyOverview')}
                 </h3>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white/10 rounded-3xl p-5 border border-white/5">
-                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">Incidentes</p>
+                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">{t('wellness.incidents')}</p>
                     <span className="text-4xl font-black">{summary.incidents}</span>
                   </div>
                   <div className="bg-white/10 rounded-3xl p-5 border border-white/5">
-                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">Meds Dados</p>
+                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">{t('wellness.medsGiven')}</p>
                     <span className="text-4xl font-black">{summary.medsDone}</span>
                   </div>
                   <div className="bg-amber-500/20 rounded-3xl p-5 border border-amber-400/30">
-                    <p className="text-[10px] font-black uppercase text-amber-200 mb-2">Críticos</p>
+                    <p className="text-[10px] font-black uppercase text-amber-200 mb-2">{t('wellness.criticalStat')}</p>
                     <span className="text-4xl font-black">{summary.criticalCount}</span>
                   </div>
                   <div className="bg-white/10 rounded-3xl p-5 border border-white/5">
-                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">Alertas</p>
+                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-2">{t('wellness.alertsStat')}</p>
                     <span className="text-4xl font-black">{alerts.length}</span>
                   </div>
                 </div>
@@ -581,12 +587,12 @@ export function WellnessCenter() {
               {/* Recent Logs (Temperature, Nap, etc) */}
               <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
                 <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center gap-3">
-                  <Stethoscope className="w-5 h-5 text-indigo-500" /> Registros Recientes
+                  <Stethoscope className="w-5 h-5 text-indigo-500" /> {t('wellness.recentLogs')}
                 </h3>
 
                 <div className="space-y-6">
                   {logs.length === 0 ? (
-                    <p className="text-slate-300 italic text-sm text-center py-6">No hay registros hoy.</p>
+                    <p className="text-slate-300 italic text-sm text-center py-6">{t('wellness.noLogsToday')}</p>
                   ) : (
                     logs.map(log => (
                       <div key={log.id} className="flex gap-4 relative">
@@ -602,8 +608,8 @@ export function WellnessCenter() {
                         </div>
                         <div className="flex-1 pt-1">
                           <p className={`text-xs font-black leading-none mb-1 uppercase tracking-tight ${log.entryType === 'incident' ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {log.entryType === 'incident' ? `INCIDENTE: ${log.type}` : (
-                              log.type === 'temperature' ? 'Control Térmico' : log.type === 'nap' ? 'Hora de Siesta' : 'Alimentación'
+                            {log.entryType === 'incident' ? `${t('wellness.incidentPrefix')}: ${log.type}` : (
+                              log.type === 'temperature' ? t('wellness.tempControl') : log.type === 'nap' ? t('wellness.napTime') : t('wellness.feeding')
                             )}
                           </p>
                           <p className="text-[11px] text-slate-500 font-bold mb-1">
@@ -616,7 +622,7 @@ export function WellnessCenter() {
                   )}
                   
                   <button className="w-full bg-slate-50 text-slate-400 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-indigo-50 hover:text-indigo-500 transition-all border border-slate-50 border-dashed hover:border-indigo-200 mt-4">
-                    VER TODOS LOS REGISTROS
+                    {t('wellness.viewAllRecordsBtn')}
                   </button>
                 </div>
               </div>
@@ -634,7 +640,7 @@ export function WellnessCenter() {
                 <div className="p-2 bg-emerald-50 rounded-xl">
                   <User className="w-5 h-5 text-emerald-500" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">Expedientes de Salud</h2>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('wellness.recordsModalTitle')}</h2>
               </div>
               <button onClick={() => { setIsRecordModalOpen(false); setSelectedRecordStudent(null); setStudentIncidents([]); }} className="p-2.5 bg-white text-slate-400 hover:text-emerald-500 rounded-xl shadow-sm transition-all hover:rotate-90">
                 <X className="w-5 h-5" />
@@ -644,14 +650,14 @@ export function WellnessCenter() {
             <div className="p-8 flex-1 overflow-y-auto space-y-6">
               {/* Student Selector */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Seleccionar Alumno</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.selectStudent')}</label>
                 <div className="relative">
-                  <select 
+                  <select
                     value={selectedRecordStudent?.id || ''}
                     onChange={(e) => handleStudentSelectForRecord(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-12 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all appearance-none"
                   >
-                    <option value="">Selecciona un alumno...</option>
+                    <option value="">{t('wellness.selectStudentPlaceholder')}</option>
                     {students.map(s => (
                       <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.grade})</option>
                     ))}
@@ -677,12 +683,12 @@ export function WellnessCenter() {
                   <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden">
                     <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-slate-500" />
-                      <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest">Historial de Incidentes</h4>
+                      <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest">{t('wellness.incidentHistory')}</h4>
                     </div>
-                    
+
                     {studentIncidents.length === 0 ? (
                       <div className="p-8 text-center text-slate-400 font-medium text-sm italic">
-                        No hay incidentes registrados para este alumno.
+                        {t('wellness.noIncidents')}
                       </div>
                     ) : (
                       <div className="divide-y divide-slate-100">
@@ -702,38 +708,38 @@ export function WellnessCenter() {
                                   onClick={() => { setEditingIncidentId(incident.id); setEvolutionText(''); }}
                                   className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg transition-all"
                                 >
-                                  Añadir Evolución
+                                  {t('wellness.addEvolution')}
                                 </button>
                               )}
                             </div>
-                            
+
                             <div className="text-sm text-slate-700 font-medium whitespace-pre-wrap bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-3">
                               {incident.description}
                             </div>
 
                             {editingIncidentId === incident.id && (
                               <div className="mt-4 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 animate-in fade-in">
-                                <label className="block text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-2">Nueva Nota de Evolución</label>
+                                <label className="block text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-2">{t('wellness.newEvolutionNote')}</label>
                                 <textarea
                                   value={evolutionText}
                                   onChange={(e) => setEvolutionText(e.target.value)}
-                                  placeholder="Ej: El alumno ya no presenta dolor..."
+                                  placeholder={t('wellness.evolutionPlaceholder')}
                                   rows={3}
                                   className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-indigo-500 transition-all resize-none mb-3"
                                 />
                                 <div className="flex gap-2 justify-end">
-                                  <button 
+                                  <button
                                     onClick={() => setEditingIncidentId(null)}
                                     className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-200 transition-all"
                                   >
-                                    Cancelar
+                                    {t('wellness.cancel')}
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => handleSaveEvolution(incident.id)}
                                     disabled={isSavingEvolution || !evolutionText.trim()}
                                     className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
                                   >
-                                    {isSavingEvolution ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Guardar'}
+                                    {isSavingEvolution ? <Loader2 className="w-3 h-3 animate-spin" /> : t('wellness.save')}
                                   </button>
                                 </div>
                               </div>
@@ -759,7 +765,7 @@ export function WellnessCenter() {
                 <div className="p-2 bg-rose-50 rounded-xl">
                   <AlertCircle className="w-5 h-5 text-rose-500" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">Reportar Incidente</h2>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('wellness.reportModalTitle')}</h2>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2.5 bg-white text-slate-400 hover:text-rose-500 rounded-xl shadow-sm transition-all hover:rotate-90">
                 <X className="w-5 h-5" />
@@ -768,15 +774,15 @@ export function WellnessCenter() {
 
             <form onSubmit={handleSaveIncident} className="p-8 space-y-6">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Estudiante Involucrado</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.studentInvolved')}</label>
                 <div className="relative">
-                  <select 
+                  <select
                     required
                     value={selectedStudentId}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-12 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all appearance-none"
                   >
-                    <option value="">Selecciona un alumno...</option>
+                    <option value="">{t('wellness.selectStudentPlaceholder')}</option>
                     {students.map(s => (
                       <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.grade})</option>
                     ))}
@@ -786,9 +792,9 @@ export function WellnessCenter() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tipo de Evento</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.eventType')}</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {['Caída', 'Fiebre', 'Raspón', 'Dolor', 'Comportamiento', 'Otro'].map(type => (
+                  {INCIDENT_TYPES.map(type => (
                     <button
                       key={type}
                       type="button"
@@ -802,31 +808,31 @@ export function WellnessCenter() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Breve Descripción</label>
-                <textarea 
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.briefDescription')}</label>
+                <textarea
                   required
                   value={incidentDesc}
                   onChange={(e) => setIncidentDesc(e.target.value)}
-                  placeholder="Explica qué sucedió..."
+                  placeholder={t('wellness.describePlaceholder')}
                   rows={4}
                   className="w-full bg-slate-50 border border-slate-200 rounded-3xl px-5 py-4 text-sm font-medium text-slate-600 outline-none focus:border-indigo-500 focus:bg-white transition-all resize-none"
                 />
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-3xl hover:bg-slate-200 transition-all text-[10px] uppercase tracking-widest"
                 >
-                  Cancelar
+                  {t('wellness.cancel')}
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSavingIncident}
                   className="flex-[2] bg-slate-900 text-white font-black py-4 rounded-3xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-50 flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest"
                 >
-                  {isSavingIncident ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Activity className="w-4 h-4" /> Guardar Reporte</>}
+                  {isSavingIncident ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Activity className="w-4 h-4" /> {t('wellness.saveReportBtn')}</>}
                 </button>
               </div>
             </form>
@@ -843,7 +849,7 @@ export function WellnessCenter() {
                 <div className="p-2 bg-indigo-50 rounded-xl">
                   <Syringe className="w-5 h-5 text-indigo-500" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">Agregar Medicamento</h2>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('wellness.addMedModalTitle')}</h2>
               </div>
               <button onClick={() => setIsMedModalOpen(false)} className="p-2.5 bg-white text-slate-400 hover:text-indigo-500 rounded-xl shadow-sm transition-all hover:rotate-90">
                 <X className="w-5 h-5" />
@@ -852,7 +858,7 @@ export function WellnessCenter() {
 
             <form onSubmit={handleSaveMedication} className="p-8 space-y-6">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Estudiante</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.student')}</label>
                 <div className="relative">
                   <select
                     required
@@ -860,7 +866,7 @@ export function WellnessCenter() {
                     onChange={(e) => setMedForm({ ...medForm, student_id: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-12 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all appearance-none"
                   >
-                    <option value="">Selecciona un alumno...</option>
+                    <option value="">{t('wellness.selectStudentPlaceholder')}</option>
                     {students.map(s => (
                       <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.grade})</option>
                     ))}
@@ -871,7 +877,7 @@ export function WellnessCenter() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Medicamento *</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.medicationLabel')}</label>
                   <input
                     type="text"
                     required
@@ -882,13 +888,13 @@ export function WellnessCenter() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Dosis *</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.doseLabel')}</label>
                   <input
                     type="text"
                     required
                     value={medForm.dosage}
                     onChange={(e) => setMedForm({ ...medForm, dosage: e.target.value })}
-                    placeholder="Ej: 5ml"
+                    placeholder={t('wellness.dosePlaceholder')}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                   />
                 </div>
@@ -896,17 +902,17 @@ export function WellnessCenter() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Frecuencia</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.frequencyLabel')}</label>
                   <input
                     type="text"
                     value={medForm.frequency}
                     onChange={(e) => setMedForm({ ...medForm, frequency: e.target.value })}
-                    placeholder="Ej: Cada 8 horas"
+                    placeholder={t('wellness.frequencyPlaceholder')}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Fecha Inicio</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.startDate')}</label>
                   <input
                     type="date"
                     value={medForm.start_date}
@@ -917,11 +923,11 @@ export function WellnessCenter() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Notas</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('wellness.notes')}</label>
                 <textarea
                   value={medForm.notes}
                   onChange={(e) => setMedForm({ ...medForm, notes: e.target.value })}
-                  placeholder="Instrucciones adicionales..."
+                  placeholder={t('wellness.notesPlaceholder')}
                   rows={2}
                   className="w-full bg-slate-50 border border-slate-200 rounded-3xl px-5 py-4 text-sm font-medium text-slate-600 outline-none focus:border-indigo-500 focus:bg-white transition-all resize-none"
                 />
@@ -932,7 +938,7 @@ export function WellnessCenter() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600" />
-                    <span className="text-sm font-black text-amber-900 uppercase tracking-tight">Medicamento Crítico</span>
+                    <span className="text-sm font-black text-amber-900 uppercase tracking-tight">{t('wellness.criticalMedication')}</span>
                   </div>
                   <button
                     type="button"
@@ -940,23 +946,23 @@ export function WellnessCenter() {
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${medForm.is_critical ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'}`}
                   >
                     {medForm.is_critical ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                    {medForm.is_critical ? 'ACTIVADO' : 'DESACTIVADO'}
+                    {medForm.is_critical ? t('wellness.enabled') : t('wellness.disabled')}
                   </button>
                 </div>
                 {medForm.is_critical && (
                   <div className="mt-3">
-                    <label className="block text-[9px] font-black text-amber-700 uppercase tracking-widest mb-2 ml-1">Razón (opcional)</label>
+                    <label className="block text-[9px] font-black text-amber-700 uppercase tracking-widest mb-2 ml-1">{t('wellness.reasonOptional')}</label>
                     <input
                       type="text"
                       value={medForm.critical_reason}
                       onChange={(e) => setMedForm({ ...medForm, critical_reason: e.target.value })}
-                      placeholder="Ej: Alergia severa, requiere monitoreo"
+                      placeholder={t('wellness.reasonPlaceholder')}
                       className="w-full bg-white border border-amber-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                   </div>
                 )}
                 <p className="text-[9px] text-amber-700 font-bold mt-3">
-                  Los medicamentos críticos aparecerán en la sección de alertas críticas y requerirán atención especial.
+                  {t('wellness.criticalMedNote')}
                 </p>
               </div>
 
@@ -966,14 +972,14 @@ export function WellnessCenter() {
                   onClick={() => setIsMedModalOpen(false)}
                   className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-3xl hover:bg-slate-200 transition-all text-[10px] uppercase tracking-widest"
                 >
-                  Cancelar
+                  {t('wellness.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingMedication}
                   className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-3xl hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest"
                 >
-                  {isSavingMedication ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Syringe className="w-4 h-4" /> Guardar Medicamento</>}
+                  {isSavingMedication ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Syringe className="w-4 h-4" /> {t('wellness.saveMedicationBtn')}</>}
                 </button>
               </div>
             </form>
