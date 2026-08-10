@@ -24,31 +24,6 @@ app.get('/api/health', (_req, res) => res.json({success: true, data: {status: 'o
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Búsqueda de colegio por código. PÚBLICO: se llama desde el login, antes de
- * que exista sesión. Devuelve sólo id y nombre — nunca la lista completa, para
- * no permitir enumerar los colegios clientes.
- */
-app.get(
-  '/api/tenants/lookup',
-  wrap(async (req, res) => {
-    const domain = String(req.query.domain ?? '').trim();
-    if (!domain) return fail(res, 400, 'Falta el código del colegio.');
-
-    const {data, error} = await admin
-      .from('tenants')
-      .select('id, name, status')
-      .eq('domain', domain)
-      .maybeSingle();
-
-    if (error) return fail(res, 500, error.message);
-    if (!data) return fail(res, 404, 'Código de colegio inválido.');
-    if (data.status !== 'active') return fail(res, 403, 'Este colegio no está activo.');
-
-    return res.json({success: true, tenant: {id: data.id, name: data.name}});
-  }),
-);
-
-/**
  * Alta de colegio + su administrador.
  *
  * Sin autoregistro público: solo el super_admin da de alta colegios, desde

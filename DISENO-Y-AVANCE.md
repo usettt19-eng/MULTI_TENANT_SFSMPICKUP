@@ -366,7 +366,6 @@ una PK son implícitamente `NOT NULL`.
 | `@supabase/supabase-js` a `dependencies` | Nada — se puede hacer ya |
 | Registrar el acceso cruzado del super_admin | Nada |
 | Activar plan Pro en Supabase | Decisión comercial |
-| Autoregistro público de padres por código de colegio en `Login.tsx` (`supabase.auth.signUp()` directo, sin pasar por el backend) sigue activo — decidir si convive con las invitaciones o se cierra | Decisión de producto |
 | Auto-vincular padres a estudiantes por nombre/grado en el import CSV | Nada |
 
 ---
