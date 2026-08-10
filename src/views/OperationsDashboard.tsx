@@ -4,9 +4,9 @@ import { TopNav } from '../components/TopNav';
 import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { GoogleGenAI, Modality } from "@google/genai";
-import { 
-  AlertTriangle, Clock, CheckCircle2, QrCode, Users, 
-  BriefcaseMedical, RefreshCw, Activity, Video, 
+import {
+  AlertTriangle, Clock, CheckCircle2, UserPlus, Users,
+  BriefcaseMedical, RefreshCw, Activity, Video, Monitor,
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
   ChevronDown, MessageSquare
@@ -323,25 +323,25 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           {logoUrl && (
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
               <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />
-              <h1 className="text-xl font-black text-slate-800">Dashboard de Operaciones</h1>
+              <h1 className="text-xl font-black text-slate-800">{t('dashboard.title')}</h1>
             </div>
           )}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-[#1e293b]" />
-                <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">Live Pickup Queue</h2>
+                <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">{t('dashboard.liveQueue')}</h2>
               </div>
               <span className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-full border border-slate-200">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">REAL-TIME SYNC</span>
+                <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">{t('dashboard.realtimeSync')}</span>
               </span>
             </div>
 
             <div className="p-6">
               {pickups.length === 0 ? (
                 <div className="h-[250px] flex items-center justify-center">
-                  <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest">No hay recolecciones pendientes</p>
+                  <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest">{t('dashboard.noPickups')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -353,7 +353,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                           </div>
                           <div>
                             <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.student?.first_name} {item.student?.last_name}</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{item.student?.grade} • VINO POR ÉL: {item.parent?.first_name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{item.student?.grade} • {t('dashboard.pickedUpBy')}: {item.parent?.first_name}</p>
                           </div>
                        </div>
                        <div className="flex items-center gap-6">
@@ -361,11 +361,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                             <span className="block text-[8px] font-black text-slate-400 uppercase">PIN</span>
                             <span className="text-lg font-black text-slate-900 tracking-widest">{item.parent?.pin_code}</span>
                           </div>
-                          <button 
+                          <button
                             onClick={() => updateStatus(item.id, 'released')}
                             className="bg-[#1e293b] text-white px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95 shadow-lg"
                           >
-                            AUTHORIZE EXIT
+                            {t('dashboard.confirmRelease')}
                           </button>
                        </div>
                     </div>
@@ -378,22 +378,22 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           {/* Pickup Zone Analysis */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-5 flex justify-between items-center">
-              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">Pickup Zone Analysis</h3>
-              <select 
+              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">{t('dashboard.pickupZone')}</h3>
+              <select
                 className="bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 text-[10px] font-black uppercase"
                 onChange={(e) => setSelectedDoor(e.target.value)}
                 value={selectedDoor}
               >
-                <option value="puerta_1">Main Entrance</option>
-                <option value="puerta_2">Side Entrance</option>
+                <option value="puerta_1">{t('dashboard.mainEntrance')}</option>
+                <option value="puerta_2">{t('dashboard.sideEntrance')}</option>
               </select>
             </div>
             <div className="px-5 pb-5">
               <div className="relative aspect-video rounded-xl bg-slate-900 overflow-hidden">
                 {latestDetections[selectedDoor] ? (
-                  <img 
-                    src={latestDetections[selectedDoor].image_url} 
-                    alt={`Detección en ${selectedDoor}`} 
+                  <img
+                    src={latestDetections[selectedDoor].image_url}
+                    alt={`Detección en ${selectedDoor}`}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -405,16 +405,16 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               </div>
               <div className="grid grid-cols-2 gap-px bg-slate-100 mt-2 rounded-xl overflow-hidden border border-slate-100 shadow-sm">
                 <div className="bg-[#f8fafc] p-3 text-center">
-                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Last Detection</p>
+                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{t('dashboard.lastDetection')}</p>
                    <p className="text-[10px] font-black text-[#1e293b]">
-                     {latestDetections[selectedDoor] 
-                       ? new Date(latestDetections[selectedDoor].detected_at).toLocaleTimeString() 
-                       : 'No data'}
+                     {latestDetections[selectedDoor]
+                       ? new Date(latestDetections[selectedDoor].detected_at).toLocaleTimeString()
+                       : t('dashboard.noData')}
                    </p>
                 </div>
                 <div className="bg-[#f8fafc] p-3 text-center border-l border-slate-100">
-                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Door</p>
-                   <p className="text-sm font-black text-[#1e293b]">{selectedDoor === 'puerta_1' ? 'Main' : 'Side'}</p>
+                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{t('dashboard.door')}</p>
+                   <p className="text-sm font-black text-[#1e293b]">{selectedDoor === 'puerta_1' ? t('dashboard.main') : t('dashboard.side')}</p>
                 </div>
               </div>
             </div>
@@ -435,13 +435,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               </div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
-                <h3 className="text-white text-[15px] font-black uppercase tracking-wider">Solicitudes Pendientes</h3>
+                <h3 className="text-white text-[15px] font-black uppercase tracking-wider">{t('dashboard.pendingRequests')}</h3>
               </div>
               <p className="text-white/80 text-[11px] font-bold">
-                Tienes {pendingRequests.length} solicitud{pendingRequests.length > 1 ? 'es' : ''} de reemplazo esperando aprobación.
+                {t('dashboard.pendingRequestsPrefix')} {pendingRequests.length} {t('dashboard.pendingRequestsSuffix')}
               </p>
               <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-white uppercase tracking-widest">
-                VER BANDEJA DE ENTRADA <ChevronDown className="w-4 h-4 -rotate-90" />
+                {t('dashboard.viewInbox')} <ChevronDown className="w-4 h-4 -rotate-90" />
               </div>
             </section>
           )}
@@ -451,13 +451,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <RefreshCw className="w-20 h-20 text-white" />
             </div>
-            <h3 className="text-white text-[15px] font-black uppercase tracking-wider mb-2">Operational Speed</h3>
-            <p className="text-white/60 text-[10px] mb-6 font-medium">Current throughput is at 94%. Optimal resource utilization.</p>
-            
+            <h3 className="text-white text-[15px] font-black uppercase tracking-wider mb-2">{t('dashboard.operationalSpeed')}</h3>
+            {/* TODO: "94%" es un valor de ejemplo fijo en el código, no se calcula de datos reales. */}
+            <p className="text-white/60 text-[10px] mb-6 font-medium">{t('dashboard.throughputStatus')}</p>
+
             <div className="grid grid-cols-2 gap-3">
               <button onClick={handleQuickScan} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <QrCode className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.quickScan')}</span>
+                <UserPlus className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.addParent')}</span>
               </button>
               <button onClick={() => setActiveModal('GUEST_SIGN')} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <Users className="w-5 h-5 text-white/80" />
@@ -468,8 +469,8 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                 <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.medLog')}</span>
               </button>
               <button onClick={() => setCurrentView('external')} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <RefreshCw className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.handover')}</span>
+                <Monitor className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.externalMonitor')}</span>
               </button>
             </div>
           </section>
@@ -477,23 +478,26 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           {/* Quick Stats */}
           <section className="grid grid-cols-3 gap-3">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase">Niños</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.children')}</p>
               <p className="text-xl font-black text-slate-800">{stats.totalChildren}</p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase">Padres</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.parents')}</p>
               <p className="text-xl font-black text-slate-800">{stats.totalParents}</p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase">Top Grado</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.topGrade')}</p>
               <p className="text-xl font-black text-slate-800">{stats.topGrade}</p>
             </div>
           </section>
 
           {/* Ratios */}
+          {/* TODO: Las filas de abajo (Toddler Wing/Pre-K/Infant Care y sus
+              proporciones) son datos de ejemplo fijos en el código, no salen
+              de la base de datos — no reflejan la situación real del colegio. */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-6 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[#0f172a]" /> Staff-to-Child Ratios
+              <Activity className="w-4 h-4 text-[#0f172a]" /> {t('dashboard.ratios')}
             </h3>
             <div className="space-y-5">
               {[
@@ -515,15 +519,15 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="mt-8 pt-4 border-t border-slate-50 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">STATE COMPLIANCE ACTIVE</span>
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{t('dashboard.stateComplianceActive')}</span>
               </div>
-              <button className="text-[9px] font-black text-slate-800 uppercase hover:underline">Reassign Staff</button>
+              <button className="text-[9px] font-black text-slate-800 uppercase hover:underline">{t('dashboard.reassignStaff')}</button>
             </div>
           </section>
 
           {/* Verification Activity */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[300px]">
-            <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-6">Verification Activity</h3>
+            <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-6">{t('dashboard.recentActivity')}</h3>
             <div className="space-y-5">
               {auditLogs.map((log) => (
                 <div key={log.id} className="flex justify-between group">
