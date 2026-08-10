@@ -1,7 +1,7 @@
 # Safe Smart Pickup — Diseño y estado del proyecto
 
 Documento de trabajo. Recoge la arquitectura, los hallazgos de la auditoría y
-lo que queda pendiente. Última actualización: 2026-08-08.
+lo que queda pendiente. Última actualización: 2026-08-10.
 
 ---
 
@@ -365,8 +365,123 @@ una PK son implícitamente `NOT NULL`.
 | Vendorizar los modelos de `face-api.js` | Nada — se puede hacer ya |
 | `@supabase/supabase-js` a `dependencies` | Nada — se puede hacer ya |
 | Registrar el acceso cruzado del super_admin | Nada |
-| Activar plan Pro en Supabase | Decisión comercial |
-| Auto-vincular padres a estudiantes por nombre/grado en el import CSV | Nada |
+| Activar plan Pro en Supabase | Decisión comercial — crítico, ver §3 |
+| App iOS: firma real (certificado + provisioning profile + API key de App Store Connect) | En **standby** a pedido del cliente — requiere que él genere las credenciales en su cuenta de Apple Developer, ver §9 |
+| App iOS: el workflow de validación (`ios-build.yml`) falla en `pod install` — el proyecto generado usa Swift Package Manager, no CocoaPods, así que ese paso sobra | Nada, es un fix trivial cuando se retome iOS |
+| Ícono/splash real de la app Android (hoy son los genéricos de Capacitor) | Nada — falta el logo en alta resolución |
+| Fuente de datos real para "Staff-to-Child Ratios" (se quitó del dashboard por ser datos inventados, ver §9) | Decisión de producto: definir qué datos existen para calcularlo |
+| Reemplazar el agente Gemini del chat por uno propio (pedido explícito, no iniciado) | Nada |
+
+---
+
+## 9. Sesión 2026-08-10: correo real, apps móviles y limpieza del dashboard
+
+### Amazon SES — invitaciones por correo reales
+
+Dominio `safesmartpickup.com` verificado en SES con Easy DKIM. Detalles que
+importan si se vuelve a tocar:
+
+- **Configuration Set propio** (`sfsmpickup-transactional`), separado del que
+  usa el FusionPBX en la misma cuenta AWS — así un problema de rebotes de este
+  proyecto no arriesga la telefonía.
+- Rebotes/quejas enganchados por **SNS** (`sfsmpickup-ses-alerts`) a
+  `info@safesmartpickup.com`.
+- Credenciales SMTP de un usuario IAM dedicado (`sfsmpickup-ses-smtp`), con
+  política mínima (solo `ses:SendEmail`/`ses:SendRawEmail` sobre la identidad
+  del dominio, no sobre toda la cuenta). Cargadas en Supabase →
+  **Authentication → Emails → SMTP Settings**, con **Rate Limits** subido
+  (el default bloquea aunque el SMTP esté bien).
+- Plantillas de **Invite** y **Magic Link** personalizadas a bilingüe
+  (inglés + español) en el mismo correo, porque los colegios son bilingües.
+
+**El backend dejó de crear cuentas con contraseña.** Los 4 puntos de alta
+(`/api/tenants/register`, `/api/parents`, `/api/parents/bulk`, `/api/staff`)
+usan `admin.auth.admin.inviteUserByEmail()` en vez de
+`createUser({password, email_confirm: true})` — este último creaba la cuenta
+pero **nunca enviaba correo**, que es como se originó un usuario huérfano en
+`auth.users` sin perfil (encontrado y limpiado durante esta sesión). Los
+formularios de alta (`GuardiansRegistry`, `StaffManagement`,
+`SuperAdminDashboard`) ya no piden contraseña; el reset manual de contraseña
+de una cuenta existente se mantiene aparte, sin tocar.
+
+Como ahora las cuentas invitadas nunca tienen contraseña, `Login.tsx` suma un
+botón **"¿No tienes contraseña? Pide un enlace de acceso"** (`signInWithOtp`,
+magic link) — verificado end-to-end en producción.
+
+**Se cerró el autoregistro público de padres.** `Login.tsx` tenía un segundo
+flujo (`supabase.auth.signUp()` directo, con código de colegio) que no pasaba
+por el backend ni por invitación — probablemente el origen del usuario
+huérfano mencionado arriba. Se quitó, junto con `/api/tenants/lookup` (el
+endpoint público que ese flujo necesitaba y que ya no usa nadie).
+
+### Import CSV: auto-vincular padres a estudiantes
+
+La plantilla de bulk-import de padres suma una columna opcional
+`student_names` (nombres completos separados por `|` si hay más de un hijo).
+`/api/parents/bulk` hace un solo fetch de los alumnos del colegio, indexa por
+`"nombre apellido"` en minúsculas, y vincula cuando el nombre matchea de forma
+única. Si un nombre no matchea o es ambiguo, **no falla el alta del padre** —
+se junta en `linkWarnings` y el frontend lo avisa aparte para que el staff lo
+resuelva a mano.
+
+### Dashboard: etiquetas corregidas y datos falsos quitados
+
+Auditoría pedida por el cliente tras notar que el botón "Quick Scan" en
+realidad abría el alta manual de padres:
+
+- **"Quick Scan" → "Add Parent"** (ícono `UserPlus`, ya no `QrCode`): es lo que
+  el botón hace de verdad.
+- **"Handover" → "External Monitor"**: llevaba al Monitor Externo
+  (`VerificationDisplay`, la pantalla de la puerta con cola en vivo y escaneo
+  QR), que en el Sidebar ya se llama así — quedaban dos nombres para lo mismo.
+- Gran parte del dashboard tenía texto fijo en inglés o español pegado en el
+  JSX, ignorando `useLanguage()`/`t()` — claves de traducción que **ya
+  existían** en `translations.ts` (`liveQueue`, `realtimeSync`, `pickupZone`,
+  `operationalSpeed`, `recentActivity`...) pero nunca se conectaron, así que
+  cambiar el idioma del sistema no cambiaba esas etiquetas. Se conectaron y se
+  agregaron las claves bilingües que faltaban.
+- **Se encontraron y quitaron datos inventados**: la sección "Staff-to-Child
+  Ratios" (Toddler Wing/Pre-K/Infant Care con proporciones fijas en el código,
+  incluyendo un falso "Infant Care 2:6 (Critical)") y el "Current throughput is
+  at 94%" no salían de la base de datos — eran mock data del template
+  original. A pedido del cliente se quitaron del dashboard en vez de
+  traducirlas, para no mostrar un número inventado como si fuera real.
+
+### Apps móviles (Capacitor)
+
+Un solo código React sirve para ambas plataformas. En vez de empaquetar un
+build local dentro de la app, `capacitor.config.ts` usa `server.url:
+'https://safesmartpickup.com'` — la app nativa carga el sitio ya desplegado en
+vivo, así que las llamadas relativas a `/api/...` (`apiFetch.ts`) no necesitan
+reescritura ni CORS extra, y cada actualización del sitio se refleja sola sin
+generar un build nuevo.
+
+**Android — funcionando de punta a punta.** `android/` committeado,
+`AndroidManifest.xml` con permisos de `CAMERA` y `ACCESS_FINE_LOCATION` (el
+propio `BridgeWebChromeClient` de Capacitor ya mapea `getUserMedia()` y
+`navigator.geolocation` a los diálogos nativos, no hizo falta tocar
+`MainActivity`). No hay SDK de Android en este entorno de trabajo (el proxy
+bloquea `dl.google.com`), así que el APK se compila en
+**`.github/workflows/android-apk.yml`** (GitHub Actions, `ubuntu-latest` ya
+trae el SDK) y queda como artefacto descargable — `workflow_dispatch` o en
+cada push que toque `android/`, `src/` o `capacitor.config.ts`. Ojo: el CLI de
+Capacitor exige **Node ≥22** (el workflow usa Node 22, no 20). Es un **APK de
+depuración** (`assembleDebug`), sin firmar — para Play Store hace falta una
+keystore de release aparte, no está armado.
+
+**iOS — scaffold listo, en standby.** `ios/` committeado, `Info.plist` con
+`NSCameraUsageDescription`/`NSLocationWhenInUseUsageDescription` (en iOS son
+obligatorios: sin el texto explicativo la app se cae al pedir el permiso, a
+diferencia de Android). `.github/workflows/ios-build.yml` compila para el
+Simulador sin firmar en un runner `macos-latest` — **este build está roto
+ahora mismo** (`pod install` falla con "No Podfile found" porque el proyecto
+generado usa Swift Package Manager, no CocoaPods; el paso sobra y hay que
+quitarlo). No se seguirá con esto hasta que el cliente decida retomarlo: hace
+falta que genere en su cuenta de Apple Developer (ya la tiene) un App ID
+(`com.safesmartpickup.app`, mismo bundle ID que Android), un certificado de
+Apple Distribution exportado a `.p12`, un Provisioning Profile tipo App Store,
+y una API Key de App Store Connect — todo eso se sube como *Secrets* del repo
+en GitHub, nunca se comparte en el chat.
 
 ---
 
