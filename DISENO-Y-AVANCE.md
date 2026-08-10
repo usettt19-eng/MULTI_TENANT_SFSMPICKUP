@@ -414,6 +414,24 @@ por el backend ni por invitación — probablemente el origen del usuario
 huérfano mencionado arriba. Se quitó, junto con `/api/tenants/lookup` (el
 endpoint público que ese flujo necesitaba y que ya no usa nadie).
 
+### Distribución del APK por correo
+
+El correo de invitación incluye un link de descarga del APK de Android para
+quien lo reciba en ese tipo de teléfono. El archivo vive en un **bucket
+público de Supabase Storage** (`downloads`), no en el servidor propio — se
+descartó servirlo desde el nginx del host (`187.33.153.78`) porque requería
+`scp` manual con contraseña cada vez; con Storage, subir una versión nueva es
+arrastrar el archivo en el dashboard de Supabase, sin terminal.
+
+- URL pública fija:
+  `https://fvzhfzogigewsvcyopel.supabase.co/storage/v1/object/public/downloads/app-debug.apk`
+- Para publicar una versión nueva: descargar el artefacto del run de
+  `android-apk.yml` en GitHub Actions, extraer el `.apk` del `.zip`, y
+  subirlo (mismo nombre) al bucket `downloads` desde **Supabase → Storage**.
+- El `location /download/` que se agregó al nginx de `safesmartpickup.com`
+  quedó configurado pero **sin usar** — se puede quitar o dejar como
+  alternativa futura si se prefiere autoalojar más adelante.
+
 ### Import CSV: auto-vincular padres a estudiantes
 
 La plantilla de bulk-import de padres suma una columna opcional
