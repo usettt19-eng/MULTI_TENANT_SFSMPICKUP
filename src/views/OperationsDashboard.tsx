@@ -451,9 +451,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <RefreshCw className="w-20 h-20 text-white" />
             </div>
-            <h3 className="text-white text-[15px] font-black uppercase tracking-wider mb-2">{t('dashboard.operationalSpeed')}</h3>
-            {/* TODO: "94%" es un valor de ejemplo fijo en el código, no se calcula de datos reales. */}
-            <p className="text-white/60 text-[10px] mb-6 font-medium">{t('dashboard.throughputStatus')}</p>
+            <h3 className="text-white text-[15px] font-black uppercase tracking-wider mb-6">{t('dashboard.operationalSpeed')}</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <button onClick={handleQuickScan} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
@@ -488,40 +486,6 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.topGrade')}</p>
               <p className="text-xl font-black text-slate-800">{stats.topGrade}</p>
-            </div>
-          </section>
-
-          {/* Ratios */}
-          {/* TODO: Las filas de abajo (Toddler Wing/Pre-K/Infant Care y sus
-              proporciones) son datos de ejemplo fijos en el código, no salen
-              de la base de datos — no reflejan la situación real del colegio. */}
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-6 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[#0f172a]" /> {t('dashboard.ratios')}
-            </h3>
-            <div className="space-y-5">
-              {[
-                { label: 'Toddler Wing (1:4)', ratio: '3:11 (Optimal)', percent: '75', color: '#1e293b' },
-                { label: 'Pre-K Section (1:10)', ratio: '2:18 (Optimal)', percent: '45', color: '#1e293b' },
-                { label: 'Infant Care (1:3)', ratio: '2:6 (Critical)', percent: '95', color: '#7c2d12' }
-              ].map(r => (
-                <div key={r.label}>
-                  <div className="flex justify-between items-end mb-1.5">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{r.label}</span>
-                    <span className="text-[10px] font-black text-slate-800">{r.ratio}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-slate-800 rounded-full" style={{ width: `${r.percent}%`, backgroundColor: r.color }}></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-8 pt-4 border-t border-slate-50 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{t('dashboard.stateComplianceActive')}</span>
-              </div>
-              <button className="text-[9px] font-black text-slate-800 uppercase hover:underline">{t('dashboard.reassignStaff')}</button>
             </div>
           </section>
 

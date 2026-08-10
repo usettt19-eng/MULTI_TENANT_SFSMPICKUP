@@ -27,13 +27,10 @@ export const translations = {
     'dashboard.eta': 'ETA',
     'dashboard.awaitingArrival': 'Awaiting Arrival',
     'dashboard.operationalSpeed': 'Operational Speed',
-    'dashboard.throughputStatus': 'Current throughput is at 94%. Optimal resource utilization.',
     'dashboard.addParent': 'Add Parent',
     'dashboard.guestSign': 'Guest Sign',
     'dashboard.medLog': 'Med Log',
     'dashboard.externalMonitor': 'External Monitor',
-    'dashboard.ratios': 'Staff-to-Child Ratios',
-    'dashboard.reassignStaff': 'Reassign Staff',
     'dashboard.pickupZone': 'Pickup Zone Analysis',
     'dashboard.queueDepth': 'Queue Depth',
     'dashboard.avgRelease': 'Avg. Release',
@@ -54,7 +51,6 @@ export const translations = {
     'dashboard.children': 'Children',
     'dashboard.parents': 'Parents',
     'dashboard.topGrade': 'Top Grade',
-    'dashboard.stateComplianceActive': 'STATE COMPLIANCE ACTIVE',
 
     // Security
     'security.title': 'Guardian Verification',
@@ -171,13 +167,10 @@ export const translations = {
     'dashboard.eta': 'Llegada',
     'dashboard.awaitingArrival': 'Esperando Llegada',
     'dashboard.operationalSpeed': 'Velocidad Operativa',
-    'dashboard.throughputStatus': 'El rendimiento actual está al 94%. Uso óptimo de recursos.',
     'dashboard.addParent': 'Agregar Padre',
     'dashboard.guestSign': 'Firma Invitado',
     'dashboard.medLog': 'Registro Med',
     'dashboard.externalMonitor': 'Monitor Externo',
-    'dashboard.ratios': 'Proporción Personal-Niños',
-    'dashboard.reassignStaff': 'Reasignar Personal',
     'dashboard.pickupZone': 'Análisis Zona de Recogida',
     'dashboard.queueDepth': 'Tamaño de Cola',
     'dashboard.avgRelease': 'Salida Promedio',
@@ -198,7 +191,6 @@ export const translations = {
     'dashboard.children': 'Niños',
     'dashboard.parents': 'Padres',
     'dashboard.topGrade': 'Grado Principal',
-    'dashboard.stateComplianceActive': 'CUMPLIMIENTO ESTATAL ACTIVO',
 
     // Security
     'security.title': 'Verificación de Tutores',
