@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Safe Smart Pickup</string>
+    <string name="title_activity_main">Safe Smart Pickup</string>
+    <string name="package_name">com.safesmartpickup.app</string>
+    <string name="custom_url_scheme">com.safesmartpickup.app</string>
+</resources>

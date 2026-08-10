@@ -1,0 +1,53 @@
+name: Build Android APK
+
+# Genera el APK de la app de padres (Capacitor) y lo deja como artefacto
+# descargable en el run de este workflow — no se publica en ningún store.
+# Se puede correr manualmente ("Run workflow") o en cada push que toque el
+# proyecto de Android o el frontend.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/tenant-isolation-rls, main]
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar el frontend
+        run: npx vite build
+
+      - name: Sincronizar assets web con el proyecto Android
+        run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Dar permisos de ejecución a gradlew
+        run: chmod +x android/gradlew
+
+      - name: Compilar APK de depuración
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: safe-smart-pickup-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
