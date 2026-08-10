@@ -310,6 +310,24 @@ app.post(
 
     const created: unknown[] = [];
     const failed: {email: string; error: string}[] = [];
+    const linkWarnings: {email: string; student_name: string; reason: string}[] = [];
+
+    // Para vincular por nombre: un solo fetch de todo el colegio, no uno por
+    // fila. Se indexa por "nombre apellido" en minúsculas; si el nombre no
+    // es único dentro del colegio, se guardan todas las coincidencias para
+    // poder avisar de la ambigüedad en vez de vincular al azar.
+    const {data: tenantStudents, error: studentsError} = await admin
+      .from('students')
+      .select('id, first_name, last_name')
+      .eq('tenant_id', tenantId);
+    if (studentsError) return fail(res, 500, studentsError.message);
+
+    const studentsByName = new Map<string, string[]>();
+    for (const s of tenantStudents ?? []) {
+      const key = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim().toLowerCase();
+      if (!key) continue;
+      studentsByName.set(key, [...(studentsByName.get(key) ?? []), s.id]);
+    }
 
     // Secuencial a propósito: en paralelo se dispara el rate limit de Auth.
     for (const p of parents) {
@@ -350,10 +368,31 @@ app.post(
         });
       }
 
+      // Vínculo con hijos por nombre, opcional: no falla el alta del padre
+      // si un nombre no coincide o es ambiguo, solo queda registrado como
+      // aviso para que el staff lo resuelva a mano.
+      const studentNames: string[] = Array.isArray(p.student_names) ? p.student_names : [];
+      const studentIdsToLink: string[] = [];
+      for (const name of studentNames) {
+        const matches = studentsByName.get(String(name).trim().toLowerCase()) ?? [];
+        if (matches.length === 1) {
+          studentIdsToLink.push(matches[0]);
+        } else if (matches.length === 0) {
+          linkWarnings.push({email: p.email, student_name: name, reason: 'No se encontró ningún alumno con ese nombre'});
+        } else {
+          linkWarnings.push({email: p.email, student_name: name, reason: `Hay ${matches.length} alumnos con ese nombre, vincúlalo manualmente`});
+        }
+      }
+      if (studentIdsToLink.length > 0) {
+        await admin
+          .from('parent_students')
+          .insert(studentIdsToLink.map((student_id) => ({parent_id: user.user.id, student_id})));
+      }
+
       created.push({id: user.user.id, email: p.email});
     }
 
-    return res.json({success: true, data: {created: created.length, failed}, error: null});
+    return res.json({success: true, data: {created: created.length, failed, linkWarnings}, error: null});
   }),
 );
 

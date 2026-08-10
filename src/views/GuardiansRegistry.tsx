@@ -140,7 +140,12 @@ export function GuardiansRegistry() {
     // handleExportCSV, más abajo, ya lo hacía bien; aquí faltaba.
     // vehicle_plate y vehicle_description son opcionales: si vienen vacías,
     // el padre se crea igual, simplemente sin vehículo registrado.
-    const csvContent = "first_name,last_name,phone,pin_code,email,vehicle_plate,vehicle_description\nJuan,Pérez,50760000000,1234,juan@ejemplo.com,ABC-123,Sedán Blanco\nMaria,García,50761111111,5678,maria@ejemplo.com,,\n";
+    // student_names: nombre completo del/los hijo(s) tal como están en
+    // Estudiantes, separados por "|" si hay más de uno. Debe coincidir
+    // exactamente (sin distinguir mayúsculas) con "Nombre Apellido" del
+    // alumno ya cargado en el sistema; si no hay coincidencia el padre se
+    // crea igual, solo queda sin vincular a ese alumno.
+    const csvContent = "first_name,last_name,phone,pin_code,email,vehicle_plate,vehicle_description,student_names\nJuan,Pérez,50760000000,1234,juan@ejemplo.com,ABC-123,Sedán Blanco,Camila Pérez\nMaria,García,50761111111,5678,maria@ejemplo.com,,,Diego García|Sofía García\n";
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -207,10 +212,14 @@ export function GuardiansRegistry() {
         const tel = cols[2]?.trim();
         const pin = cols[3]?.trim();
         const mail = cols[4]?.trim() || `${f_name.toLowerCase()}@example.com`;
-        // Opcionales: si el CSV no trae estas dos columnas, cols[5]/cols[6]
-        // son undefined y el padre se crea igual, sin vehículo.
+        // Opcionales: si el CSV no trae estas columnas, quedan undefined y
+        // el padre se crea igual, sin vehículo ni hijos vinculados.
         const plate = cols[5]?.trim();
         const vdesc = cols[6]?.trim();
+        const studentNames = (cols[7] || '')
+          .split('|')
+          .map(n => n.trim())
+          .filter(Boolean);
 
         if (!f_name || !mail) continue;
 
@@ -223,6 +232,7 @@ export function GuardiansRegistry() {
           pin_code: pin,
           vehicle_plate: plate || undefined,
           vehicle_description: vdesc || undefined,
+          student_names: studentNames.length > 0 ? studentNames : undefined,
           role: 'parent',
           tenant_id: profile?.tenant_id
         });
@@ -243,16 +253,24 @@ export function GuardiansRegistry() {
           // procesó, no que cada padre se haya creado. Sin esto, una fila
           // fallida no mostraba ningún aviso: el admin creía que había
           // funcionado y el padre simplemente no aparecía en ningún lado.
-          const { created: createdCount, failed: failedRows } = json.data || {};
-          if (failedRows?.length > 0) {
-            const detalle = failedRows.map((f: any) => `• ${f.email}: ${f.error}`).join('\n');
-            alert(
-              `Importados ${createdCount} de ${parentsToInsert.length}.\n\n` +
-              `No se pudieron crear ${failedRows.length}:\n${detalle}`
-            );
-          } else {
-            alert(`Se importaron ${createdCount} padres correctamente.`);
+          const { created: createdCount, failed: failedRows, linkWarnings } = json.data || {};
+
+          let message = failedRows?.length > 0
+            ? `Importados ${createdCount} de ${parentsToInsert.length}.\n\n` +
+              `No se pudieron crear ${failedRows.length}:\n` +
+              failedRows.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
+            : `Se importaron ${createdCount} padres correctamente.`;
+
+          // Vincular por nombre es opcional y no bloquea la creación del
+          // padre: si un nombre no coincide con ningún alumno (o coincide
+          // con más de uno), se avisa aparte para que el staff lo revise y
+          // lo vincule a mano, en vez de fallar la importación entera.
+          if (linkWarnings?.length > 0) {
+            message += `\n\nAlgunos hijos no se pudieron vincular automáticamente (revísalos manualmente):\n` +
+              linkWarnings.map((w: any) => `• ${w.email} → "${w.student_name}": ${w.reason}`).join('\n');
           }
+
+          alert(message);
         } catch (error: any) {
           alert('Error al importar: ' + error.message);
         }
