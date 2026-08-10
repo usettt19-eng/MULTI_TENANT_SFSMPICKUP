@@ -327,7 +327,6 @@ export function GuardiansRegistry() {
             last_name: lastName,
             phone: phone,
             email: email,
-            password: password,
             pin_code: pinCode,
             photo_url: photoPayload,
             role: 'parent',
@@ -709,10 +708,16 @@ export function GuardiansRegistry() {
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico (Acceso)</label>
                       <input required readOnly={!!editingGuardianId} type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none read-only:bg-slate-100 transition-all" />
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{editingGuardianId ? 'Cambiar Contraseña' : 'Contraseña Provisoria'}</label>
-                      <input required={!editingGuardianId} type="password" minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                    </div>
+                    {editingGuardianId ? (
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Cambiar Contraseña <span className="text-[9px] text-slate-400 font-normal lowercase tracking-normal ml-2">(opcional, dejar en blanco para no cambiarla)</span></label>
+                        <input type="password" minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
+                        Se le enviará un correo de invitación a este padre para que active su acceso — no hace falta definir una contraseña aquí.
+                      </p>
+                    )}
                   </div>
                 </div>
 

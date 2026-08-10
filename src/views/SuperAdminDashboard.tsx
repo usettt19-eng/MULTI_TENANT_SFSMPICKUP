@@ -24,18 +24,16 @@ export function SuperAdminDashboard() {
     domain: '',
     firstName: '',
     lastName: '',
-    email: '',
-    password: ''
+    email: ''
   });
 
   // Edit Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
-  
+
   // Password Reset State
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [showAddModalPassword, setShowAddModalPassword] = useState(false);
   const [showEditModalPassword, setShowEditModalPassword] = useState(false);
 
   const { profile } = useAuth() as any;
@@ -77,7 +75,7 @@ export function SuperAdminDashboard() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTenant.schoolName || !newTenant.email || !newTenant.password) return;
+    if (!newTenant.schoolName || !newTenant.email) return;
     setIsSubmitting(true);
 
     try {
@@ -95,8 +93,8 @@ export function SuperAdminDashboard() {
       // Refresh list
       await fetchTenants();
       setShowAddModal(false);
-      setNewTenant({ schoolName: '', domain: '', firstName: '', lastName: '', email: '', password: '' });
-      alert("Institución y administrador creados exitosamente");
+      setNewTenant({ schoolName: '', domain: '', firstName: '', lastName: '', email: '' });
+      alert("Institución creada. Se le envió un correo de invitación al administrador.");
     } catch (error: any) {
       console.error('Error creating tenant:', error);
       alert(`Error: ${error.message || 'Desconocido'}`);
@@ -396,16 +394,9 @@ export function SuperAdminDashboard() {
                       <input type="email" required value={newTenant.email} onChange={(e) => setNewTenant({...newTenant, email: e.target.value})} className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Contraseña *</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
-                      <input type={showAddModalPassword ? "text" : "password"} required minLength={6} value={newTenant.password} onChange={(e) => setNewTenant({...newTenant, password: e.target.value})} className="w-full border border-slate-200 rounded-xl pl-9 pr-10 py-2.5 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
-                      <button type="button" onClick={() => setShowAddModalPassword(!showAddModalPassword)} className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600">
-                        {showAddModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
+                  <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2.5">
+                    Se le enviará un correo de invitación a este administrador para que active su acceso — no hace falta definir una contraseña aquí.
+                  </p>
                 </div>
               </div>
 

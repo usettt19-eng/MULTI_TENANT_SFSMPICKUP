@@ -60,13 +60,10 @@ app.post(
   requireAuth,
   requireSuperAdmin,
   wrap(async (req, res) => {
-    const {schoolName, domain, firstName, lastName, email, password} = req.body ?? {};
+    const {schoolName, domain, firstName, lastName, email} = req.body ?? {};
 
-    if (!schoolName || !email || !password) {
-      return fail(res, 400, 'Faltan nombre del colegio, correo o contraseña.');
-    }
-    if (String(password).length < 8) {
-      return fail(res, 400, 'La contraseña debe tener al menos 8 caracteres.');
+    if (!schoolName || !email) {
+      return fail(res, 400, 'Faltan nombre del colegio o correo.');
     }
 
     const {data: tenant, error: tenantError} = await admin
@@ -80,11 +77,11 @@ app.post(
       return fail(res, 500, tenantError.message);
     }
 
-    const {data: created, error: userError} = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
+    // Nunca se genera ni envía contraseña: el admin del colegio entra por el
+    // enlace de invitación que Supabase Auth manda a su correo.
+    const {data: created, error: userError} = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: process.env.PUBLIC_APP_URL || undefined,
+      data: {
         first_name: firstName ?? '',
         last_name: lastName ?? '',
         role: 'admin',
@@ -235,13 +232,11 @@ app.post(
     const tenantId = req.caller!.role === 'super_admin' ? body.tenant_id : req.caller!.tenantId;
 
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
-    if (!body.email || !body.password) return fail(res, 400, 'Faltan correo o contraseña.');
+    if (!body.email) return fail(res, 400, 'Falta el correo.');
 
-    const {data: created, error} = await admin.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
-      email_confirm: true,
-      user_metadata: {
+    const {data: created, error} = await admin.auth.admin.inviteUserByEmail(body.email, {
+      redirectTo: process.env.PUBLIC_APP_URL || undefined,
+      data: {
         first_name: body.first_name ?? '',
         last_name: body.last_name ?? '',
         role: 'parent',
@@ -347,14 +342,10 @@ app.post(
         failed.push({email: '(sin correo)', error: 'Falta el correo'});
         continue;
       }
-      // Contraseña temporal: el padre entra con enlace mágico, no con ella.
-      const password = p.password ?? `${Math.random().toString(36).slice(2)}Aa1!`;
-
-      const {data: user, error} = await admin.auth.admin.createUser({
-        email: p.email,
-        password,
-        email_confirm: true,
-        user_metadata: {
+      // Sin contraseña: cada padre recibe su propio correo de invitación.
+      const {data: user, error} = await admin.auth.admin.inviteUserByEmail(p.email, {
+        redirectTo: process.env.PUBLIC_APP_URL || undefined,
+        data: {
           first_name: p.first_name ?? '',
           last_name: p.last_name ?? '',
           role: 'parent',
@@ -404,13 +395,11 @@ app.post(
 
     // Crear personal es más sensible que crear padres: exige ser admin.
     if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
-    if (!body.email || !body.password) return fail(res, 400, 'Faltan correo o contraseña.');
+    if (!body.email) return fail(res, 400, 'Falta el correo.');
 
-    const {data: created, error} = await admin.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
-      email_confirm: true,
-      user_metadata: {
+    const {data: created, error} = await admin.auth.admin.inviteUserByEmail(body.email, {
+      redirectTo: process.env.PUBLIC_APP_URL || undefined,
+      data: {
         first_name: body.first_name ?? '',
         last_name: body.last_name ?? '',
         role: 'admin',

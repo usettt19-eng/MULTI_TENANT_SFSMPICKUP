@@ -38,7 +38,6 @@ export function StaffManagement() {
 
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
     first_name: '',
     last_name: '',
     permissions: [] as string[]
@@ -101,7 +100,6 @@ export function StaffManagement() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: formData.email,
-            password: formData.password,
             first_name: formData.first_name,
             last_name: formData.last_name,
             permissions: formData.permissions,
@@ -114,7 +112,7 @@ export function StaffManagement() {
 
       setIsModalOpen(false);
       fetchStaff();
-      setFormData({ email: '', password: '', first_name: '', last_name: '', permissions: [] });
+      setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
       setEditingId(null);
     } catch (error: any) {
       alert("Error: " + error.message);
@@ -155,7 +153,6 @@ export function StaffManagement() {
     
     setFormData({
       email: user.email || '',
-      password: '',
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       permissions: perms
@@ -187,7 +184,7 @@ export function StaffManagement() {
           <button 
             onClick={() => {
               setEditingId(null);
-              setFormData({ email: '', password: '', first_name: '', last_name: '', permissions: [] });
+              setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
               setIsModalOpen(true);
             }}
             className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
@@ -316,15 +313,9 @@ export function StaffManagement() {
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Contraseña Temporal</label>
-                      <input 
-                        type="text" required minLength={6}
-                        value={formData.password}
-                        onChange={e => setFormData({...formData, password: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                      />
-                    </div>
+                    <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
+                      Se le enviará un correo de invitación a este correo para que active su acceso — no hace falta definir una contraseña aquí.
+                    </p>
                   </div>
                 )}
 
