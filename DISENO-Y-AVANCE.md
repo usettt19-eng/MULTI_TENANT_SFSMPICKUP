@@ -73,25 +73,31 @@ Al no haber servidor en la ruta de datos, mover la SPA fuera de Vercel es una
 decisión de coste, no de arquitectura. El servidor sí hace falta para el backend
 (§6), que necesita proceso persistente.
 
-**Correo: Amazon SES**, ya fuera de sandbox. Falta verificar el dominio del
-proyecto como identidad y añadir sus 3 CNAME de Easy DKIM al DNS.
+**Correo: Amazon SES — RESUELTO.** Dominio `safesmartpickup.com` verificado con
+Easy DKIM (3 CNAME en el DNS). No se tocó el SPF/MX existente de Zoho: conviven
+porque un dominio admite varios selectores DKIM.
 
-- No hay que tocar el SPF existente: SES firma con `d=<dominio>` y DMARC pasa por
-  alineación de DKIM. Zoho (correo humano) y SES (transaccional) conviven, porque
-  un dominio admite varios selectores DKIM.
-- Al configurarlo en Supabase Auth: las credenciales SMTP de SES **no son** las
-  access keys de AWS, y hay que **subir el límite en Authentication → Rate
-  Limits**, que viene bajo por defecto y bloquea aunque SES esté perfecto.
-- **Enganchar rebotes por SNS antes de la primera tanda de invitaciones.** Las
-  direcciones las teclean los padres y vendrán con erratas. AWS suspende cuentas
-  por encima del 5% de rebotes — y esa misma cuenta SES sirve al FusionPBX, así
-  que una suspensión se llevaría también la telefonía. Usar un Configuration Set
-  separado.
+- Configuration Set propio (`sfsmpickup-transactional`), separado del que usa el
+  FusionPBX — así un problema de rebotes en este proyecto no arriesga la cuenta
+  SES compartida con la telefonía.
+- Rebotes/quejas enganchados por SNS (`sfsmpickup-ses-alerts`) a
+  `info@safesmartpickup.com`, antes de la primera tanda real de invitaciones.
+- SMTP de SES cargado en Supabase Auth (Authentication → Emails → SMTP
+  Settings) con credenciales IAM dedicadas (`sfsmpickup-ses-smtp`, política
+  mínima: solo `ses:SendEmail`/`ses:SendRawEmail` sobre la identidad del
+  dominio). Rate Limits de Supabase Auth subido — el default bloquea aunque el
+  SMTP esté perfecto.
+- Plantillas de Invite/Magic Link en Supabase personalizadas a bilingüe
+  (inglés + español), porque los colegios son bilingües.
 
-**Autenticación: nunca enviar contraseñas por correo.** Usar `inviteUserByEmail`
-o **magic link** de Supabase Auth. Para padres de familia el magic link elimina
-las contraseñas olvidadas, que serían la principal carga de soporte. Y la
-credencial gobierna quién puede recoger a un menor: no debe viajar por email.
+**Autenticación: nunca se envían contraseñas por correo — RESUELTO.** Los 4
+puntos de alta (`tenants/register`, `parents`, `parents/bulk`, `staff`) usan
+`admin.auth.admin.inviteUserByEmail()` en vez de `createUser({password})`. Los
+formularios de alta ya no piden contraseña. `Login.tsx` gana una opción de
+**magic link** (`signInWithOtp`) para que los invitados, que nunca tienen
+contraseña, puedan volver a entrar cuando su sesión expire — verificado
+end-to-end en producción. El reset manual de contraseña (soporte, desde
+`SuperAdminDashboard`/edición de padre) se mantiene como acción aparte.
 
 ---
 
@@ -360,7 +366,8 @@ una PK son implícitamente `NOT NULL`.
 | `@supabase/supabase-js` a `dependencies` | Nada — se puede hacer ya |
 | Registrar el acceso cruzado del super_admin | Nada |
 | Activar plan Pro en Supabase | Decisión comercial |
-| Verificar el dominio en SES + rebotes por SNS | Nada |
+| Autoregistro público de padres por código de colegio en `Login.tsx` (`supabase.auth.signUp()` directo, sin pasar por el backend) sigue activo — decidir si convive con las invitaciones o se cierra | Decisión de producto |
+| Auto-vincular padres a estudiantes por nombre/grado en el import CSV | Nada |
 
 ---
 
