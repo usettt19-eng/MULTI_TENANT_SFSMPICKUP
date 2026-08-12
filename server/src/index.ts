@@ -61,6 +61,7 @@ app.post(
         last_name: lastName ?? '',
         role: 'admin',
         tenant_id: tenant.id,
+        needs_password_setup: true,
       },
     });
 
@@ -216,6 +217,7 @@ app.post(
         last_name: body.last_name ?? '',
         role: 'parent',
         tenant_id: tenantId,
+        needs_password_setup: true,
       },
     });
     if (error || !created?.user) return fail(res, 400, error?.message ?? 'No se pudo crear el padre.');
@@ -343,6 +345,7 @@ app.post(
           last_name: p.last_name ?? '',
           role: 'parent',
           tenant_id: tenantId,
+          needs_password_setup: true,
         },
       });
 
@@ -418,6 +421,7 @@ app.post(
         last_name: body.last_name ?? '',
         role: 'admin',
         tenant_id: tenantId,
+        needs_password_setup: true,
       },
     });
     if (error || !created?.user) return fail(res, 400, error?.message ?? 'No se pudo crear el usuario.');

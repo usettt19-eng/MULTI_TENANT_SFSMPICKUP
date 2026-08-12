@@ -1,7 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase, authRedirectType as initialAuthRedirectType } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/database';
+
+// Supabase's PKCE flow (the current default) doesn't carry `type=invite` in
+// the URL the app receives, so we can't tell an invite apart from a normal
+// sign-in by parsing the redirect. Instead: password-reset links reliably
+// fire the PASSWORD_RECOVERY auth event, and invites are marked with a
+// `needs_password_setup` flag in user_metadata at invite time (see
+// server/src/index.ts) that we clear once the user sets a password or skips.
+function passwordSetupTypeFor(event: string, session: Session | null): 'invite' | 'recovery' | null {
+  if (event === 'PASSWORD_RECOVERY') return 'recovery';
+  if (session?.user?.user_metadata?.needs_password_setup === true) return 'invite';
+  return null;
+}
 
 interface AuthContextType {
   session: Session | null;
@@ -39,13 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authRedirectType, setAuthRedirectType] = useState<string | null>(initialAuthRedirectType);
+  const [authRedirectType, setAuthRedirectType] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
       if (sessionError) setError(sessionError.message);
       setSession(session);
       setUser(session?.user ?? null);
+      setAuthRedirectType((prev) => prev ?? passwordSetupTypeFor('INITIAL_SESSION', session));
       if (session?.user) {
         fetchProfiles(session.user.id);
       } else {
@@ -58,7 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(null);
         setProfiles([]);
         setProfile(null);
+        setAuthRedirectType(null);
       }
+      const redirectType = passwordSetupTypeFor(_event, session);
+      if (redirectType) setAuthRedirectType(redirectType);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -112,6 +128,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearAuthRedirectType = () => {
+    if (authRedirectType === 'invite') {
+      // Persist the dismissal so this doesn't prompt again on the next login.
+      supabase.auth.updateUser({ data: { needs_password_setup: false } }).catch(() => {});
+    }
     setAuthRedirectType(null);
     window.history.replaceState(null, '', window.location.pathname);
   };
