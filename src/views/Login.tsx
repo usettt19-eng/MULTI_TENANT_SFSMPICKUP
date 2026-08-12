@@ -12,6 +12,8 @@ export function Login() {
   // mágico enviado a su correo.
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +63,24 @@ export function Login() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+      setResetSent(true);
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo enviar el enlace de restablecimiento.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-6 px-4 sm:py-12 sm:px-6 lg:px-8 font-body relative">
       <div className="absolute top-4 left-4 sm:top-8 sm:left-8 z-50">
@@ -97,7 +117,67 @@ export function Login() {
         <div className="bg-white py-8 px-6 sm:py-10 sm:px-8 shadow-2xl shadow-slate-200/50 rounded-[2rem] sm:rounded-[3rem] border border-slate-50 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-800"></div>
 
-          {showMagicLink ? (
+          {showForgotPassword ? (
+            resetSent ? (
+              <div className="space-y-6 animate-in fade-in duration-500 text-center">
+                <p className="text-sm text-slate-600 font-medium">
+                  Te enviamos un enlace a <span className="font-black text-slate-900">{email}</span> para restablecer tu contraseña. Revisa tu bandeja de entrada (y spam) y sigue el enlace.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShowForgotPassword(false); setResetSent(false); setError(null); }}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                </button>
+              </div>
+            ) : (
+              <form className="space-y-6 animate-in fade-in duration-500" onSubmit={handleForgotPassword}>
+                {error && (
+                  <div className="bg-rose-50 border border-rose-100 text-rose-600 px-5 py-3 rounded-2xl text-xs font-bold animate-shake">
+                    {error}
+                  </div>
+                )}
+                <p className="text-xs text-slate-500 font-medium">
+                  Te enviamos un enlace a tu correo para elegir una contraseña nueva.
+                </p>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <UserIcon className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-11 pr-5 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                      placeholder="ejemplo@correo.com"
+                    />
+                  </div>
+                </div>
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR ENLACE DE RESTABLECIMIENTO'}
+                  </button>
+                </div>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgotPassword(false); setError(null); }}
+                    className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                  </button>
+                </div>
+              </form>
+            )
+          ) : showMagicLink ? (
             magicLinkSent ? (
               <div className="space-y-6 animate-in fade-in duration-500 text-center">
                 <p className="text-sm text-slate-600 font-medium">
@@ -209,13 +289,20 @@ export function Login() {
               </button>
             </div>
 
-            <div className="text-center pt-2">
+            <div className="text-center pt-2 space-y-2">
               <button
                 type="button"
                 onClick={() => { setShowMagicLink(true); setError(null); }}
-                className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                className="block w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
               >
                 ¿No tienes contraseña? Pide un enlace de acceso
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowForgotPassword(true); setError(null); }}
+                className="block w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                ¿Olvidaste tu contraseña? Restablécela
               </button>
             </div>
           </form>

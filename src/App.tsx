@@ -21,6 +21,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { LayoutProvider } from './contexts/LayoutContext';
 import { useAuth } from './contexts/AuthContext';
 import { Login } from './views/Login';
+import { SetPassword } from './views/SetPassword';
 import { SharedQRDisplay } from './views/SharedQRDisplay';
 import { LandingPage } from './views/LandingPage';
 
@@ -28,7 +29,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
   const [isLandingRoute, setIsLandingRoute] = useState(false);
-  const { session, loading, profile } = useAuth() as any;
+  const { session, loading, profile, authRedirectType, clearAuthRedirectType } = useAuth() as any;
 
   useEffect(() => {
     // Check if we are on the /external route with a qr parameter
@@ -70,6 +71,12 @@ export default function App() {
         <Login />
       </>
     );
+  }
+
+  // Session came from an invite or password-reset link: prompt for a
+  // password before showing the normal dashboard.
+  if (authRedirectType === 'invite' || authRedirectType === 'recovery') {
+    return <SetPassword type={authRedirectType} onDone={clearAuthRedirectType} />;
   }
 
   // STRICT REDIRECT FOR SUPER ADMIN

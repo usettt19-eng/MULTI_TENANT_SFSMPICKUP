@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, authRedirectType as initialAuthRedirectType } from '../lib/supabase';
 import type { Profile } from '../types/database';
 
 interface AuthContextType {
@@ -12,6 +12,11 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   switchProfile: (tenantId: string) => void;
   error: string | null;
+  // 'invite' | 'recovery' | null — set when the session came from an invite
+  // or password-reset link, so the app can prompt for a password before
+  // showing the normal dashboard.
+  authRedirectType: string | null;
+  clearAuthRedirectType: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -23,6 +28,8 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
   switchProfile: () => {},
   error: null,
+  authRedirectType: null,
+  clearAuthRedirectType: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -32,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authRedirectType, setAuthRedirectType] = useState<string | null>(initialAuthRedirectType);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
@@ -103,8 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const clearAuthRedirectType = () => {
+    setAuthRedirectType(null);
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, profiles, loading, signOut, switchProfile, error } as any}>
+    <AuthContext.Provider value={{ session, user, profile, profiles, loading, signOut, switchProfile, error, authRedirectType, clearAuthRedirectType } as any}>
       {children}
     </AuthContext.Provider>
   );
