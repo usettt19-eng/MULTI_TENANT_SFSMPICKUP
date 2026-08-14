@@ -17,6 +17,8 @@ export function SchoolStructureSettings() {
   const [newDoorDesc, setNewDoorDesc] = useState('');
   const [newGradeName, setNewGradeName] = useState('');
   const [newGradeOrder, setNewGradeOrder] = useState(1);
+  const [newGradeStage, setNewGradeStage] = useState<'primaria' | 'secundaria'>('primaria');
+  const [newGradeExitTime, setNewGradeExitTime] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -98,24 +100,46 @@ export function SchoolStructureSettings() {
   const handleAddGrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGradeName.trim()) return;
-    
+
     setSaving(true);
     setActionError(null);
     try {
       const { data, error } = await supabase
         .from('school_grades')
-        .insert([{ name: newGradeName, level_order: newGradeOrder }])
+        .insert([{
+          name: newGradeName,
+          level_order: newGradeOrder,
+          stage: newGradeStage,
+          exit_time: newGradeExitTime || null,
+        }])
         .select()
         .single();
-        
+
       if (error) throw error;
       setGrades([...grades, data].sort((a, b) => a.level_order - b.level_order));
       setNewGradeName('');
       setNewGradeOrder(grades.length > 0 ? Math.max(...grades.map(g => g.level_order)) + 1 : 1);
+      setNewGradeExitTime('');
     } catch (err: any) {
       handleError(err, 'Error al añadir grado');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateGradeField = async (gradeId: string, field: 'stage' | 'exit_time', value: string) => {
+    setActionError(null);
+    const prev = grades;
+    setGrades(grades.map(g => g.id === gradeId ? { ...g, [field]: value || null } as SchoolGrade : g));
+    try {
+      const { error } = await supabase
+        .from('school_grades')
+        .update({ [field]: value || null })
+        .eq('id', gradeId);
+      if (error) throw error;
+    } catch (err: any) {
+      setGrades(prev);
+      handleError(err, 'Error al actualizar grado');
     }
   };
 
@@ -298,53 +322,89 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
             <GraduationCap className="w-5 h-5 text-amber-500" /> Grados Escolares
           </h3>
           
-          <form onSubmit={handleAddGrade} className="mb-6 flex gap-3">
-            <div className="flex-1 flex gap-3">
-              <input 
+          <form onSubmit={handleAddGrade} className="mb-6 space-y-3">
+            <div className="flex gap-3">
+              <input
                 required
                 placeholder="Nombre (ej. 1er Grado)"
                 value={newGradeName}
                 onChange={e => setNewGradeName(e.target.value)}
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
               />
-              <input 
+              <input
                 type="number"
                 required
                 min="1"
                 placeholder="Orden"
                 value={newGradeOrder}
                 onChange={e => setNewGradeOrder(parseInt(e.target.value) || 1)}
-                className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all text-center"
+                className="w-20 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all text-center"
                 title="Orden lógico (1 = Maternal, 2 = Pre-Kinder, etc.)"
               />
             </div>
-            <button 
-              type="submit"
-              disabled={saving || !newGradeName.trim()}
-              className="bg-amber-500 text-white px-4 rounded-xl hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex gap-3">
+              <select
+                value={newGradeStage}
+                onChange={e => setNewGradeStage(e.target.value as 'primaria' | 'secundaria')}
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
+              >
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+              <input
+                type="time"
+                value={newGradeExitTime}
+                onChange={e => setNewGradeExitTime(e.target.value)}
+                title="Hora de salida"
+                className="w-36 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
+              />
+              <button
+                type="submit"
+                disabled={saving || !newGradeName.trim()}
+                className="bg-amber-500 text-white px-4 rounded-xl hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </form>
 
-          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
             {grades.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-4">No hay grados configurados.</p>
             ) : (
               grades.map(grade => (
-                <div key={grade.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold">
-                      {grade.level_order}
-                    </span>
-                    <p className="font-bold text-slate-800">{grade.name}</p>
+                <div key={grade.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold">
+                        {grade.level_order}
+                      </span>
+                      <p className="font-bold text-slate-800">{grade.name}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteGrade(grade.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => handleDeleteGrade(grade.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex gap-3 pl-9">
+                    <select
+                      value={grade.stage}
+                      onChange={e => handleUpdateGradeField(grade.id, 'stage', e.target.value)}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
+                    >
+                      <option value="primaria">Primaria</option>
+                      <option value="secundaria">Secundaria</option>
+                    </select>
+                    <input
+                      type="time"
+                      value={grade.exit_time?.slice(0, 5) || ''}
+                      onChange={e => handleUpdateGradeField(grade.id, 'exit_time', e.target.value)}
+                      title="Hora de salida"
+                      className="w-32 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
               ))
             )}

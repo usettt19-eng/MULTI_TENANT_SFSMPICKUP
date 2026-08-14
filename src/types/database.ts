@@ -241,10 +241,14 @@ export interface ExitDoor {
   updated_at: string;
 }
 
+export type SchoolStage = 'primaria' | 'secundaria';
+
 export interface SchoolGrade {
   id: string;
   name: string;
   level_order: number;
+  stage: SchoolStage;
+  exit_time: string | null; // "HH:MM:SS"
   created_at: string;
   updated_at: string;
 }
@@ -254,6 +258,34 @@ export interface GradeDoor {
   grade_id: string;
   door_id: string;
   created_at: string;
+}
+
+export type DismissalScheduleType = 'regular' | 'post_school';
+
+export interface DismissalAssignment {
+  id: string;
+  tenant_id: string;
+  grade_id: string;
+  section: string;
+  schedule_type: DismissalScheduleType;
+  day_of_week: number; // 0=domingo ... 6=sábado
+  staff_id: string;
+  created_at: string;
+  updated_at: string;
+  staff?: Pick<Profile, 'first_name' | 'last_name'>;
+}
+
+export interface DismissalOverride {
+  id: string;
+  tenant_id: string;
+  grade_id: string;
+  section: string;
+  schedule_type: DismissalScheduleType;
+  override_date: string; // "YYYY-MM-DD"
+  staff_id: string;
+  created_by: string | null;
+  created_at: string;
+  staff?: Pick<Profile, 'first_name' | 'last_name'>;
 }
 
 // Constants

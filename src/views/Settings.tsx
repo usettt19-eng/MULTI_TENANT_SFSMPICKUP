@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
-import { 
-  Settings as SettingsIcon, MapPin, Building, Shield, 
-  Map as MapIcon, Save, Navigation, RefreshCcw, 
-  Loader2, CheckCircle2, Globe, Ruler, DoorOpen
+import {
+  Settings as SettingsIcon, MapPin, Building, Shield,
+  Map as MapIcon, Save, Navigation, RefreshCcw,
+  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
+import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
 
 export function Settings() {
   const { profile } = useAuth() as any;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'structure'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'structure' | 'dismissal'>('general');
   const [settings, setSettings] = useState({
     id: '',
     school_name: 'SmartPickup Academy',
@@ -21,7 +22,8 @@ export function Settings() {
     latitude: 8.9833,
     longitude: -79.5167,
     pickup_radius_meters: 65,
-    logo_url: ''
+    logo_url: '',
+    primary_dismissal_mode: 'teacher' as 'teacher' | 'staff',
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
@@ -152,6 +154,17 @@ export function Settings() {
             <DoorOpen className="w-4 h-4" />
             Estructura y Puertas
           </button>
+          <button
+            onClick={() => setActiveTab('dismissal')}
+            className={`px-6 py-3 font-bold text-sm rounded-t-2xl transition-colors flex items-center gap-2 ${
+              activeTab === 'dismissal'
+                ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <CalendarClock className="w-4 h-4" />
+            Horarios de Salida
+          </button>
         </div>
 
         {loading ? (
@@ -206,6 +219,42 @@ export function Settings() {
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium text-slate-600 outline-none focus:border-primary focus:bg-white transition-all"
                       />
                     </div>
+                  </div>
+                </section>
+
+                {/* Primaria dismissal coordination mode */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <Users className="w-5 h-5 text-amber-500" /> Coordinación de Salida en Primaria
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    En primaria, ¿quién es el encargado de la entrega de los alumnos: el profesor de cada sección,
+                    o un personal designado para esa tarea (recepción, coordinador, etc.)? Esto define el texto
+                    que verán al asignar encargados en la pestaña "Horarios de Salida".
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, primary_dismissal_mode: 'teacher' })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        settings.primary_dismissal_mode === 'teacher'
+                          ? 'bg-primary text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      El Profesor de la Sección
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, primary_dismissal_mode: 'staff' })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        settings.primary_dismissal_mode === 'staff'
+                          ? 'bg-primary text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Personal Asignado
+                    </button>
                   </div>
                 </section>
 
@@ -291,8 +340,10 @@ export function Settings() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'structure' ? (
           <SchoolStructureSettings />
+        ) : (
+          <DismissalScheduleSettings />
         )}
       </div>
     </>

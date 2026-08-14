@@ -7,6 +7,7 @@ import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
 } from '../lib/backgroundGeolocation';
+import { resolveResponsibleStaff } from '../lib/dismissalSchedule';
 import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
@@ -596,6 +597,27 @@ export function ParentDashboard() {
         setErrorMessage(`Error al anunciar: ${insertError.message}`);
         setLoading(false);
         return;
+      }
+
+      // Aviso dirigido al profesor/personal encargado de este grado+sección
+      // hoy (excepción del día, si hay, si no el horario semanal). No
+      // reemplaza la cola compartida que ya ven recepción y administración —
+      // solo se suma para avisar directamente a la persona correcta.
+      try {
+        const responsibleStaffId = await resolveResponsibleStaff(
+          profile.tenant_id, student.grade, student.section, 'regular',
+        );
+        if (responsibleStaffId) {
+          await supabase.from('notifications').insert({
+            user_id: responsibleStaffId,
+            title: `${profile.first_name} ${profile.last_name} llegó`,
+            message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.`,
+            type: 'info',
+            tenant_id: profile.tenant_id,
+          });
+        }
+      } catch (routeErr) {
+        console.error('Error al enrutar el aviso al encargado:', routeErr);
       }
     }
 
