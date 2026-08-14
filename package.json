@@ -14,9 +14,11 @@
     "db:migrate": "npx supabase db push --db-url \"$DATABASE_URL\""
   },
   "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
+    "@capacitor/local-notifications": "^8.3.0",
     "@google/genai": "^1.29.0",
     "@supabase/supabase-js": "^2.101.1",
     "@tailwindcss/vite": "^4.1.14",

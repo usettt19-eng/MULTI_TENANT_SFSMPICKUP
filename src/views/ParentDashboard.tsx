@@ -3,8 +3,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { 
-  MapPin, Navigation, CheckCircle2, AlertTriangle, 
+import {
+  isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
+  startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
+} from '../lib/backgroundGeolocation';
+import {
+  MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare
@@ -46,6 +50,14 @@ export function ParentDashboard() {
   const [parentPos, setParentPos] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
   const watchId = useRef<number | null>(null);
+
+  // En la app nativa (Android), la ubicación se rastrea en segundo plano sin
+  // que el padre tenga que abrir la app ni tocar nada — solo se pide el
+  // permiso "Permitir siempre" una vez, con una pantalla propia explicando
+  // el motivo antes del prompt del sistema.
+  const isNative = isNativeApp();
+  const [showLocationRationale, setShowLocationRationale] = useState(false);
+  const [isBackgroundTrackingActive, setIsBackgroundTrackingActive] = useState(false);
 
   const playBeep = () => {
     try {
@@ -463,6 +475,61 @@ export function ParentDashboard() {
     setErrorMessage(null);
   };
 
+  const handleBackgroundLocation = (lat: number, lng: number) => {
+    setParentPos({ lat, lng });
+    const dist = calculateDistance(lat, lng, schoolPos.lat, schoolPos.lng);
+    setDistance(dist);
+    setIsInside(dist <= schoolPos.radius);
+    setErrorMessage(null);
+    setIsLocationEnabled(true);
+  };
+
+  const startNativeTracking = async () => {
+    try {
+      await startBackgroundWatch(
+        (loc) => handleBackgroundLocation(loc.latitude, loc.longitude),
+        (message) => setErrorMessage(message),
+      );
+      setIsBackgroundTrackingActive(true);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'No se pudo activar el rastreo de ubicación en segundo plano.');
+    }
+  };
+
+  const handleAcceptLocationRationale = async () => {
+    markLocationRationaleSeen();
+    setShowLocationRationale(false);
+    await startNativeTracking();
+  };
+
+  // En la app nativa, la ubicación se activa sola (sin toggle manual): se
+  // pide el permiso "Permitir siempre" una vez, con explicación previa, y a
+  // partir de ahí el colegio se entera de las llegadas y salidas del padre
+  // aunque la app esté minimizada.
+  useEffect(() => {
+    if (!isNative) return;
+
+    if (hasSeenLocationRationale()) {
+      startNativeTracking();
+    } else {
+      setShowLocationRationale(true);
+    }
+
+    return () => {
+      stopBackgroundWatch();
+      setIsBackgroundTrackingActive(false);
+    };
+  }, []);
+
+  // Al entrar al perímetro por rastreo nativo en segundo plano, se anuncia la
+  // llegada sin que el padre tenga que abrir la app ni tocar nada.
+  useEffect(() => {
+    if (!isNative || !isBackgroundTrackingActive) return;
+    if (isInside && status === 'idle' && !loading) {
+      handleAnnounceArrival();
+    }
+  }, [isNative, isBackgroundTrackingActive, isInside, status, loading]);
+
   // Auto-refresh every 3 seconds when inside perimeter
   useEffect(() => {
     let interval: number | null = null;
@@ -613,17 +680,41 @@ export function ParentDashboard() {
           </div>
         )}
 
-        <div onClick={toggleLocation} className={`p-4 rounded-2xl flex items-center justify-between border cursor-pointer ${isLocationEnabled ? 'bg-emerald-500/20 border-emerald-400/30' : 'bg-white/10 border-white/10'}`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${isLocationEnabled ? 'bg-emerald-500 text-white' : 'bg-white/20'}`}>
-              <Navigation className="w-4 h-4" />
+        {isNative ? (
+          <div className={`p-4 rounded-2xl flex items-center justify-between border ${isLocationEnabled ? 'bg-emerald-500/20 border-emerald-400/30' : 'bg-white/10 border-white/10'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${isLocationEnabled ? 'bg-emerald-500 text-white' : 'bg-white/20'}`}>
+                <Navigation className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-black block">Ubicación en Segundo Plano</span>
+                <span className="text-[10px] text-indigo-100 opacity-80">
+                  {isLocationEnabled ? 'Activa automáticamente' : 'Esperando permiso del sistema'}
+                </span>
+              </div>
             </div>
-            <span className="text-xs font-black">Compartir Ubicación GPS</span>
+            {!isLocationEnabled && (
+              <button
+                onClick={openLocationSettings}
+                className="text-[10px] font-black uppercase tracking-widest text-indigo-100 underline"
+              >
+                Ajustes
+              </button>
+            )}
           </div>
-          <div className={`w-12 h-6 rounded-full relative border-2 ${isLocationEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-400/20 border-white/10'}`}>
-             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isLocationEnabled ? 'left-6' : 'left-0.5'}`} />
+        ) : (
+          <div onClick={toggleLocation} className={`p-4 rounded-2xl flex items-center justify-between border cursor-pointer ${isLocationEnabled ? 'bg-emerald-500/20 border-emerald-400/30' : 'bg-white/10 border-white/10'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${isLocationEnabled ? 'bg-emerald-500 text-white' : 'bg-white/20'}`}>
+                <Navigation className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-black">Compartir Ubicación GPS</span>
+            </div>
+            <div className={`w-12 h-6 rounded-full relative border-2 ${isLocationEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-400/20 border-white/10'}`}>
+               <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isLocationEnabled ? 'left-6' : 'left-0.5'}`} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="max-w-md mx-auto p-6 space-y-6">
@@ -844,6 +935,41 @@ export function ParentDashboard() {
         </div>
       )}
       {/* REPLACEMENT REQUEST MODAL */}
+      {showLocationRationale && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="p-8 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+              <div className="p-2 bg-indigo-600 rounded-xl text-white">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Ubicación en Segundo Plano</h3>
+            </div>
+            <div className="p-8 space-y-6">
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Safe Smart Pickup usa tu ubicación para avisarle al colegio automáticamente cuando llegas a la
+                zona de recogida y cuando te retiras con tu hijo o hija — sin que tengas que abrir la app.
+              </p>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Para eso, Android te va a pedir el permiso <b>“Permitir todo el tiempo”</b>. Solo se usa para
+                esta función; nunca se comparte ni se usa con otro fin.
+              </p>
+              <button
+                onClick={handleAcceptLocationRationale}
+                className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
+              >
+                Activar Ubicación
+              </button>
+              <button
+                onClick={() => { markLocationRationaleSeen(); setShowLocationRationale(false); }}
+                className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest"
+              >
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showReplacementModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">

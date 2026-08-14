@@ -14,6 +14,13 @@ const config: CapacitorConfig = {
     url: 'https://safesmartpickup.com',
     androidScheme: 'https',
   },
+  android: {
+    // Sin esto, Android detiene las actualizaciones de ubicación en segundo
+    // plano a los 5 minutos, sin importar el servicio en primer plano del
+    // plugin de geolocalización. Ver:
+    // https://github.com/capacitor-community/background-geolocation/issues/89
+    useLegacyBridge: true,
+  },
 };
 
 export default config;
