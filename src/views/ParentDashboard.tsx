@@ -359,7 +359,7 @@ export function ParentDashboard() {
     }
   };
 
-  const handleFinalConfirm = async () => {
+  const handleFinalConfirm = async (auto = false) => {
     setLoading(true);
     const { error } = await supabase
       .from('pickup_events')
@@ -369,14 +369,21 @@ export function ParentDashboard() {
 
     if (!error) {
       await logActivity(
-        'PICKUP', 
-        `CICLO COMPLETADO: ${profile.first_name} confirmó reunión con el alumno en el vehículo.`,
+        'PICKUP',
+        auto
+          ? `CICLO COMPLETADO (automático): se detectó que ${profile.first_name} salió del perímetro del colegio con la recogida ya autorizada.`
+          : `CICLO COMPLETADO: ${profile.first_name} confirmó reunión con el alumno en el vehículo.`,
         profile.first_name,
-        {},
+        { auto_confirmed: auto },
         profile?.tenant_id
       );
       setStatus('idle');
-      alert("¡Ciclo de recogida terminado! Buen viaje.");
+      if (auto) {
+        setSuccessMessage('Detectamos que saliste del colegio — dimos por confirmada la recogida automáticamente.');
+        setTimeout(() => setSuccessMessage(null), 10000);
+      } else {
+        alert("¡Ciclo de recogida terminado! Buen viaje.");
+      }
     }
     setLoading(false);
   };
@@ -481,6 +488,21 @@ export function ParentDashboard() {
       if (interval) clearInterval(interval);
     };
   }, [isInside, isLocationEnabled]);
+
+  // Si la escuela ya autorizó la salida (status 'released') y el padre sale del
+  // perímetro sin presionar "Confirmar reunión", lo damos por confirmado solo:
+  // probablemente ya recogió al alumno y olvidó tocar el botón. Se espera 20s
+  // fuera del perímetro (no al primer instante) para evitar falsos positivos
+  // por ruido del GPS cerca del borde de la geocerca.
+  useEffect(() => {
+    if (status !== 'released' || !isLocationEnabled || isInside) return;
+
+    const timeoutId = window.setTimeout(() => {
+      handleFinalConfirm(true);
+    }, 20000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [status, isLocationEnabled, isInside]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371000;
