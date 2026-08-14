@@ -48,7 +48,7 @@ export function DismissalScheduleSettings() {
         supabase.from('school_grades').select('*').order('level_order'),
         supabase.from('profiles').select('id, first_name, last_name').eq('role', 'admin'),
         supabase.from('dismissal_assignments').select('*, staff:profiles(first_name, last_name)'),
-        supabase.from('dismissal_overrides').select('*, staff:profiles(first_name, last_name)').gte('override_date', today).order('override_date'),
+        supabase.from('dismissal_overrides').select('*, staff:profiles!staff_id(first_name, last_name)').gte('override_date', today).order('override_date'),
         supabase.from('school_settings').select('primary_dismissal_mode').maybeSingle(),
       ]);
 
@@ -195,7 +195,7 @@ export function DismissalScheduleSettings() {
           { tenant_id: profile.tenant_id, grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, staff_id: ovStaffId, created_by: profile.id },
           { onConflict: 'tenant_id,grade_id,section,schedule_type,override_date' }
         )
-        .select('*, staff:profiles(first_name, last_name)')
+        .select('*, staff:profiles!staff_id(first_name, last_name)')
         .single();
       if (error) throw error;
       setOverrides(prev => [...prev.filter(o => o.id !== data.id), data].sort((a, b) => a.override_date.localeCompare(b.override_date)));
