@@ -404,6 +404,7 @@ export function ParentDashboard() {
         profile?.tenant_id
       );
       setStatus('idle');
+      setJustCompletedToday(true);
       if (auto) {
         setSuccessMessage('Detectamos que saliste del colegio — dimos por confirmada la recogida automáticamente.');
         setTimeout(() => setSuccessMessage(null), 10000);
@@ -412,6 +413,22 @@ export function ParentDashboard() {
       }
     }
     setLoading(false);
+  };
+
+  // Mientras el padre siga dentro del perímetro después de cerrar el ciclo
+  // de hoy, no tiene sentido volver a ofrecerle "Anunciar Llegada" — ya
+  // recogió al alumno. Se muestra un cierre amable en su lugar, y se olvida
+  // solo en cuanto se retira (para que mañana vuelva a funcionar normal).
+  const [justCompletedToday, setJustCompletedToday] = useState(false);
+  useEffect(() => {
+    if (!isInside) setJustCompletedToday(false);
+  }, [isInside]);
+
+  const getFarewellMessage = () => {
+    const day = new Date().getDay(); // 0=domingo … 5=viernes, 6=sábado
+    if (day === 5) return { title: '¡Buen fin de semana!', subtitle: 'Nos vemos el lunes.' };
+    if (day === 0 || day === 6) return { title: '¡Nos vemos pronto!', subtitle: 'Que descanses.' };
+    return { title: '¡Nos vemos mañana!', subtitle: 'Buen viaje a casa.' };
   };
 
   const handleSubmitForm = async () => {
@@ -870,9 +887,15 @@ export function ParentDashboard() {
                <span className="text-4xl font-black tracking-[0.3em]">{profile?.pin_code}</span>
              </div>
           </div>
+        ) : justCompletedToday && isInside ? (
+          <div className="bg-emerald-600 p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden text-center">
+             <ShieldCheck className="w-10 h-10 mx-auto mb-4 text-emerald-100" />
+             <h3 className="text-2xl font-black">{getFarewellMessage().title}</h3>
+             <p className="text-sm font-bold text-emerald-100 mt-2">{getFarewellMessage().subtitle}</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            <button 
+            <button
               onClick={handleAnnounceArrival}
               disabled={!isInside || !isLocationEnabled || loading}
               className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && isLocationEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
