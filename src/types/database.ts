@@ -288,6 +288,15 @@ export interface DismissalOverride {
   staff?: Pick<Profile, 'first_name' | 'last_name'>;
 }
 
+export interface ParentPresence {
+  parent_id: string;
+  tenant_id: string;
+  is_inside: boolean;
+  entered_at: string | null;
+  updated_at: string;
+  parent?: Pick<Profile, 'first_name' | 'last_name' | 'photo_url'>;
+}
+
 // Constants
 export const PICKUP_STATUSES: PickupStatus[] = ['announced', 'in_queue', 'released', 'completed', 'cancelled'];
 

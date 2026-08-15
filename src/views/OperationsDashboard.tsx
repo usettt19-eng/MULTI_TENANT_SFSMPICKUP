@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
+import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
   const { t } = useLanguage();
@@ -419,6 +420,8 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               </div>
             </div>
           </div>
+
+          <ParentPerimeterPanel />
         </div>
 
         {/* Right Column (Speed/Ratios/Activity) */}

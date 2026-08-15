@@ -541,6 +541,24 @@ export function ParentDashboard() {
     }
   }, [isNative, isBackgroundTrackingActive, isInside, status, loading]);
 
+  // Reporta al colegio si el padre está dentro o fuera del perímetro, para
+  // que recepción vea en vivo quién está llegando — sin guardar coordenadas,
+  // solo un booleano y desde cuándo. Se actualiza cada vez que isInside
+  // cambia de valor (no en cada lectura de GPS), así que sirve tanto para el
+  // rastreo nativo en segundo plano como para el watch del navegador.
+  useEffect(() => {
+    if (!profile?.id || !profile?.tenant_id || !isLocationEnabled) return;
+    supabase.from('parent_presence').upsert({
+      parent_id: profile.id,
+      tenant_id: profile.tenant_id,
+      is_inside: isInside,
+      entered_at: isInside ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error) console.error('Error al reportar presencia:', error);
+    });
+  }, [isInside, isLocationEnabled, profile?.id, profile?.tenant_id]);
+
   // Auto-refresh every 3 seconds when inside perimeter
   useEffect(() => {
     let interval: number | null = null;
