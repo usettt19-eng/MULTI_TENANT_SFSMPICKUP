@@ -52,6 +52,14 @@ export function ParentDashboard() {
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
   const watchId = useRef<number | null>(null);
 
+  // El watcher nativo en segundo plano se registra una sola vez al montar la
+  // pantalla (antes de que fetchSchoolSettings() traiga la ubicación real del
+  // colegio). Si su callback leyera "schoolPos" directamente, quedaría para
+  // siempre comparando contra el valor por defecto de arriba, ya que ese
+  // closure nunca se vuelve a crear. Este ref sí se mantiene al día.
+  const schoolPosRef = useRef(schoolPos);
+  useEffect(() => { schoolPosRef.current = schoolPos; }, [schoolPos]);
+
   // En la app nativa (Android), la ubicación se rastrea en segundo plano sin
   // que el padre tenga que abrir la app ni tocar nada — solo se pide el
   // permiso "Permitir siempre" una vez, con una pantalla propia explicando
@@ -259,7 +267,12 @@ export function ParentDashboard() {
   };
 
   const fetchSchoolSettings = async () => {
-    const { data } = await supabase.from('school_settings').select('*').single();
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('school_settings')
+      .select('*')
+      .eq('tenant_id', profile.tenant_id)
+      .maybeSingle();
     if (data) {
       setSchoolPos({ 
         lat: Number(data.latitude), 
@@ -454,9 +467,9 @@ export function ParentDashboard() {
         (position) => {
           const { latitude, longitude } = position.coords;
           setParentPos({ lat: latitude, lng: longitude });
-          const dist = calculateDistance(latitude, longitude, schoolPos.lat, schoolPos.lng);
+          const dist = calculateDistance(latitude, longitude, schoolPosRef.current.lat, schoolPosRef.current.lng);
           setDistance(dist);
-          setIsInside(dist <= schoolPos.radius);
+          setIsInside(dist <= schoolPosRef.current.radius);
           setErrorMessage(null);
         },
         (error) => {
@@ -478,9 +491,9 @@ export function ParentDashboard() {
 
   const handleBackgroundLocation = (lat: number, lng: number) => {
     setParentPos({ lat, lng });
-    const dist = calculateDistance(lat, lng, schoolPos.lat, schoolPos.lng);
+    const dist = calculateDistance(lat, lng, schoolPosRef.current.lat, schoolPosRef.current.lng);
     setDistance(dist);
-    setIsInside(dist <= schoolPos.radius);
+    setIsInside(dist <= schoolPosRef.current.radius);
     setErrorMessage(null);
     setIsLocationEnabled(true);
   };
