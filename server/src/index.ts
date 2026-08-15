@@ -663,18 +663,33 @@ app.get(
     const safeQ = raw.replace(/[^\p{L}\p{N}\s@._-]/gu, '').trim().slice(0, 60);
     if (safeQ.length < 2) return ok(res, []);
 
-    const pattern = `%${safeQ}%`;
+    // "Juan Perez" no aparece completo en NINGUNA columna por separado
+    // (first_name="Juan", last_name="Perez"), así que buscar el texto tal
+    // cual con un solo ilike nunca encuentra nada cuando se escribe el
+    // nombre completo. Se filtra en la base con la primera palabra (trae un
+    // grupo amplio de candidatos) y se exige en JS que TODAS las palabras
+    // aparezcan en algún lugar de nombre+apellido+correo, sin importar en
+    // qué columna caiga cada una.
+    const words = safeQ.split(/\s+/).filter(Boolean).slice(0, 4);
+    const firstPattern = `%${words[0]}%`;
+
     const {data, error} = await admin
       .from('profiles')
       .select('id, first_name, last_name, email, photo_url')
       .eq('tenant_id', tenantId)
       .in('role', ['parent', 'guardian'])
       .neq('id', req.caller!.id)
-      .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`)
-      .limit(10);
+      .or(`first_name.ilike.${firstPattern},last_name.ilike.${firstPattern},email.ilike.${firstPattern}`)
+      .limit(25);
 
     if (error) return fail(res, 500, error.message);
-    return ok(res, data ?? []);
+
+    const matches = (data ?? []).filter((p) => {
+      const haystack = `${p.first_name ?? ''} ${p.last_name ?? ''} ${p.email ?? ''}`.toLowerCase();
+      return words.every((w) => haystack.includes(w.toLowerCase()));
+    });
+
+    return ok(res, matches.slice(0, 10));
   }),
 );
 
