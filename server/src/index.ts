@@ -628,6 +628,354 @@ app.post(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// POOL DAY (CARPOOL)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Un padre autoriza a OTRO padre ya registrado a recoger a su hijo/a ciertos
+// días (semanal recurrente, tabla carpool_authorizations) o un solo día
+// puntual (excepción, carpool_overrides) — mismo patrón de
+// dismissal_assignments/dismissal_overrides. No requiere aprobación de
+// recepción/admin: se activa al instante y solo se notifica al encargado de
+// la salida (a la hora de la recogida) y al/los administrador(es) del
+// colegio (al configurarse y de nuevo al momento de la recogida).
+//
+// Las lecturas con nombres de otros padres/alumnos y las escrituras pasan por
+// aquí (service_role) porque las políticas de `profiles`/`students` solo
+// dejan ver el propio perfil o los hijos propios — un padre "conductor" no
+// está vinculado al alumno que va a recoger, así que RLS por sí sola no
+// alcanza para mostrarle esos datos.
+
+const CARPOOL_STUDENT_FIELDS = 'id, first_name, last_name, grade, section, photo_url';
+const CARPOOL_PARENT_FIELDS = 'id, first_name, last_name, photo_url';
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+app.get(
+  '/api/parents/search',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    if (!tenantId) return ok(res, []);
+
+    const raw = String(req.query.q ?? '').trim();
+    // Se limpia todo lo que no sea letra/número/espacio/@/./- para que no
+    // pueda inyectarse sintaxis de filtro de PostgREST (comas, paréntesis) en
+    // el `.or()` de abajo.
+    const safeQ = raw.replace(/[^\p{L}\p{N}\s@._-]/gu, '').trim().slice(0, 60);
+    if (safeQ.length < 2) return ok(res, []);
+
+    const pattern = `%${safeQ}%`;
+    const {data, error} = await admin
+      .from('profiles')
+      .select('id, first_name, last_name, email, photo_url')
+      .eq('tenant_id', tenantId)
+      .in('role', ['parent', 'guardian'])
+      .neq('id', req.caller!.id)
+      .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`)
+      .limit(10);
+
+    if (error) return fail(res, 500, error.message);
+    return ok(res, data ?? []);
+  }),
+);
+
+/** Todo lo que el padre que llama configuró y todo aquello para lo que a él lo autorizaron a conducir. */
+app.get(
+  '/api/carpool/mine',
+  requireAuth,
+  wrap(async (req, res) => {
+    const callerId = req.caller!.id;
+    const tenantId = req.caller!.tenantId;
+    if (!tenantId) return ok(res, {authorizations: [], overrides: [], drivingFor: [], drivingForOverrides: [], todaysCarpoolStudents: []});
+
+    const today = todayStr();
+    const todayDow = new Date().getDay();
+
+    const [authRes, overrideRes, drivingForRes, drivingForOverrideRes]: any[] = await Promise.all([
+      (admin
+        .from('carpool_authorizations')
+        .select(`id, day_of_week, student:students(${CARPOOL_STUDENT_FIELDS}), driver:profiles!carpool_authorizations_driver_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any)
+        .eq('tenant_id', tenantId)
+        .eq('authorizing_parent_id', callerId)
+        .order('day_of_week'),
+      (admin
+        .from('carpool_overrides')
+        .select(`id, override_date, student:students(${CARPOOL_STUDENT_FIELDS}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any)
+        .eq('tenant_id', tenantId)
+        .eq('authorizing_parent_id', callerId)
+        .gte('override_date', today)
+        .order('override_date'),
+      (admin
+        .from('carpool_authorizations')
+        .select(`id, day_of_week, student:students(${CARPOOL_STUDENT_FIELDS}), authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any)
+        .eq('tenant_id', tenantId)
+        .eq('driver_parent_id', callerId)
+        .order('day_of_week'),
+      (admin
+        .from('carpool_overrides')
+        .select(`id, override_date, student:students(${CARPOOL_STUDENT_FIELDS}), authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any)
+        .eq('tenant_id', tenantId)
+        .eq('driver_parent_id', callerId)
+        .gte('override_date', today)
+        .order('override_date'),
+    ]);
+
+    if (authRes.error) return fail(res, 500, authRes.error.message);
+    if (overrideRes.error) return fail(res, 500, overrideRes.error.message);
+    if (drivingForRes.error) return fail(res, 500, drivingForRes.error.message);
+    if (drivingForOverrideRes.error) return fail(res, 500, drivingForOverrideRes.error.message);
+
+    // Alumnos que hoy le toca recoger a este padre por pool day: la
+    // excepción del día exacto manda sobre el recurrente semanal (mismo
+    // criterio que resolveResponsibleStaff), por si alguien cambió el
+    // conductor de hoy sin tocar su horario habitual.
+    const todaysOverrideStudentIds = new Set(
+      (drivingForOverrideRes.data ?? []).filter((o: any) => o.override_date === today).map((o: any) => o.student?.id),
+    );
+    const todaysFromOverrides = (drivingForOverrideRes.data ?? [])
+      .filter((o: any) => o.override_date === today && o.student)
+      .map((o: any) => ({...o.student, _carpoolAuthorizingParent: o.authorizing}));
+    const todaysFromWeekly = (drivingForRes.data ?? [])
+      .filter((a: any) => a.day_of_week === todayDow && a.student && !todaysOverrideStudentIds.has(a.student.id))
+      .map((a: any) => ({...a.student, _carpoolAuthorizingParent: a.authorizing}));
+
+    return ok(res, {
+      authorizations: authRes.data ?? [],
+      overrides: overrideRes.data ?? [],
+      drivingFor: drivingForRes.data ?? [],
+      drivingForOverrides: drivingForOverrideRes.data ?? [],
+      todaysCarpoolStudents: [...todaysFromOverrides, ...todaysFromWeekly],
+    });
+  }),
+);
+
+/** Valida que `callerId` sea padre/tutor de `studentId` y que `driverParentId` sea otro padre registrado del mismo colegio. */
+async function validateCarpoolActors(
+  tenantId: string,
+  callerId: string,
+  studentId: string,
+  driverParentId: string,
+): Promise<string | null> {
+  if (driverParentId === callerId) return 'El conductor debe ser otro padre distinto de ti.';
+
+  const {data: link} = await admin
+    .from('parent_students')
+    .select('id, students!inner(tenant_id)')
+    .eq('parent_id', callerId)
+    .eq('student_id', studentId)
+    .eq('students.tenant_id', tenantId)
+    .maybeSingle();
+  if (!link) return 'No eres padre/tutor registrado de ese alumno.';
+
+  const {data: driver} = await admin
+    .from('profiles')
+    .select('id')
+    .eq('id', driverParentId)
+    .eq('tenant_id', tenantId)
+    .in('role', ['parent', 'guardian'])
+    .maybeSingle();
+  if (!driver) return 'El conductor debe ser un padre/tutor registrado de este colegio.';
+
+  return null;
+}
+
+/** Notifica a los administradores del colegio (no bloquea la respuesta si falla). */
+async function notifyTenantAdmins(tenantId: string, title: string, message: string) {
+  try {
+    const {data: admins} = await admin.from('profiles').select('id').eq('tenant_id', tenantId).eq('role', 'admin');
+    if (!admins || admins.length === 0) return;
+    await admin.from('notifications').insert(
+      admins.map((a) => ({user_id: a.id, title, message, type: 'info', tenant_id: tenantId})),
+    );
+  } catch (err) {
+    console.error('Error al notificar a administradores:', err);
+  }
+}
+
+app.post(
+  '/api/carpool/authorizations',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    if (!tenantId) return fail(res, 403, 'Sin colegio asociado.');
+
+    const {student_id, driver_parent_id, days_of_week} = req.body ?? {};
+    if (!student_id || !driver_parent_id) return fail(res, 400, 'Falta el alumno o el conductor.');
+    const days: number[] = Array.isArray(days_of_week)
+      ? [...new Set(days_of_week.map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      : [];
+    if (days.length === 0) return fail(res, 400, 'Selecciona al menos un día de la semana.');
+
+    const validationError = await validateCarpoolActors(tenantId, req.caller!.id, student_id, driver_parent_id);
+    if (validationError) return fail(res, 403, validationError);
+
+    const rows = days.map((day_of_week) => ({
+      tenant_id: tenantId,
+      student_id,
+      authorizing_parent_id: req.caller!.id,
+      driver_parent_id,
+      day_of_week,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const {data, error} = await admin
+      .from('carpool_authorizations')
+      .upsert(rows, {onConflict: 'tenant_id,student_id,day_of_week'})
+      .select(`id, day_of_week, student:students(${CARPOOL_STUDENT_FIELDS}), driver:profiles!carpool_authorizations_driver_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any;
+
+    if (error) return fail(res, 500, error.message);
+
+    const studentName = data?.[0]?.student ? `${(data[0] as any).student.first_name} ${(data[0] as any).student.last_name}` : 'un alumno';
+    const driverName = data?.[0]?.driver ? `${(data[0] as any).driver.first_name} ${(data[0] as any).driver.last_name}` : 'otro padre';
+    const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    await notifyTenantAdmins(
+      tenantId,
+      'Nuevo Pool Day configurado',
+      `${req.caller!.email ?? 'Un padre'} autorizó a ${driverName} a recoger a ${studentName} los días: ${days.map((d) => dayNames[d]).join(', ')}.`,
+    );
+
+    return ok(res, data);
+  }),
+);
+
+app.delete(
+  '/api/carpool/authorizations/:id',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {data: row} = await admin.from('carpool_authorizations').select('id, tenant_id, authorizing_parent_id').eq('id', req.params.id).maybeSingle();
+    if (!row) return fail(res, 404, 'No encontrado.');
+    if (row.authorizing_parent_id !== req.caller!.id && !isStaffOf(req.caller, row.tenant_id)) {
+      return fail(res, 403, 'Sin permisos sobre esa autorización.');
+    }
+    const {error} = await admin.from('carpool_authorizations').delete().eq('id', req.params.id);
+    if (error) return fail(res, 500, error.message);
+    return ok(res);
+  }),
+);
+
+app.post(
+  '/api/carpool/overrides',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    if (!tenantId) return fail(res, 403, 'Sin colegio asociado.');
+
+    const {student_id, driver_parent_id, date} = req.body ?? {};
+    if (!student_id || !driver_parent_id || !date) return fail(res, 400, 'Falta el alumno, el conductor o la fecha.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(res, 400, 'Fecha inválida.');
+    if (date < todayStr()) return fail(res, 400, 'La fecha debe ser hoy o en el futuro.');
+
+    const validationError = await validateCarpoolActors(tenantId, req.caller!.id, student_id, driver_parent_id);
+    if (validationError) return fail(res, 403, validationError);
+
+    const {data, error} = await admin
+      .from('carpool_overrides')
+      .upsert(
+        {
+          tenant_id: tenantId,
+          student_id,
+          authorizing_parent_id: req.caller!.id,
+          driver_parent_id,
+          override_date: date,
+          created_by: req.caller!.id,
+        },
+        {onConflict: 'tenant_id,student_id,override_date'},
+      )
+      .select(`id, override_date, student:students(${CARPOOL_STUDENT_FIELDS}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${CARPOOL_PARENT_FIELDS})`) as any;
+
+    if (error) return fail(res, 500, error.message);
+
+    const studentName = data?.[0]?.student ? `${(data[0] as any).student.first_name} ${(data[0] as any).student.last_name}` : 'un alumno';
+    const driverName = data?.[0]?.driver ? `${(data[0] as any).driver.first_name} ${(data[0] as any).driver.last_name}` : 'otro padre';
+    await notifyTenantAdmins(
+      tenantId,
+      'Pool Day de un día configurado',
+      `${req.caller!.email ?? 'Un padre'} autorizó a ${driverName} a recoger a ${studentName} el ${date} (excepción de un día).`,
+    );
+
+    return ok(res, data);
+  }),
+);
+
+app.delete(
+  '/api/carpool/overrides/:id',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {data: row} = await admin.from('carpool_overrides').select('id, tenant_id, authorizing_parent_id').eq('id', req.params.id).maybeSingle();
+    if (!row) return fail(res, 404, 'No encontrado.');
+    if (row.authorizing_parent_id !== req.caller!.id && !isStaffOf(req.caller, row.tenant_id)) {
+      return fail(res, 403, 'Sin permisos sobre esa excepción.');
+    }
+    const {error} = await admin.from('carpool_overrides').delete().eq('id', req.params.id);
+    if (error) return fail(res, 500, error.message);
+    return ok(res);
+  }),
+);
+
+/**
+ * Se llama al anunciar la llegada por un alumno que hoy es pool day para
+ * quien llama. Revalida server-side (no confía en lo que mande el cliente)
+ * que exista una autorización real de hoy antes de avisar a los
+ * administradores — así un padre no puede fabricar el aviso para un alumno
+ * cualquiera.
+ */
+app.post(
+  '/api/carpool/pickup-notify',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    const {student_id} = req.body ?? {};
+    if (!tenantId || !student_id) return fail(res, 400, 'Falta el alumno.');
+
+    const today = todayStr();
+    const todayDow = new Date().getDay();
+
+    const [{data: override}, {data: assignment}, {data: student}] = await Promise.all([
+      admin
+        .from('carpool_overrides')
+        .select(`driver_parent_id, authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(first_name, last_name)`)
+        .eq('tenant_id', tenantId)
+        .eq('student_id', student_id)
+        .eq('override_date', today)
+        .maybeSingle(),
+      admin
+        .from('carpool_authorizations')
+        .select(`driver_parent_id, authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(first_name, last_name)`)
+        .eq('tenant_id', tenantId)
+        .eq('student_id', student_id)
+        .eq('day_of_week', todayDow)
+        .maybeSingle(),
+      admin.from('students').select('first_name, last_name').eq('id', student_id).maybeSingle(),
+    ]);
+
+    // La excepción del día manda sobre el recurrente semanal, mismo criterio
+    // que resolveResponsibleStaff().
+    const applicable: any = (override as any)?.driver_parent_id === req.caller!.id
+      ? override
+      : (assignment as any)?.driver_parent_id === req.caller!.id
+        ? assignment
+        : null;
+
+    // No hay pool day real para hoy con este llamante: no se notifica a
+    // nadie, pero tampoco se trata como error (el cliente ya decidió llamar
+    // aquí basado en su copia local, que pudo quedar desactualizada).
+    if (!applicable) return ok(res);
+
+    const studentName = student ? `${student.first_name} ${student.last_name}` : 'un alumno';
+    const authName = applicable.authorizing
+      ? `${applicable.authorizing.first_name} ${applicable.authorizing.last_name}`
+      : 'el padre/tutor habitual';
+
+    await notifyTenantAdmins(
+      tenantId,
+      'Recogida por Pool Day',
+      `${req.caller!.email ?? 'Un padre'} está recogiendo a ${studentName} hoy en lugar de ${authName} (Pool Day autorizado).`,
+    );
+
+    return ok(res);
+  }),
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 
 app.use('/api', (_req, res) => fail(res, 404, 'Endpoint no encontrado.'));
 

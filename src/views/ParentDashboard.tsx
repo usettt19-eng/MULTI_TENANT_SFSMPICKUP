@@ -1,4 +1,4 @@
-import {apiFetch} from '../lib/apiFetch';
+import {apiFetch, apiJson} from '../lib/apiFetch';
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +12,7 @@ import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
-  UserPlus, QrCode, Share2, Trash2, MessageSquare
+  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search
 } from 'lucide-react';
 
 export function ParentDashboard() {
@@ -41,6 +41,22 @@ export function ParentDashboard() {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
   const [deliveryLink, setDeliveryLink] = useState('');
+
+  // "Pool day": otro padre registrado recoge a mi hijo/a ciertos días (fijo
+  // cada semana o solo un día puntual), con aviso al encargado y al admin.
+  const [showCarpoolModal, setShowCarpoolModal] = useState(false);
+  const [carpoolStudentId, setCarpoolStudentId] = useState('');
+  const [carpoolMode, setCarpoolMode] = useState<'weekly' | 'oneday'>('weekly');
+  const [carpoolDays, setCarpoolDays] = useState<number[]>([]);
+  const [carpoolDate, setCarpoolDate] = useState('');
+  const [driverQuery, setDriverQuery] = useState('');
+  const [driverResults, setDriverResults] = useState<any[]>([]);
+  const [isSearchingDrivers, setIsSearchingDrivers] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
+  const [isSubmittingCarpool, setIsSubmittingCarpool] = useState(false);
+  const [carpoolData, setCarpoolData] = useState<{
+    authorizations: any[]; overrides: any[]; drivingFor: any[]; drivingForOverrides: any[]; todaysCarpoolStudents: any[];
+  }>({ authorizations: [], overrides: [], drivingFor: [], drivingForOverrides: [], todaysCarpoolStudents: [] });
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
   
@@ -147,7 +163,128 @@ export function ParentDashboard() {
     await checkActivePickups();
     await fetchPendingForms();
     await fetchNotifications();
+    await fetchCarpoolData();
     setLoading(false);
+  };
+
+  const fetchCarpoolData = async () => {
+    if (!profile?.tenant_id) return;
+    try {
+      const res = await apiJson('/api/carpool/mine');
+      setCarpoolData(res.data);
+    } catch (e) {
+      console.error('Error al cargar pool days:', e);
+    }
+  };
+
+  // Busca padres registrados del mismo colegio para elegir "quién conduce"
+  // (con debounce, ya que dispara una llamada al backend por cada letra).
+  useEffect(() => {
+    if (!showCarpoolModal || driverQuery.trim().length < 2) {
+      setDriverResults([]);
+      return;
+    }
+    setIsSearchingDrivers(true);
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const res = await apiJson(`/api/parents/search?q=${encodeURIComponent(driverQuery.trim())}`);
+        setDriverResults(res.data || []);
+      } catch (e) {
+        console.error('Error al buscar padres:', e);
+      } finally {
+        setIsSearchingDrivers(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(timeoutId);
+  }, [driverQuery, showCarpoolModal]);
+
+  const resetCarpoolForm = () => {
+    setCarpoolStudentId('');
+    setCarpoolMode('weekly');
+    setCarpoolDays([]);
+    setCarpoolDate('');
+    setDriverQuery('');
+    setDriverResults([]);
+    setSelectedDriver(null);
+  };
+
+  const toggleCarpoolDay = (day: number) => {
+    setCarpoolDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort());
+  };
+
+  const handleSubmitCarpool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!carpoolStudentId || !selectedDriver) return;
+    if (carpoolMode === 'weekly' && carpoolDays.length === 0) {
+      alert('Selecciona al menos un día de la semana.');
+      return;
+    }
+    if (carpoolMode === 'oneday' && !carpoolDate) {
+      alert('Selecciona la fecha.');
+      return;
+    }
+
+    setIsSubmittingCarpool(true);
+    try {
+      const student = students.find(s => s.id === carpoolStudentId);
+      const driverName = `${selectedDriver.first_name} ${selectedDriver.last_name}`;
+
+      if (carpoolMode === 'weekly') {
+        await apiJson('/api/carpool/authorizations', {
+          method: 'POST',
+          body: JSON.stringify({ student_id: carpoolStudentId, driver_parent_id: selectedDriver.id, days_of_week: carpoolDays }),
+        });
+        await logActivity(
+          'CARPOOL_AUTHORIZATION',
+          `POOL DAY: ${profile.first_name} autorizó a ${driverName} a recoger a ${student?.first_name || ''} ${student?.last_name || ''} (recurrente).`,
+          profile.first_name,
+          { student_id: carpoolStudentId, driver_parent_id: selectedDriver.id, days_of_week: carpoolDays },
+          profile?.tenant_id
+        );
+      } else {
+        await apiJson('/api/carpool/overrides', {
+          method: 'POST',
+          body: JSON.stringify({ student_id: carpoolStudentId, driver_parent_id: selectedDriver.id, date: carpoolDate }),
+        });
+        await logActivity(
+          'CARPOOL_AUTHORIZATION',
+          `POOL DAY: ${profile.first_name} autorizó a ${driverName} a recoger a ${student?.first_name || ''} ${student?.last_name || ''} el ${carpoolDate} (excepción de un día).`,
+          profile.first_name,
+          { student_id: carpoolStudentId, driver_parent_id: selectedDriver.id, date: carpoolDate },
+          profile?.tenant_id
+        );
+      }
+
+      alert('¡Pool day configurado! El encargado y el administrador serán notificados.');
+      setShowCarpoolModal(false);
+      resetCarpoolForm();
+      await fetchCarpoolData();
+    } catch (err: any) {
+      console.error(err);
+      alert('Error al configurar el pool day: ' + (err.message || String(err)));
+    } finally {
+      setIsSubmittingCarpool(false);
+    }
+  };
+
+  const handleDeleteCarpoolAuthorization = async (id: string) => {
+    if (!confirm('¿Quitar esta autorización recurrente?')) return;
+    try {
+      await apiJson(`/api/carpool/authorizations/${id}`, { method: 'DELETE' });
+      await fetchCarpoolData();
+    } catch (err: any) {
+      alert('Error al quitar la autorización: ' + (err.message || String(err)));
+    }
+  };
+
+  const handleDeleteCarpoolOverride = async (id: string) => {
+    if (!confirm('¿Quitar esta excepción de un día?')) return;
+    try {
+      await apiJson(`/api/carpool/overrides/${id}`, { method: 'DELETE' });
+      await fetchCarpoolData();
+    } catch (err: any) {
+      alert('Error al quitar la excepción: ' + (err.message || String(err)));
+    }
   };
 
   const handleRequestReplacement = async (e: React.FormEvent) => {
@@ -638,10 +775,22 @@ export function ParentDashboard() {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
   };
 
+  // A los hijos propios se les suman los alumnos que hoy le tocan a este
+  // padre por un pool day (autorizado por el padre/tutor real). Así puede
+  // anunciar la llegada y aparecer en la tarjeta de abajo igual que con sus
+  // propios hijos, aunque no esté vinculado a ellos en parent_students.
+  const pickupStudents = React.useMemo(() => {
+    const ownIds = new Set(students.map(s => s.id));
+    const extra = (carpoolData.todaysCarpoolStudents || [])
+      .filter(s => !ownIds.has(s.id))
+      .map(s => ({ ...s, _isCarpool: true }));
+    return [...students, ...extra];
+  }, [students, carpoolData.todaysCarpoolStudents]);
+
   const handleAnnounceArrival = async () => {
     if (!isInside) return;
     setLoading(true);
-    for (const student of students) {
+    for (const student of pickupStudents) {
       const { error: insertError } = await supabase.from('pickup_events').insert({
         parent_id: profile.id,
         student_id: student.id,
@@ -649,7 +798,7 @@ export function ParentDashboard() {
         announced_at: new Date().toISOString(),
         tenant_id: profile.tenant_id
       });
-      
+
       if (insertError) {
         console.error('Error inserting pickup event:', insertError);
         setErrorMessage(`Error al anunciar: ${insertError.message}`);
@@ -662,6 +811,12 @@ export function ParentDashboard() {
       // reemplaza la cola compartida que ya ven recepción y administración —
       // solo se suma para avisar directamente a la persona correcta.
       try {
+        const isCarpool = !!(student as any)._isCarpool;
+        const carpoolParent = (student as any)._carpoolAuthorizingParent;
+        const carpoolNote = isCarpool && carpoolParent
+          ? ` (Pool day: recoge en lugar de ${carpoolParent.first_name} ${carpoolParent.last_name}.)`
+          : '';
+
         const responsibleStaffId = await resolveResponsibleStaff(
           profile.tenant_id, student.grade, student.section, 'regular',
         );
@@ -669,9 +824,20 @@ export function ParentDashboard() {
           await supabase.from('notifications').insert({
             user_id: responsibleStaffId,
             title: `${profile.first_name} ${profile.last_name} llegó`,
-            message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.`,
+            message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
             type: 'info',
             tenant_id: profile.tenant_id,
+          });
+        }
+
+        // El padre no tiene permiso para leer la lista de administradores
+        // (RLS), así que el aviso al admin de que hoy aplica un pool day pasa
+        // por el backend, que además revalida que la autorización sea real
+        // antes de notificar a nadie.
+        if (isCarpool) {
+          await apiFetch('/api/carpool/pickup-notify', {
+            method: 'POST',
+            body: JSON.stringify({ student_id: student.id }),
           });
         }
       } catch (routeErr) {
@@ -911,14 +1077,75 @@ export function ParentDashboard() {
               <UserPlus className="w-5 h-5" />
               Solicitar Reemplazo de Recogida
             </button>
-            <button 
+            <button
               onClick={() => setShowDeliveryModal(true)}
               className="w-full p-6 bg-white border-2 border-dashed border-amber-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-amber-600 font-black text-xs uppercase tracking-widest hover:bg-amber-50 transition-all"
             >
               <MessageSquare className="w-5 h-5" />
               Enviar Mensaje / Delivery
             </button>
+            {students.length > 0 && (
+              <button
+                onClick={() => setShowCarpoolModal(true)}
+                className="w-full p-6 bg-white border-2 border-dashed border-emerald-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-all"
+              >
+                <Car className="w-5 h-5" />
+                Configurar Pool Day
+              </button>
+            )}
           </div>
+        )}
+
+        {/* Pool Day: lo que configuré para mis hijos + lo que conduzco para otros */}
+        {(carpoolData.authorizations.length > 0 || carpoolData.overrides.length > 0 || carpoolData.drivingFor.length > 0 || carpoolData.drivingForOverrides.length > 0) && (
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Pool Day</h3>
+            <div className="grid grid-cols-1 gap-3">
+              {carpoolData.authorizations.map((a: any) => (
+                <div key={a.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
+                  <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600"><Car className="w-5 h-5" /></div>
+                  <div className="flex-1">
+                    <h4 className="font-black text-slate-800 text-sm">{a.student?.first_name} {a.student?.last_name}</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">
+                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][a.day_of_week]} · Conduce {a.driver?.first_name} {a.driver?.last_name}
+                    </p>
+                  </div>
+                  <button onClick={() => handleDeleteCarpoolAuthorization(a.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {carpoolData.overrides.map((o: any) => (
+                <div key={o.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
+                  <div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><CalendarDays className="w-5 h-5" /></div>
+                  <div className="flex-1">
+                    <h4 className="font-black text-slate-800 text-sm">{o.student?.first_name} {o.student?.last_name}</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">{o.override_date} (solo ese día) · Conduce {o.driver?.first_name} {o.driver?.last_name}</p>
+                  </div>
+                  <button onClick={() => handleDeleteCarpoolOverride(o.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {(carpoolData.drivingFor.length > 0 || carpoolData.drivingForOverrides.length > 0) && (
+                <div className="bg-indigo-50 p-5 rounded-[2rem] border border-indigo-100">
+                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-3">Tú conduces para</p>
+                  <div className="space-y-2">
+                    {carpoolData.drivingFor.map((a: any) => (
+                      <p key={a.id} className="text-xs font-bold text-indigo-700">
+                        {a.student?.first_name} {a.student?.last_name} — {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][a.day_of_week]} (por {a.authorizing?.first_name} {a.authorizing?.last_name})
+                      </p>
+                    ))}
+                    {carpoolData.drivingForOverrides.map((o: any) => (
+                      <p key={o.id} className="text-xs font-bold text-indigo-700">
+                        {o.student?.first_name} {o.student?.last_name} — {o.override_date} (por {o.authorizing?.first_name} {o.authorizing?.last_name})
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
         )}
 
         {/* Authorized Replacements Section */}
@@ -959,13 +1186,18 @@ export function ParentDashboard() {
         )}
 
         <div className="space-y-4">
-           {students.map(s => (
+           {pickupStudents.map(s => (
              <div key={s.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
                 <img src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"} className="w-16 h-16 rounded-2xl object-cover" />
                 <div className="flex-1">
                    <h5 className="font-bold text-slate-800">{s.first_name} {s.last_name}</h5>
                    <p className="text-[11px] text-slate-500 font-black uppercase">{s.grade || 'Grado no asignado'}</p>
                 </div>
+                {(s as any)._isCarpool && (
+                  <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border border-emerald-100 flex items-center gap-1">
+                    <Car className="w-3 h-3" /> Pool day hoy
+                  </span>
+                )}
              </div>
            ))}
         </div>
@@ -1150,6 +1382,137 @@ export function ParentDashboard() {
                   className="w-full bg-amber-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-amber-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
                 >
                   {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR AVISO'}
+                </button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* POOL DAY MODAL */}
+      {showCarpoolModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-3">
+                 <div className="p-2 bg-emerald-600 rounded-xl text-white">
+                   <Car className="w-5 h-5" />
+                 </div>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Configurar Pool Day</h3>
+               </div>
+               <button onClick={() => { setShowCarpoolModal(false); resetCarpoolForm(); }} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+             </div>
+             <form onSubmit={handleSubmitCarpool} className="p-8 space-y-6 overflow-y-auto">
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Autoriza a otro padre o madre ya registrado a recoger a tu hijo/a. Se activa al instante — el encargado de la salida y el administrador serán notificados, sin necesidad de aprobación.
+                </p>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Hijo/a</label>
+                  <select
+                    required
+                    value={carpoolStudentId}
+                    onChange={e => setCarpoolStudentId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                  >
+                    <option value="">Selecciona...</option>
+                    {students.map(s => (
+                      <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Frecuencia</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCarpoolMode('weekly')}
+                      className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${carpoolMode === 'weekly' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                    >Cada Semana</button>
+                    <button
+                      type="button"
+                      onClick={() => setCarpoolMode('oneday')}
+                      className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${carpoolMode === 'oneday' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                    >Solo Un Día</button>
+                  </div>
+                </div>
+
+                {carpoolMode === 'weekly' ? (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Días de la semana</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((label, day) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleCarpoolDay(day)}
+                          className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${carpoolDays.includes(day) ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                        >{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Fecha</label>
+                    <input
+                      type="date"
+                      required
+                      min={new Date().toISOString().slice(0, 10)}
+                      value={carpoolDate}
+                      onChange={e => setCarpoolDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">¿Quién conduce?</label>
+                  {selectedDriver ? (
+                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-4">
+                      <img src={selectedDriver.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-9 h-9 rounded-xl object-cover" />
+                      <span className="flex-1 text-sm font-bold text-slate-700">{selectedDriver.first_name} {selectedDriver.last_name}</span>
+                      <button type="button" onClick={() => { setSelectedDriver(null); setDriverQuery(''); }} className="p-1.5 text-slate-400 hover:text-rose-500">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-300 absolute left-5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={driverQuery}
+                        onChange={e => setDriverQuery(e.target.value)}
+                        placeholder="Busca por nombre o correo..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                      />
+                      {isSearchingDrivers && <Loader2 className="w-4 h-4 text-slate-300 animate-spin absolute right-5 top-1/2 -translate-y-1/2" />}
+                      {driverResults.length > 0 && (
+                        <div className="mt-2 bg-white border border-slate-100 rounded-2xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                          {driverResults.map(p => (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() => { setSelectedDriver(p); setDriverResults([]); }}
+                              className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-all text-left"
+                            >
+                              <img src={p.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-8 h-8 rounded-lg object-cover" />
+                              <div>
+                                <p className="text-xs font-bold text-slate-700">{p.first_name} {p.last_name}</p>
+                                <p className="text-[10px] text-slate-400">{p.email}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingCarpool || !carpoolStudentId || !selectedDriver}
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-emerald-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isSubmittingCarpool ? <Loader2 className="w-5 h-5 animate-spin" /> : 'AUTORIZAR'}
                 </button>
              </form>
           </div>
