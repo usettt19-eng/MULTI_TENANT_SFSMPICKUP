@@ -524,9 +524,19 @@ export function ParentDashboard() {
 
   // Al entrar al perímetro por rastreo nativo en segundo plano, se anuncia la
   // llegada sin que el padre tenga que abrir la app ni tocar nada.
+  //
+  // Importante: solo debe dispararse quien acaba de ENTRAR al perímetro
+  // (transición fuera→dentro), no simplemente "está dentro y el estado está
+  // en idle". Sin ese matiz, terminar la recogida (que deja status en
+  // 'idle') mientras el padre sigue parado dentro del perímetro —porque
+  // todavía no arrancó el carro— volvía a disparar un anuncio de llegada
+  // repetido, en loop, hasta que finalmente se retiraba.
+  const wasInsideRef = useRef(false);
   useEffect(() => {
     if (!isNative || !isBackgroundTrackingActive) return;
-    if (isInside && status === 'idle' && !loading) {
+    const justEntered = isInside && !wasInsideRef.current;
+    wasInsideRef.current = isInside;
+    if (justEntered && status === 'idle' && !loading) {
       handleAnnounceArrival();
     }
   }, [isNative, isBackgroundTrackingActive, isInside, status, loading]);
