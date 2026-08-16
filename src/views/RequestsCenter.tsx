@@ -1,15 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   UserPlus, Check, X, Loader2, MessageSquare,
-  Clock, Shield, UserCheck, Trash2, Bell
+  Clock, Shield, UserCheck, Trash2, Bell, Car
 } from 'lucide-react';
+
+const CARPOOL_DAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
 export function RequestsCenter() {
   const { t } = useLanguage();
   const [requests, setRequests] = useState<any[]>([]);
+  // Pool day no pasa por aprobación (se activa solo al configurarse), así
+  // que se trae aparte y se muestra como tarjetas informativas, sin botones
+  // de aprobar/rechazar — solo para que recepción/admin tengan visibilidad.
+  const [carpoolEvents, setCarpoolEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -33,14 +39,38 @@ export function RequestsCenter() {
     }
   };
 
+  const fetchCarpoolEvents = async () => {
+    const parentFields = 'first_name, last_name';
+    const studentFields = 'first_name, last_name';
+    const [weekly, overrides] = await Promise.all([
+      supabase
+        .from('carpool_authorizations')
+        .select(`id, created_at, day_of_week, student:students(${studentFields}), authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_authorizations_driver_parent_id_fkey(${parentFields})`)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('carpool_overrides')
+        .select(`id, created_at, override_date, student:students(${studentFields}), authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${parentFields})`)
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
+
+    const events = [
+      ...(weekly.data ?? []).map((r: any) => ({ ...r, _kind: 'carpool_weekly' })),
+      ...(overrides.data ?? []).map((r: any) => ({ ...r, _kind: 'carpool_override' })),
+    ];
+    setCarpoolEvents(events);
+  };
+
   useEffect(() => {
     fetchRequests(true);
+    fetchCarpoolEvents();
 
     const channel = supabase
       .channel(`replacement_requests_${Math.random()}`)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
         table: 'replacement_requests'
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -48,12 +78,21 @@ export function RequestsCenter() {
         }
         fetchRequests(false);
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'carpool_authorizations' }, () => {
+        playArrivalSound();
+        fetchCarpoolEvents();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'carpool_overrides' }, () => {
+        playArrivalSound();
+        fetchCarpoolEvents();
+      })
       .subscribe();
 
     // Fallback polling every 10 seconds
     const pollInterval = window.setInterval(() => {
       console.log('RequestsCenter fallback polling...');
       fetchRequests(false);
+      fetchCarpoolEvents();
     }, 10000);
 
     return () => {
@@ -61,6 +100,15 @@ export function RequestsCenter() {
       clearInterval(pollInterval);
     };
   }, []);
+
+  // Une reemplazos/mensajes con pool day en un solo feed ordenado por fecha,
+  // para que recepción/admin revisen todo en un único lugar.
+  const combinedFeed = useMemo(() => {
+    const a = requests.map((r) => ({ ...r, _kind: r._kind ?? 'replacement' }));
+    return [...a, ...carpoolEvents].sort(
+      (x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime(),
+    );
+  }, [requests, carpoolEvents]);
 
   const fetchRequests = async (isInitial = false) => {
     if (isInitial) setLoading(true);
@@ -172,9 +220,9 @@ export function RequestsCenter() {
           </div>
         </header>
 
-        {loading && requests.length === 0 ? (
+        {loading && combinedFeed.length === 0 ? (
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
-        ) : requests.length === 0 ? (
+        ) : combinedFeed.length === 0 ? (
           <div className="bg-white rounded-[2.5rem] p-16 text-center shadow-sm border border-slate-100">
             <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <Check className="w-10 h-10 text-slate-300" />
@@ -184,14 +232,54 @@ export function RequestsCenter() {
           </div>
         ) : (
           <div className="space-y-4">
-            {requests.map((req) => {
+            {combinedFeed.map((req) => {
+              if (req._kind === 'carpool_weekly' || req._kind === 'carpool_override') {
+                const studentName = req.student ? `${req.student.first_name} ${req.student.last_name}` : 'un alumno';
+                const driverName = req.driver ? `${req.driver.first_name} ${req.driver.last_name}` : 'otro padre';
+                const authName = req.authorizing ? `${req.authorizing.first_name} ${req.authorizing.last_name}` : 'un padre';
+                const whenLabel = req._kind === 'carpool_weekly'
+                  ? `todos los ${CARPOOL_DAY_NAMES[req.day_of_week]}`
+                  : `el ${req.override_date} (excepción de un día)`;
+                return (
+                  <div key={`carpool-${req._kind}-${req.id}`} className="bg-white rounded-[2rem] p-6 shadow-sm border border-emerald-100">
+                    <div className="flex items-start gap-5">
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-600">
+                        <Car className="w-7 h-7" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-black text-slate-800 text-lg">{authName}</h3>
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest bg-emerald-100 text-emerald-700">
+                            Pool Day · Activo
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                          Autorizó a <span className="text-slate-900 font-bold">{driverName}</span> a recoger a{' '}
+                          <span className="text-slate-900 font-bold">{studentName}</span> {whenLabel}.
+                        </p>
+                        <div className="flex items-center gap-4 mt-3">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(req.created_at).toLocaleString()}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
+                            <Shield className="w-3.5 h-3.5" />
+                            ID: {req.id.slice(0, 8)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               const isPending = req.status === 'pending';
               const isApproved = req.status === 'approved';
               const isRejected = req.status === 'rejected';
 
               return (
-                <div 
-                  key={req.id} 
+                <div
+                  key={req.id}
                   className={`bg-white rounded-[2rem] p-6 shadow-sm border transition-all ${isPending ? 'border-indigo-100 hover:border-indigo-300' : 'border-slate-100 opacity-75'}`}
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
