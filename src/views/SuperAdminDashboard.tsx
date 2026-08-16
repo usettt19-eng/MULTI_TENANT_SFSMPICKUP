@@ -256,6 +256,7 @@ export function SuperAdminDashboard() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                   <th className="font-bold p-4 pl-6">Nombre del Colegio</th>
+                  <th className="font-bold p-4">Administrador</th>
                   <th className="font-bold p-4">Dominio</th>
                   <th className="font-bold p-4">Estado</th>
                   <th className="font-bold p-4">Fecha de Creación</th>
@@ -292,6 +293,21 @@ export function SuperAdminDashboard() {
                               </span>
                             )}
                           </div>
+                        )}
+                      </td>
+                      <td className="p-4 text-slate-600">
+                        {stats[tenant.id]?.admin ? (
+                          <div>
+                            <p className="font-bold text-slate-800 text-sm">
+                              {stats[tenant.id].admin!.first_name} {stats[tenant.id].admin!.last_name}
+                            </p>
+                            <p className="text-xs text-slate-400">{stats[tenant.id].admin!.email || 'sin correo'}</p>
+                            {stats[tenant.id].admin!.phone && (
+                              <p className="text-xs text-slate-400">{stats[tenant.id].admin!.phone}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-300 italic">Sin administrador</span>
                         )}
                       </td>
                       <td className="p-4 text-slate-500">

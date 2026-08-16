@@ -98,7 +98,7 @@ app.get(
     const [tenants, students, profiles, doors, settings] = await Promise.all([
       admin.from('tenants').select('id'),
       admin.from('students').select('tenant_id'),
-      admin.from('profiles').select('tenant_id, role, additional_tutor_name'),
+      admin.from('profiles').select('id, tenant_id, role, first_name, last_name, email, phone, additional_tutor_name, created_at'),
       admin.from('exit_doors').select('tenant_id'),
       admin.from('school_settings').select('tenant_id, latitude, longitude'),
     ]);
@@ -118,19 +118,36 @@ app.get(
 
     const stats: Record<
       string,
-      {students: number; parents: number; staff: number; doors: number; latitude: number | null; longitude: number | null}
+      {
+        students: number; parents: number; staff: number; doors: number;
+        latitude: number | null; longitude: number | null;
+        admin: {id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null} | null;
+      }
     > = {};
 
     for (const t of tenants.data ?? []) {
-      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, latitude: null, longitude: null};
+      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, latitude: null, longitude: null, admin: null};
     }
     for (const s of students.data ?? []) {
       if (s.tenant_id && stats[s.tenant_id]) stats[s.tenant_id].students++;
     }
+    // El administrador "principal" es el primer admin creado en el colegio
+    // (el que se da de alta junto con el tenant en /api/tenants/register) —
+    // mismo criterio que ya usa /api/tenants/reset-admin-password.
+    const earliestAdminAt: Record<string, string> = {};
     for (const p of profiles.data ?? []) {
       if (!p.tenant_id || !stats[p.tenant_id]) continue;
       if (p.role === 'parent') stats[p.tenant_id].parents++;
       else if (isStaff(p)) stats[p.tenant_id].staff++;
+      else if (p.role === 'admin') {
+        const current = earliestAdminAt[p.tenant_id];
+        if (!current || p.created_at < current) {
+          earliestAdminAt[p.tenant_id] = p.created_at;
+          stats[p.tenant_id].admin = {
+            id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, phone: p.phone,
+          };
+        }
+      }
     }
     for (const d of doors.data ?? []) {
       if (d.tenant_id && stats[d.tenant_id]) stats[d.tenant_id].doors++;
