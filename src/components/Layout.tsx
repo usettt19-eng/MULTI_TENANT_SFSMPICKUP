@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sidebar } from './Sidebar';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { useLayout } from '../contexts/LayoutContext';
 
 interface LayoutProps {
@@ -13,13 +14,14 @@ export function Layout({ children, currentView, setCurrentView }: LayoutProps) {
 
   return (
     <div className="flex min-h-screen bg-surface-container-low">
-      <Sidebar 
-        currentView={currentView} 
-        setCurrentView={setCurrentView} 
-        isOpen={isMenuOpen} 
+      <Sidebar
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        isOpen={isMenuOpen}
         onClose={() => setIsMenuOpen(false)}
       />
       <div className="flex-1 md:ml-64 flex flex-col relative w-full overflow-x-hidden">
+        <ImpersonationBanner />
         {children}
       </div>
     </div>

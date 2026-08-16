@@ -1,7 +1,7 @@
 import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Tenant {
@@ -36,7 +36,7 @@ export function SuperAdminDashboard() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [showEditModalPassword, setShowEditModalPassword] = useState(false);
 
-  const { profile } = useAuth() as any;
+  const { profile, enterTenantAsAdmin } = useAuth() as any;
 
   const [stats, setStats] = useState<Record<string, any>>({});
 
@@ -315,12 +315,22 @@ export function SuperAdminDashboard() {
                         {new Date(tenant.created_at).toLocaleDateString()}
                       </td>
                       <td className="p-4 pr-6 text-right">
-                        <button 
-                          onClick={() => handleEditClick(tenant)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
-                        >
-                          <Settings className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => enterTenantAsAdmin(tenant.id)}
+                            title="Entrar como administrador de este colegio"
+                            className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors"
+                          >
+                            <LogIn className="w-4 h-4" />
+                            Entrar como Admin
+                          </button>
+                          <button
+                            onClick={() => handleEditClick(tenant)}
+                            className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                          >
+                            <Settings className="w-5 h-5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

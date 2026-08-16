@@ -29,7 +29,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
   const [isLandingRoute, setIsLandingRoute] = useState(false);
-  const { session, loading, profile, authRedirectType, clearAuthRedirectType } = useAuth() as any;
+  const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType } = useAuth() as any;
 
   useEffect(() => {
     // Check if we are on the /external route with a qr parameter
@@ -79,8 +79,11 @@ export default function App() {
     return <SetPassword type={authRedirectType} onDone={clearAuthRedirectType} />;
   }
 
-  // STRICT REDIRECT FOR SUPER ADMIN
-  if (profile?.role === 'super_admin') {
+  // STRICT REDIRECT FOR SUPER ADMIN — a menos que haya "entrado" a un
+  // colegio puntual (ver AuthContext.enterTenantAsAdmin), en cuyo caso
+  // `profile` ya viene disfrazado de admin de ese tenant y sigue de largo
+  // hacia las pantallas normales de abajo.
+  if (profile?.role === 'super_admin' && !isImpersonating) {
     return (
       <LanguageProvider>
         <SuperAdminDashboard />
