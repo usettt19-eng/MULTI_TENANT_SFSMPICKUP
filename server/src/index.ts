@@ -656,22 +656,18 @@ app.get(
     const tenantId = req.caller!.tenantId;
     if (!tenantId) return ok(res, []);
 
-    const raw = String(req.query.q ?? '').trim();
-    // Se limpia todo lo que no sea letra/número/espacio/@/./- para que no
-    // pueda inyectarse sintaxis de filtro de PostgREST (comas, paréntesis) en
-    // el `.or()` de abajo.
-    const safeQ = raw.replace(/[^\p{L}\p{N}\s@._-]/gu, '').trim().slice(0, 60);
-    if (safeQ.length < 2) return ok(res, []);
+    const raw = String(req.query.q ?? '').trim().slice(0, 60);
+    if (raw.length < 2) return ok(res, []);
 
     // "Juan Perez" no aparece completo en NINGUNA columna por separado
-    // (first_name="Juan", last_name="Perez"), así que buscar el texto tal
-    // cual con un solo ilike nunca encuentra nada cuando se escribe el
-    // nombre completo. Se filtra en la base con la primera palabra (trae un
-    // grupo amplio de candidatos) y se exige en JS que TODAS las palabras
-    // aparezcan en algún lugar de nombre+apellido+correo, sin importar en
-    // qué columna caiga cada una.
-    const words = safeQ.split(/\s+/).filter(Boolean).slice(0, 4);
-    const firstPattern = `%${words[0]}%`;
+    // (first_name="Juan", last_name="Pérez"), y además ILIKE de Postgres no
+    // ignora tildes ("pérez" no contiene "perez" como texto literal). Como
+    // el universo de padres de un colegio es chico, es más simple y
+    // confiable traer a todos los del tenant y filtrar en JS, sin tilde y
+    // sin importar en qué columna caiga cada palabra escrita.
+    const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const words = stripAccents(raw.toLowerCase()).split(/\s+/).filter(Boolean).slice(0, 4);
+    if (words.length === 0) return ok(res, []);
 
     const {data, error} = await admin
       .from('profiles')
@@ -679,14 +675,13 @@ app.get(
       .eq('tenant_id', tenantId)
       .in('role', ['parent', 'guardian'])
       .neq('id', req.caller!.id)
-      .or(`first_name.ilike.${firstPattern},last_name.ilike.${firstPattern},email.ilike.${firstPattern}`)
-      .limit(25);
+      .limit(500);
 
     if (error) return fail(res, 500, error.message);
 
     const matches = (data ?? []).filter((p) => {
-      const haystack = `${p.first_name ?? ''} ${p.last_name ?? ''} ${p.email ?? ''}`.toLowerCase();
-      return words.every((w) => haystack.includes(w.toLowerCase()));
+      const haystack = stripAccents(`${p.first_name ?? ''} ${p.last_name ?? ''} ${p.email ?? ''}`.toLowerCase());
+      return words.every((w) => haystack.includes(w));
     });
 
     return ok(res, matches.slice(0, 10));
