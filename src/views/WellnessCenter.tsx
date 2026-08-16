@@ -63,14 +63,16 @@ export function WellnessCenter() {
     fetchWellnessData();
     fetchStudents();
     fetchCriticalMedications();
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*').order('first_name');
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase.from('students').select('*').eq('tenant_id', profile.tenant_id).order('first_name');
     if (data) setStudents(data);
   };
 
   const fetchCriticalMedications = async () => {
+    if (!profile?.tenant_id) return;
     try {
       // Fetch critical medications from medication_schedule table
       const { data: criticalData, error } = await supabase
@@ -85,6 +87,7 @@ export function WellnessCenter() {
             photo_url
           )
         `)
+        .eq('tenant_id', profile.tenant_id)
         .eq('is_critical', true);
 
       if (error) throw error;
@@ -96,11 +99,13 @@ export function WellnessCenter() {
   };
 
   const fetchWellnessData = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     try {
       const { data: alertsData } = await supabase
         .from('health_alerts')
         .select('*, students(first_name, last_name, grade, photo_url)')
+        .eq('tenant_id', profile.tenant_id)
         .order('severity', { ascending: false });
 
       const today = new Date();
@@ -108,6 +113,7 @@ export function WellnessCenter() {
       const { data: medsData } = await supabase
         .from('medication_schedule')
         .select('*, students(first_name, last_name)')
+        .eq('tenant_id', profile.tenant_id)
         .gte('scheduled_time', today.toISOString())
         .order('scheduled_time', { ascending: true });
 
@@ -115,6 +121,7 @@ export function WellnessCenter() {
       const { data: logsData } = await supabase
         .from('wellness_logs')
         .select('*, students(first_name, last_name)')
+        .eq('tenant_id', profile.tenant_id)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -122,6 +129,7 @@ export function WellnessCenter() {
       const { data: recentIncidents } = await supabase
         .from('student_incidents')
         .select('*, students(first_name, last_name)')
+        .eq('tenant_id', profile.tenant_id)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -135,8 +143,9 @@ export function WellnessCenter() {
       const { count: incidentCount } = await supabase
         .from('student_incidents')
         .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', profile.tenant_id)
         .gte('created_at', today.toISOString());
-      
+
       const medsDoneCount = medsData?.filter(m => m.status === 'administered').length || 0;
       
       setAlerts(alertsData || []);
@@ -297,12 +306,14 @@ export function WellnessCenter() {
   };
 
   const fetchStudentIncidents = async (studentId: string) => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('student_incidents')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .eq('student_id', studentId)
       .order('created_at', { ascending: false });
-    
+
     if (data) setStudentIncidents(data);
   };
 

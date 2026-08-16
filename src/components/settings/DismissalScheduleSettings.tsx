@@ -35,21 +35,22 @@ export function DismissalScheduleSettings() {
   const [ovStaffId, setOvStaffId] = useState('');
   const [savingOverride, setSavingOverride] = useState(false);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [profile?.tenant_id]);
 
   const actorName = () => `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Administrador';
 
   const fetchAll = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     setError(null);
     try {
       const today = new Date().toISOString().slice(0, 10);
       const [gradesRes, staffRes, assignRes, overrideRes, settingsRes] = await Promise.all([
-        supabase.from('school_grades').select('*').order('level_order'),
-        supabase.from('profiles').select('id, first_name, last_name').eq('role', 'admin'),
-        supabase.from('dismissal_assignments').select('*, staff:profiles(first_name, last_name)'),
-        supabase.from('dismissal_overrides').select('*, staff:profiles!staff_id(first_name, last_name)').gte('override_date', today).order('override_date'),
-        supabase.from('school_settings').select('primary_dismissal_mode').maybeSingle(),
+        supabase.from('school_grades').select('*').eq('tenant_id', profile.tenant_id).order('level_order'),
+        supabase.from('profiles').select('id, first_name, last_name').eq('tenant_id', profile.tenant_id).eq('role', 'admin'),
+        supabase.from('dismissal_assignments').select('*, staff:profiles(first_name, last_name)').eq('tenant_id', profile.tenant_id),
+        supabase.from('dismissal_overrides').select('*, staff:profiles!staff_id(first_name, last_name)').eq('tenant_id', profile.tenant_id).gte('override_date', today).order('override_date'),
+        supabase.from('school_settings').select('primary_dismissal_mode').eq('tenant_id', profile.tenant_id).maybeSingle(),
       ]);
 
       if (gradesRes.error) throw gradesRes.error;

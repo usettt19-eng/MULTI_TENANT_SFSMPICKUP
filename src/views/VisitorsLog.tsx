@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { Loader2, Search, User, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export function VisitorsLog() {
+  const { profile } = useAuth() as any;
   const [visitors, setVisitors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchVisitors();
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchVisitors = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('daily_visitors')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('check_in_time', { ascending: false });
 
     if (error) console.error('Error fetching visitors:', error);

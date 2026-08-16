@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video } from 'lucide-react';
@@ -9,6 +10,7 @@ import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAu
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
+  const { profile } = useAuth() as any;
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
@@ -117,12 +119,13 @@ export function VerificationDisplay() {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchDoorsAndGrades = async () => {
+    if (!profile?.tenant_id) return;
     const [doorsRes, gradesRes, gradeDoorsRes] = await Promise.all([
-      supabase.from('exit_doors').select('*').order('name'),
-      supabase.from('school_grades').select('*'),
+      supabase.from('exit_doors').select('*').eq('tenant_id', profile.tenant_id).order('name'),
+      supabase.from('school_grades').select('*').eq('tenant_id', profile.tenant_id),
       supabase.from('grade_doors').select('*')
     ]);
 
@@ -142,13 +145,16 @@ export function VerificationDisplay() {
   };
 
   const fetchPickups = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('pickup_events')
       .select('*, profiles:parent_id(*), students:student_id(*)')
+      .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced', 'in_queue'])
       .order('announced_at', { ascending: true })
       .limit(300);
-    
+
+
     if (data) {
       setPickups(data);
       

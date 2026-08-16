@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { 
   ShieldCheck, CheckCircle2, AlertTriangle, 
@@ -10,6 +11,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 export function GuardianVerification() {
   const { t } = useLanguage();
+  const { profile } = useAuth() as any;
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,16 +59,18 @@ export function GuardianVerification() {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchRequests = async (isInitial = false) => {
+    if (!profile?.tenant_id) return;
     if (isInitial) setLoading(true);
     const { data } = await supabase
       .from('pickup_events')
       .select('*, profiles:parent_id(*), students:student_id(*)')
+      .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced'])
       .order('announced_at', { ascending: false });
-    
+
     if (data) setRequests(data);
     setLoading(false);
   };

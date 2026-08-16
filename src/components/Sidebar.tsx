@@ -43,7 +43,12 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
 
   React.useEffect(() => {
     const fetchInitialState = async () => {
-      const { data } = await supabase.from('school_settings').select('id, school_name, logo_url').single();
+      if (!profile?.tenant_id) return;
+      const { data } = await supabase
+        .from('school_settings')
+        .select('id, school_name, logo_url')
+        .eq('tenant_id', profile.tenant_id)
+        .maybeSingle();
       if (data) {
         setSettingsId(data.id);
         if (data.school_name) {
@@ -78,7 +83,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   const handleLockdownToggle = async () => {
     const newState = !lockdownActive;

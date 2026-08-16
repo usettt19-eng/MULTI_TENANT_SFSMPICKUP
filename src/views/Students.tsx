@@ -50,7 +50,7 @@ export function Students() {
       supabase.removeChannel(channel);
       stopCamera();
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   useEffect(() => {
     const filtered = students.filter(s => 
@@ -62,11 +62,13 @@ export function Students() {
   }, [searchTerm, students]);
 
   const fetchStudents = async () => {
+    if (!profile?.tenant_id) return;
     const { data, error } = await supabase
       .from('students')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('last_name', { ascending: true });
-    
+
     if (error) {
       console.error('Error fetching students:', error);
     } else {
@@ -75,9 +77,11 @@ export function Students() {
   };
 
   const fetchSchoolGrades = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('school_grades')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('level_order', { ascending: true });
     if (data) {
       setSchoolGrades(data);

@@ -45,16 +45,18 @@ export function StaffManagement() {
 
   useEffect(() => {
     fetchStaff();
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchStaff = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .eq('role', 'admin')
       .order('created_at', { ascending: false });
-    
+
     if (data) {
       // Filter out true admins
       const staffUsers = data.filter(user => {

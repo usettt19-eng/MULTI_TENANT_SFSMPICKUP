@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
@@ -11,6 +12,7 @@ const CARPOOL_DAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves',
 
 export function RequestsCenter() {
   const { t } = useLanguage();
+  const { profile } = useAuth() as any;
   const [requests, setRequests] = useState<any[]>([]);
   // Pool day no pasa por aprobación (se activa solo al configurarse), así
   // que se trae aparte y se muestra como tarjetas informativas, sin botones
@@ -40,17 +42,20 @@ export function RequestsCenter() {
   };
 
   const fetchCarpoolEvents = async () => {
+    if (!profile?.tenant_id) return;
     const parentFields = 'first_name, last_name';
     const studentFields = 'first_name, last_name';
     const [weekly, overrides] = await Promise.all([
       supabase
         .from('carpool_authorizations')
         .select(`id, created_at, day_of_week, student:students(${studentFields}), authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_authorizations_driver_parent_id_fkey(${parentFields})`)
+        .eq('tenant_id', profile.tenant_id)
         .order('created_at', { ascending: false })
         .limit(50),
       supabase
         .from('carpool_overrides')
         .select(`id, created_at, override_date, student:students(${studentFields}), authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${parentFields})`)
+        .eq('tenant_id', profile.tenant_id)
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
@@ -99,7 +104,7 @@ export function RequestsCenter() {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   // Une reemplazos/mensajes con pool day en un solo feed ordenado por fecha,
   // para que recepción/admin revisen todo en un único lugar.
@@ -111,12 +116,14 @@ export function RequestsCenter() {
   }, [requests, carpoolEvents]);
 
   const fetchRequests = async (isInitial = false) => {
+    if (!profile?.tenant_id) return;
     if (isInitial) setLoading(true);
     const { data } = await supabase
       .from('replacement_requests')
       .select('*, parent:profiles(first_name, last_name, tenant_id)')
+      .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
-    
+
     if (data) setRequests(data);
     setLoading(false);
   };

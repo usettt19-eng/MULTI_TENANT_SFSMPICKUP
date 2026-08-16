@@ -29,14 +29,20 @@ export function Settings() {
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchSettings = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('school_settings')
       .select('*')
-      .single();
+      .eq('tenant_id', profile.tenant_id)
+      // Un colegio recién creado (como en la implementación inicial vía
+      // "Entrar como Admin") todavía no tiene fila en school_settings —
+      // .single() lanzaría error en ese caso, así que se usa maybeSingle()
+      // y se dejan los valores por defecto del estado inicial.
+      .maybeSingle();
 
     if (data) {
       setSettings(data);

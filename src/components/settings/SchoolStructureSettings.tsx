@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import { DoorOpen, GraduationCap, Plus, Trash2, Save, AlertCircle, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import type { ExitDoor, SchoolGrade, GradeDoor } from '../../types/database';
 
 export function SchoolStructureSettings() {
+  const { profile } = useAuth() as any;
   const [doors, setDoors] = useState<ExitDoor[]>([]);
   const [grades, setGrades] = useState<SchoolGrade[]>([]);
   const [gradeDoors, setGradeDoors] = useState<GradeDoor[]>([]);
@@ -22,7 +24,7 @@ export function SchoolStructureSettings() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [profile?.tenant_id]);
 
   const handleError = (err: any, context: string) => {
     console.error(context, err);
@@ -37,12 +39,13 @@ export function SchoolStructureSettings() {
   };
 
   const fetchData = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     setError(null);
     try {
       const [doorsRes, gradesRes, gradeDoorsRes] = await Promise.all([
-        supabase.from('exit_doors').select('*').order('name'),
-        supabase.from('school_grades').select('*').order('level_order'),
+        supabase.from('exit_doors').select('*').eq('tenant_id', profile.tenant_id).order('name'),
+        supabase.from('school_grades').select('*').eq('tenant_id', profile.tenant_id).order('level_order'),
         supabase.from('grade_doors').select('*')
       ]);
 
@@ -63,14 +66,14 @@ export function SchoolStructureSettings() {
 
   const handleAddDoor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDoorName.trim()) return;
-    
+    if (!newDoorName.trim() || !profile?.tenant_id) return;
+
     setSaving(true);
     setActionError(null);
     try {
       const { data, error } = await supabase
         .from('exit_doors')
-        .insert([{ name: newDoorName, description: newDoorDesc }])
+        .insert([{ name: newDoorName, description: newDoorDesc, tenant_id: profile.tenant_id }])
         .select()
         .single();
         
@@ -99,7 +102,7 @@ export function SchoolStructureSettings() {
 
   const handleAddGrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGradeName.trim()) return;
+    if (!newGradeName.trim() || !profile?.tenant_id) return;
 
     setSaving(true);
     setActionError(null);
@@ -111,6 +114,7 @@ export function SchoolStructureSettings() {
           level_order: newGradeOrder,
           stage: newGradeStage,
           exit_time: newGradeExitTime || null,
+          tenant_id: profile.tenant_id,
         }])
         .select()
         .single();
@@ -170,10 +174,11 @@ export function SchoolStructureSettings() {
         // Add assignment
         const { data, error } = await supabase
           .from('grade_doors')
-          .insert([{ grade_id: gradeId, door_id: doorId }])
+          .insert([{ grade_id: gradeId, door_id: doorId, tenant_id: profile?.tenant_id }])
           .select()
           .single();
-          
+
+
         if (error) throw error;
         setGradeDoors([...gradeDoors, data]);
       }

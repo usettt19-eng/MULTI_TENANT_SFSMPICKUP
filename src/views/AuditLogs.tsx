@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { 
   History, Search, Filter, Shield, 
@@ -8,16 +9,18 @@ import {
 } from 'lucide-react';
 
 export function AuditLogs() {
+  const { profile } = useAuth() as any;
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('ALL');
 
   useEffect(() => {
     fetchLogs();
-    
+
     const channel = supabase
       .channel('public:audit_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (payload) => {
+        if (payload.new.tenant_id !== profile?.tenant_id) return;
         setLogs(prev => {
           // Avoid duplicates if interval and realtime fire close to each other
           if (prev.some(log => log.id === payload.new.id)) return prev;
@@ -31,17 +34,19 @@ export function AuditLogs() {
       fetchLogs(false); // Pass false to avoid showing loading spinner on background refresh
     }, 5000);
 
-    return () => { 
-      supabase.removeChannel(channel); 
+    return () => {
+      supabase.removeChannel(channel);
       clearInterval(intervalId);
     };
-  }, [filter]);
+  }, [filter, profile?.tenant_id]);
 
   const fetchLogs = async (showLoading = true) => {
+    if (!profile?.tenant_id) return;
     if (showLoading) setLoading(true);
     let query = supabase
       .from('audit_logs')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false })
       .limit(100);
 

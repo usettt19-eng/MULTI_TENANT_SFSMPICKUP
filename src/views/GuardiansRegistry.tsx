@@ -63,13 +63,15 @@ export function GuardiansRegistry() {
       setIsModalOpen(true);
       localStorage.removeItem('openAddGuardianModal');
     }
-  }, []);
+  }, [profile?.tenant_id]);
 
   const fetchGuardians = async () => {
+    if (!profile?.tenant_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('profiles')
       .select('*, parent_students(students(*)), vehicles(*)')
+      .eq('tenant_id', profile.tenant_id)
       .eq('role', 'parent')
       .order('last_name', { ascending: true });
 
@@ -79,7 +81,8 @@ export function GuardiansRegistry() {
   };
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*').order('first_name');
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase.from('students').select('*').eq('tenant_id', profile.tenant_id).order('first_name');
     if (data) setStudents(data);
   };
 

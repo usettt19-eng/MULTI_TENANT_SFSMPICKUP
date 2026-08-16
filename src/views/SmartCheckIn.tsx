@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { 
   QrCode, 
@@ -17,6 +18,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
+  const { profile: staffProfile } = useAuth() as any;
   const [pin, setPin] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -239,9 +241,17 @@ export function SmartCheckIn() {
   const handleClear = () => setPin('');
 
   const handleEnter = async () => {
-    if (pin.length !== 4) return;
+    if (pin.length !== 4 || !staffProfile?.tenant_id) return;
     setStatusMsg('Verificando...');
-    const { data: profile } = await supabase.from('profiles').select('id').eq('pin_code', pin).single();
+    // Un PIN de 4 dígitos tiene solo 10,000 combinaciones — sin filtrar por
+    // colegio, dos padres de tenants distintos podrían compartir PIN y este
+    // kiosco terminaría anunciando la llegada del padre equivocado.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tenant_id', staffProfile.tenant_id)
+      .eq('pin_code', pin)
+      .maybeSingle();
     if (!profile) {
       setStatusMsg('PIN Incorrecto');
       setPin('');

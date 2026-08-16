@@ -3,6 +3,7 @@ import { supabase, logActivity } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
 import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import { GoogleGenAI, Modality } from "@google/genai";
 import {
   AlertTriangle, Clock, CheckCircle2, UserPlus, Users,
@@ -17,6 +18,7 @@ import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
   const { t } = useLanguage();
+  const { profile } = useAuth() as any;
   const [pickups, setPickups] = useState<any[]>([]);
   const isFirstFetch = useRef(true);
   const announcedPickupIds = useRef<Set<string>>(new Set());
@@ -107,7 +109,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchStats();
     }, 10000);
 
-    return () => { 
+    return () => {
       supabase.removeChannel(pickupChannel);
       supabase.removeChannel(requestChannel);
       supabase.removeChannel(detectionChannel);
@@ -115,7 +117,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       supabase.removeChannel(alertChannel);
       clearInterval(pollInterval);
     };
-  }, []);
+  }, [profile?.tenant_id]);
 
   const handleQuickScan = () => {
     localStorage.setItem('openAddGuardianModal', 'true');
@@ -123,9 +125,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   };
 
   const fetchPickups = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('pickup_events')
       .select('*, student:students(first_name, last_name, grade, tenant_id), parent:profiles(first_name, last_name, pin_code)')
+      .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced', 'in_queue'])
       .order('announced_at', { ascending: true });
     
@@ -166,9 +170,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   };
 
   const fetchLatestDetections = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('camera_detections')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('detected_at', { ascending: false });
     
     if (data) {
@@ -181,16 +187,19 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   };
 
   const fetchAuditLogs = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('audit_logs')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false })
       .limit(5);
-    
+
     if (data) setAuditLogs(data);
   };
 
   const fetchHealthAlerts = async () => {
+    if (!profile?.tenant_id) return;
     // health_alerts no tiene columna `status` (id, student_id, title, severity,
     // action_plan, created_at, tenant_id) — nunca la tuvo. El .eq('status',
     // 'active') hacía que PostgREST rechazara la consulta con 400 en cada
@@ -198,28 +207,39 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     const { data } = await supabase
       .from('health_alerts')
       .select('*')
+      .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
 
     if (data) setHealthAlerts(data);
   };
 
   const fetchPendingRequests = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('replacement_requests')
       .select('id')
+      .eq('tenant_id', profile.tenant_id)
       .eq('status', 'pending');
-    
+
     if (data) {
       setPendingRequests(data);
     }
   };
 
   const fetchStats = async () => {
-    const { count: childrenCount } = await supabase.from('students').select('*', { count: 'exact', head: true });
-    const { count: parentsCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    
-    const { data: gradeData } = await supabase.from('students').select('grade');
-    
+    if (!profile?.tenant_id) return;
+    const { count: childrenCount } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', profile.tenant_id);
+    const { count: parentsCount } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', profile.tenant_id)
+      .eq('role', 'parent');
+
+    const { data: gradeData } = await supabase.from('students').select('grade').eq('tenant_id', profile.tenant_id);
+
     let topGrade = 'N/A';
     if (gradeData) {
       const counts: Record<string, number> = {};
@@ -232,16 +252,18 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         }
       }
     }
-    
+
     setStats({ totalChildren: childrenCount || 0, totalParents: parentsCount || 0, topGrade });
   };
 
   const fetchSchoolSettings = async () => {
+    if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('school_settings')
       .select('logo_url')
-      .single();
-    
+      .eq('tenant_id', profile.tenant_id)
+      .maybeSingle();
+
     if (data) setLogoUrl(data.logo_url);
   };
 
