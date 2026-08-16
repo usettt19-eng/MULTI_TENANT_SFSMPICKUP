@@ -688,6 +688,58 @@ app.get(
   }),
 );
 
+/**
+ * Padres/tutores de los compañeros de salón (mismo grado+sección) del
+ * alumno dado, para elegir "quién conduce" con un toque en vez de tener que
+ * buscar a ciegas en todo el colegio — el pool day casi siempre es entre
+ * familias del mismo salón.
+ */
+app.get(
+  '/api/carpool/classmates-parents',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    const studentId = String(req.query.student_id ?? '');
+    if (!tenantId || !studentId) return ok(res, []);
+
+    // Solo para quien de verdad sea padre/tutor de ese alumno.
+    const {data: link} = await admin
+      .from('parent_students')
+      .select('id, students!inner(id, tenant_id, grade, section)')
+      .eq('parent_id', req.caller!.id)
+      .eq('student_id', studentId)
+      .eq('students.tenant_id', tenantId)
+      .maybeSingle();
+    const student = (link as any)?.students;
+    if (!student || !student.grade) return ok(res, []);
+
+    const {data: classmates, error: classmatesError} = await admin
+      .from('students')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('grade', student.grade)
+      .eq('section', student.section ?? '');
+    if (classmatesError) return fail(res, 500, classmatesError.message);
+
+    const classmateIds = (classmates ?? []).map((s) => s.id).filter((id) => id !== studentId);
+    if (classmateIds.length === 0) return ok(res, []);
+
+    const {data: links, error: linksError} = await admin
+      .from('parent_students')
+      .select('parent:profiles!parent_students_parent_id_fkey(id, first_name, last_name, email, photo_url)')
+      .in('student_id', classmateIds);
+    if (linksError) return fail(res, 500, linksError.message);
+
+    const seen = new Map<string, any>();
+    for (const row of links ?? []) {
+      const p = (row as any).parent;
+      if (p && p.id !== req.caller!.id && !seen.has(p.id)) seen.set(p.id, p);
+    }
+
+    return ok(res, [...seen.values()]);
+  }),
+);
+
 /** Todo lo que el padre que llama configuró y todo aquello para lo que a él lo autorizaron a conducir. */
 app.get(
   '/api/carpool/mine',

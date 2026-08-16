@@ -52,6 +52,8 @@ export function ParentDashboard() {
   const [driverQuery, setDriverQuery] = useState('');
   const [driverResults, setDriverResults] = useState<any[]>([]);
   const [isSearchingDrivers, setIsSearchingDrivers] = useState(false);
+  const [classmateParents, setClassmateParents] = useState<any[]>([]);
+  const [isLoadingClassmates, setIsLoadingClassmates] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
   const [isSubmittingCarpool, setIsSubmittingCarpool] = useState(false);
   const [carpoolData, setCarpoolData] = useState<{
@@ -197,6 +199,21 @@ export function ParentDashboard() {
     }, 350);
     return () => window.clearTimeout(timeoutId);
   }, [driverQuery, showCarpoolModal]);
+
+  // Al elegir el hijo, trae directo a los padres de sus compañeros de salón
+  // — casi siempre el pool day es entre familias del mismo salón, así que
+  // se pueden seleccionar con un toque en vez de tener que escribir.
+  useEffect(() => {
+    if (!showCarpoolModal || !carpoolStudentId) {
+      setClassmateParents([]);
+      return;
+    }
+    setIsLoadingClassmates(true);
+    apiJson(`/api/carpool/classmates-parents?student_id=${encodeURIComponent(carpoolStudentId)}`)
+      .then(res => setClassmateParents(res.data || []))
+      .catch(e => { console.error('Error al cargar padres del salón:', e); setClassmateParents([]); })
+      .finally(() => setIsLoadingClassmates(false));
+  }, [carpoolStudentId, showCarpoolModal]);
 
   const resetCarpoolForm = () => {
     setCarpoolStudentId('');
@@ -1476,12 +1493,35 @@ export function ParentDashboard() {
                       </button>
                     </div>
                   ) : (
+                    <div className="space-y-3">
+                      {isLoadingClassmates ? (
+                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-2">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Cargando padres del salón...
+                        </div>
+                      ) : classmateParents.length > 0 ? (
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Padres del mismo salón</p>
+                          <div className="flex flex-wrap gap-2">
+                            {classmateParents.map(p => (
+                              <button
+                                type="button"
+                                key={p.id}
+                                onClick={() => { setSelectedDriver(p); setDriverResults([]); setDriverQuery(''); }}
+                                className="flex items-center gap-2 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl pl-2 pr-4 py-2 transition-all"
+                              >
+                                <img src={p.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-7 h-7 rounded-lg object-cover" />
+                                <span className="text-xs font-bold text-slate-700">{p.first_name} {p.last_name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     <div className="relative">
                       <Search className="w-4 h-4 text-slate-300 absolute left-5 top-1/2 -translate-y-1/2" />
                       <input
                         value={driverQuery}
                         onChange={e => setDriverQuery(e.target.value)}
-                        placeholder="Busca por nombre o correo..."
+                        placeholder="O busca por nombre o correo..."
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
                       />
                       {isSearchingDrivers && <Loader2 className="w-4 h-4 text-slate-300 animate-spin absolute right-5 top-1/2 -translate-y-1/2" />}
@@ -1503,6 +1543,7 @@ export function ParentDashboard() {
                           ))}
                         </div>
                       )}
+                    </div>
                     </div>
                   )}
                 </div>
