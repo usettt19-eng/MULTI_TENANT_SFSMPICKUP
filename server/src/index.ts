@@ -713,12 +713,18 @@ app.get(
     const student = (link as any)?.students;
     if (!student || !student.grade) return ok(res, []);
 
+    // La data real trae inconsistencias de mayúsculas en grado/sección
+    // (p.ej. sección "C" vs "c"), así que se compara sin distinguir
+    // mayúsculas — si no, dos alumnos del mismo salón quedan fuera por una
+    // diferencia puramente de formato. Ojo: NO se recorta el texto, porque
+    // algunos grados quedaron guardados con un espacio al final ("1er ") y
+    // recortarlo rompería la coincidencia contra esos mismos datos.
     const {data: classmates, error: classmatesError} = await admin
       .from('students')
       .select('id')
       .eq('tenant_id', tenantId)
-      .eq('grade', student.grade)
-      .eq('section', student.section ?? '');
+      .ilike('grade', student.grade)
+      .ilike('section', student.section ?? '');
     if (classmatesError) return fail(res, 500, classmatesError.message);
 
     const classmateIds = (classmates ?? []).map((s) => s.id).filter((id) => id !== studentId);
