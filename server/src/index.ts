@@ -702,15 +702,24 @@ app.get(
     const studentId = String(req.query.student_id ?? '');
     if (!tenantId || !studentId) return ok(res, []);
 
-    // Solo para quien de verdad sea padre/tutor de ese alumno.
+    // Solo para quien de verdad sea padre/tutor de ese alumno. parent_students
+    // no tiene columna `id` (llave compuesta parent_id+student_id), así que
+    // se separa en dos consultas simples en vez de anidar el filtro de
+    // tenant sobre el join, que es más frágil.
     const {data: link} = await admin
       .from('parent_students')
-      .select('id, students!inner(id, tenant_id, grade, section)')
+      .select('student_id')
       .eq('parent_id', req.caller!.id)
       .eq('student_id', studentId)
-      .eq('students.tenant_id', tenantId)
       .maybeSingle();
-    const student = (link as any)?.students;
+    if (!link) return ok(res, []);
+
+    const {data: student} = await admin
+      .from('students')
+      .select('id, grade, section')
+      .eq('id', studentId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
     if (!student || !student.grade) return ok(res, []);
 
     // La data real trae inconsistencias de mayúsculas en grado/sección
@@ -825,14 +834,24 @@ async function validateCarpoolActors(
 ): Promise<string | null> {
   if (driverParentId === callerId) return 'El conductor debe ser otro padre distinto de ti.';
 
+  // parent_students no tiene columna `id` (su llave es compuesta
+  // parent_id+student_id) — se separa en dos consultas simples en vez de
+  // anidar el filtro de tenant sobre el join, que es más frágil.
   const {data: link} = await admin
     .from('parent_students')
-    .select('id, students!inner(tenant_id)')
+    .select('student_id')
     .eq('parent_id', callerId)
     .eq('student_id', studentId)
-    .eq('students.tenant_id', tenantId)
     .maybeSingle();
   if (!link) return 'No eres padre/tutor registrado de ese alumno.';
+
+  const {data: linkedStudent} = await admin
+    .from('students')
+    .select('id')
+    .eq('id', studentId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (!linkedStudent) return 'No eres padre/tutor registrado de ese alumno.';
 
   const {data: driver} = await admin
     .from('profiles')
