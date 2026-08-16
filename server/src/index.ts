@@ -673,7 +673,7 @@ app.get(
       .from('profiles')
       .select('id, first_name, last_name, email, photo_url')
       .eq('tenant_id', tenantId)
-      .in('role', ['parent', 'guardian'])
+      .eq('role', 'parent')
       .neq('id', req.caller!.id)
       .limit(500);
 
@@ -853,13 +853,14 @@ async function validateCarpoolActors(
     .maybeSingle();
   if (!linkedStudent) return 'No eres padre/tutor registrado de ese alumno.';
 
-  const {data: driver} = await admin
+  const {data: driver, error: driverError} = await admin
     .from('profiles')
     .select('id')
     .eq('id', driverParentId)
     .eq('tenant_id', tenantId)
-    .in('role', ['parent', 'guardian'])
+    .eq('role', 'parent')
     .maybeSingle();
+  if (driverError) return `Error al validar el conductor: ${driverError.message}`;
   if (!driver) return 'El conductor debe ser un padre/tutor registrado de este colegio.';
 
   return null;
