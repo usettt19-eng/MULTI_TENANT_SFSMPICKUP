@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de Privacidad — Safe Smart Pickup</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+    color: #1e293b;
+    line-height: 1.65;
+    background: #ffffff;
+  }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.25rem; color: #4338ca; }
+  .updated { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+  .lang-toggle { margin-bottom: 2rem; font-size: 0.9rem; }
+  .lang-toggle a { color: #4338ca; text-decoration: none; font-weight: 600; }
+  ul { padding-left: 1.25rem; }
+  li { margin-bottom: 0.4rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  th { color: #475569; font-weight: 600; }
+  a { color: #4338ca; }
+  .section-en { display: none; }
+  .lang-en .section-es { display: none; }
+  .lang-en .section-en { display: block; }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; }
+</style>
+</head>
+<body id="body">
+
+<div class="lang-toggle">
+  <a href="#" onclick="document.getElementById('body').classList.remove('lang-en'); return false;">Español</a>
+  &nbsp;·&nbsp;
+  <a href="#" onclick="document.getElementById('body').classList.add('lang-en'); return false;">English</a>
+</div>
+
+<div class="section-es">
+<h1>Política de Privacidad de Safe Smart Pickup</h1>
+<p class="updated">Última actualización: 19 de agosto de 2026</p>
+
+<p>
+Safe Smart Pickup ("nosotros", "la app") es un servicio de gestión de recogida
+escolar operado por <strong>USE Unión de Servicios Especializados S.A.</strong>,
+contratado por colegios ("el Colegio") para coordinar de forma segura la
+entrega de alumnos a sus padres, tutores o personas autorizadas.
+</p>
+
+<p>
+El Colegio es responsable de decidir qué datos se recopilan sobre sus alumnos,
+padres y personal, y es quien invita a cada usuario a la app. Nosotros
+procesamos esos datos en nombre del Colegio, siguiendo sus instrucciones.
+</p>
+
+<h2>1. Qué datos recopilamos</h2>
+<table>
+  <tr><th>Categoría</th><th>Datos</th><th>Quién los aporta</th></tr>
+  <tr><td>Cuenta</td><td>Nombre, correo, teléfono, foto de perfil, PIN de acceso</td><td>El Colegio o el propio usuario</td></tr>
+  <tr><td>Alumnos</td><td>Nombre, grado/sección, foto</td><td>El Colegio</td></tr>
+  <tr><td>Recogida</td><td>Hora de anuncio y de recogida, vehículo (placa), quién recogió a quién</td><td>Generado por el uso de la app</td></tr>
+  <tr><td>Ubicación</td><td>Cercanía al colegio durante el horario de salida (geocerca), para anunciar la llegada automáticamente</td><td>El dispositivo del padre/tutor, solo con permiso otorgado en el sistema operativo</td></tr>
+  <tr><td>Reconocimiento facial</td><td>Verificación de identidad del padre/tutor en la puerta del colegio, procesada en el propio dispositivo</td><td>Cámara del dispositivo, con permiso</td></tr>
+  <tr><td>Salud y bienestar</td><td>Alertas de salud, medicación, incidentes reportados por el personal del colegio</td><td>El Colegio</td></tr>
+  <tr><td>Visitantes</td><td>Nombre, motivo de visita, a quién visita</td><td>Registrado por recepción del Colegio</td></tr>
+  <tr><td>Bitácora</td><td>Registro de eventos sensibles (auditoría) para trazabilidad y seguridad</td><td>Generado por el uso de la app</td></tr>
+</table>
+
+<h2>2. Cómo usamos los datos</h2>
+<ul>
+  <li>Coordinar y verificar la recogida segura de cada alumno.</li>
+  <li>Enviar notificaciones relevantes a padres y personal (correo, dentro de la app).</li>
+  <li>Anunciar automáticamente la llegada de un padre/tutor cuando entra al perímetro del colegio (geocerca), sin necesidad de que abra la app.</li>
+  <li>Registrar incidentes, alertas de salud y medicación para el cuidado del alumno mientras está en el colegio.</li>
+  <li>Mantener una bitácora de auditoría de acciones sensibles, por seguridad y cumplimiento.</li>
+  <li>Generar anuncios de voz con el nombre del alumno en la zona de recogida.</li>
+</ul>
+
+<h2>3. Con quién compartimos datos</h2>
+<p>No vendemos datos personales a terceros. Usamos los siguientes proveedores para operar el servicio:</p>
+<ul>
+  <li><strong>Supabase</strong> — base de datos y autenticación de usuarios.</li>
+  <li><strong>Amazon SES</strong> — envío de correos de invitación y notificación.</li>
+  <li><strong>Google (Gemini)</strong> — generación de voz (texto a voz) para los anuncios de llegada; solo recibe el texto del anuncio, no datos de identificación adicionales.</li>
+</ul>
+<p>
+Cada colegio cliente solo puede ver los datos de sus propios alumnos, padres y
+personal — los datos nunca se comparten entre colegios distintos.
+</p>
+
+<h2>4. Datos de menores de edad</h2>
+<p>
+Safe Smart Pickup está diseñado para que lo usen adultos (padres, tutores y
+personal del colegio) en representación de los alumnos, quienes no crean ni
+gestionan cuentas propias. Los datos de los alumnos (nombre, grado, foto, y en
+algunos casos información de salud) los administra el Colegio como parte de su
+responsabilidad de cuidado, y solo son visibles para el personal autorizado y
+los padres/tutores del propio alumno.
+</p>
+<p>
+Si eres el Colegio y necesitas eliminar o corregir datos de un alumno, contáctanos
+en <a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>.
+</p>
+
+<h2>5. Ubicación y geocerca</h2>
+<p>
+La app de Android puede pedir permiso de ubicación en segundo plano para
+detectar automáticamente cuándo un padre/tutor entra o sale del perímetro del
+colegio durante el horario de salida, y anunciar la llegada sin que tenga que
+abrir la app manualmente. Este permiso es opcional: el padre puede anunciar su
+llegada manualmente en su lugar. La ubicación no se comparte con nadie fuera
+del propósito de anunciar la recogida, y no se usa para rastrear al usuario
+fuera de ese contexto.
+</p>
+
+<h2>6. Reconocimiento facial</h2>
+<p>
+Cuando el Colegio activa esta función, la verificación de identidad del padre
+o tutor en la puerta ocurre localmente en el dispositivo/tablet de la
+recepción — no se envían las imágenes a un servidor externo para ese
+procesamiento.
+</p>
+
+<h2>7. Retención y eliminación de datos</h2>
+<p>
+Conservamos los datos mientras el Colegio mantenga una cuenta activa con
+Safe Smart Pickup. Si un colegio finaliza el servicio, sus datos se eliminan
+o se ponen a su disposición para exportación, según lo acordado con cada
+Colegio. Un padre/tutor puede solicitar la corrección o eliminación de su
+propia información contactando directamente al Colegio o a nosotros.
+</p>
+
+<h2>8. Seguridad</h2>
+<p>
+El acceso a los datos está restringido por colegio: el personal y los padres
+de un colegio no pueden ver los datos de otro. Las conexiones entre la app y
+nuestros servidores usan cifrado (HTTPS/TLS). El acceso administrativo de
+soporte queda registrado en la bitácora de auditoría.
+</p>
+
+<h2>9. Tus derechos</h2>
+<p>
+Puedes solicitar acceso, corrección o eliminación de tus datos personales, o
+los de tu hijo/a, contactando al Colegio (quien es el responsable principal
+de esos datos) o escribiéndonos directamente a
+<a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>.
+</p>
+
+<h2>10. Cambios a esta política</h2>
+<p>
+Si hacemos cambios importantes a esta política, lo indicaremos actualizando
+la fecha al inicio de este documento.
+</p>
+
+<h2>11. Contacto</h2>
+<p>
+USE Unión de Servicios Especializados S.A.<br />
+Colón, Panamá<br />
+<a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>
+</p>
+</div>
+
+<div class="section-en">
+<h1>Safe Smart Pickup Privacy Policy</h1>
+<p class="updated">Last updated: August 19, 2026</p>
+
+<p>
+Safe Smart Pickup ("we", "the app") is a school dismissal management service
+operated by <strong>USE Unión de Servicios Especializados S.A.</strong>,
+contracted by schools ("the School") to safely coordinate handing off
+students to their parents, guardians, or authorized pickup persons.
+</p>
+
+<p>
+The School decides what data is collected about its students, parents, and
+staff, and invites each user to the app. We process that data on the
+School's behalf, following its instructions.
+</p>
+
+<h2>1. What data we collect</h2>
+<table>
+  <tr><th>Category</th><th>Data</th><th>Provided by</th></tr>
+  <tr><td>Account</td><td>Name, email, phone, profile photo, access PIN</td><td>The School or the user</td></tr>
+  <tr><td>Students</td><td>Name, grade/section, photo</td><td>The School</td></tr>
+  <tr><td>Pickup</td><td>Announcement/pickup times, vehicle (license plate), who picked up whom</td><td>Generated by app usage</td></tr>
+  <tr><td>Location</td><td>Proximity to school during dismissal hours (geofence), to auto-announce arrival</td><td>The parent/guardian's device, only with OS-level permission granted</td></tr>
+  <tr><td>Facial recognition</td><td>Parent/guardian identity verification at the school gate, processed on-device</td><td>Device camera, with permission</td></tr>
+  <tr><td>Health & wellness</td><td>Health alerts, medication, incidents reported by school staff</td><td>The School</td></tr>
+  <tr><td>Visitors</td><td>Name, reason for visit, who they're visiting</td><td>Logged by the School's front desk</td></tr>
+  <tr><td>Audit log</td><td>Record of sensitive events, for traceability and security</td><td>Generated by app usage</td></tr>
+</table>
+
+<h2>2. How we use the data</h2>
+<ul>
+  <li>Coordinate and verify each student's safe pickup.</li>
+  <li>Send relevant notifications to parents and staff (email, in-app).</li>
+  <li>Automatically announce a parent/guardian's arrival when they enter the school's perimeter (geofence), without needing to open the app.</li>
+  <li>Log incidents, health alerts, and medication for student care while at school.</li>
+  <li>Maintain an audit log of sensitive actions, for security and compliance.</li>
+  <li>Generate voice announcements with the student's name in the pickup area.</li>
+</ul>
+
+<h2>3. Who we share data with</h2>
+<p>We do not sell personal data to third parties. We use the following providers to operate the service:</p>
+<ul>
+  <li><strong>Supabase</strong> — database and user authentication.</li>
+  <li><strong>Amazon SES</strong> — sending invitation and notification emails.</li>
+  <li><strong>Google (Gemini)</strong> — text-to-speech generation for arrival announcements; it only receives the announcement text, no additional identifying data.</li>
+</ul>
+<p>
+Each client school can only see its own students', parents', and staff's
+data — data is never shared across different schools.
+</p>
+
+<h2>4. Children's data</h2>
+<p>
+Safe Smart Pickup is designed to be used by adults (parents, guardians, and
+school staff) on behalf of students, who do not create or manage accounts of
+their own. Student data (name, grade, photo, and in some cases health
+information) is managed by the School as part of its duty of care, and is
+only visible to authorized staff and the student's own parents/guardians.
+</p>
+<p>
+If you are the School and need to delete or correct a student's data,
+contact us at <a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>.
+</p>
+
+<h2>5. Location and geofencing</h2>
+<p>
+The Android app may request background location permission to automatically
+detect when a parent/guardian enters or leaves the school's perimeter during
+dismissal hours, and announce their arrival without manually opening the
+app. This permission is optional: the parent can announce arrival manually
+instead. Location is not shared with anyone outside the purpose of
+announcing pickup, and is not used to track the user outside that context.
+</p>
+
+<h2>6. Facial recognition</h2>
+<p>
+When the School enables this feature, parent/guardian identity verification
+at the gate happens locally on the front-desk device/tablet — images are not
+sent to an external server for that processing.
+</p>
+
+<h2>7. Data retention and deletion</h2>
+<p>
+We retain data while the School maintains an active Safe Smart Pickup
+account. If a school ends the service, its data is deleted or made
+available for export, as agreed with each School. A parent/guardian can
+request correction or deletion of their own information by contacting the
+School directly or us.
+</p>
+
+<h2>8. Security</h2>
+<p>
+Data access is restricted per school: staff and parents at one school cannot
+see another school's data. Connections between the app and our servers use
+encryption (HTTPS/TLS). Administrative support access is recorded in the
+audit log.
+</p>
+
+<h2>9. Your rights</h2>
+<p>
+You may request access, correction, or deletion of your personal data, or
+your child's, by contacting the School (which is the primary data
+controller) or writing to us directly at
+<a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>.
+</p>
+
+<h2>10. Changes to this policy</h2>
+<p>
+If we make significant changes to this policy, we will indicate so by
+updating the date at the top of this document.
+</p>
+
+<h2>11. Contact</h2>
+<p>
+USE Unión de Servicios Especializados S.A.<br />
+Colón, Panama<br />
+<a href="mailto:info@safesmartpickup.com">info@safesmartpickup.com</a>
+</p>
+</div>
+
+<footer>Safe Smart Pickup — USE Unión de Servicios Especializados S.A.</footer>
+</body>
+</html>
