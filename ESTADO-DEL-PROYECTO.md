@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19 (primer build de iOS en TestFlight).
+2026-08-19 (política de privacidad y soporte publicadas para las tiendas).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -152,6 +152,21 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   App Store Connect.
 - App Android sigue funcionando de punta a punta como antes (sin cambios
   en esta sesión).
+- **2026-08-19 — Ficha de tienda: política de privacidad y soporte
+  publicadas**: `public/privacy.html` (bilingüe ES/EN — qué datos se
+  recopilan, geocerca opcional, reconocimiento facial procesado en el
+  propio dispositivo, tratamiento de datos de menores, retención,
+  contacto) y `public/support.html`, servidas como HTML estático en
+  `https://safesmartpickup.com/privacy.html` y `/support.html`.
+  Requeridas por Apple y Google Play para publicar la ficha de la app.
+- **2026-08-19 — Cuenta de Google Play Console recreada**: la cuenta
+  anterior ("USE SERVICES") fue cerrada por Google en marzo 2024 por
+  inactividad — no es reversible, el pago de $25 no es reembolsable. Se
+  creó una cuenta de organización nueva ("Use Union de Servicios
+  Especializados", ID `9115502081694003474`), vinculada al D-U-N-S ya
+  existente de la empresa (`816808791`). **Pendiente**: verificación de
+  identidad por Google (varios días) y, después de esa, verificación de
+  los números de teléfono — bloquea poder publicar hasta completarse.
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
