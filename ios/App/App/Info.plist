@@ -70,5 +70,13 @@
 	<string>Safe Smart Pickup usa la cámara para tomar la foto del padre/tutor y para la verificación de rostro en el check-in.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Safe Smart Pickup usa tu ubicación para compartir con el colegio cuándo estás cerca a la hora de recoger a tu hijo.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Safe Smart Pickup usa tu ubicación en segundo plano para avisar automáticamente al colegio cuando te acercas o te alejas de la zona de recogida, sin que tengas que abrir la app.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Safe Smart Pickup usa tu ubicación en segundo plano para avisar automáticamente al colegio cuando te acercas o te alejas de la zona de recogida, sin que tengas que abrir la app.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>
