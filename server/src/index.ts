@@ -465,6 +465,70 @@ app.post(
   }),
 );
 
+/**
+ * Alta masiva de personal desde un CSV — mismo patrón que /api/parents/bulk:
+ * cada fila recibe su propio correo de invitación, sin contraseña. Los
+ * módulos de acceso llegan como arreglo de ids (ver AVAILABLE_MODULES en
+ * StaffManagement.tsx) y se guardan igual que en el alta individual.
+ */
+app.post(
+  '/api/staff/bulk',
+  requireAuth,
+  wrap(async (req, res) => {
+    const rows = Array.isArray(req.body?.staff) ? req.body.staff : [];
+    if (rows.length === 0) return fail(res, 400, 'No se recibió ningún miembro del personal.');
+    if (rows.length > 500) return fail(res, 400, 'Máximo 500 filas por importación.');
+
+    const tenantId = req.caller!.role === 'super_admin' ? req.body?.tenant_id : req.caller!.tenantId;
+    if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
+
+    const created: unknown[] = [];
+    const failed: {email: string; error: string}[] = [];
+
+    // Secuencial a propósito: en paralelo se dispara el rate limit de Auth
+    // (mismo motivo que /api/parents/bulk).
+    for (const r of rows) {
+      if (!r?.email) {
+        failed.push({email: '(sin correo)', error: 'Falta el correo'});
+        continue;
+      }
+
+      const {data: user, error} = await admin.auth.admin.inviteUserByEmail(r.email, {
+        redirectTo: process.env.PUBLIC_APP_URL || undefined,
+        data: {
+          first_name: r.first_name ?? '',
+          last_name: r.last_name ?? '',
+          role: 'admin',
+          tenant_id: tenantId,
+          needs_password_setup: true,
+        },
+      });
+
+      if (error || !user?.user) {
+        failed.push({email: r.email, error: error?.message ?? 'desconocido'});
+        continue;
+      }
+
+      const permissions: string[] = Array.isArray(r.permissions) ? r.permissions : [];
+      await admin
+        .from('profiles')
+        .update({
+          first_name: r.first_name ?? '',
+          last_name: r.last_name ?? '',
+          email: r.email,
+          role: 'admin',
+          tenant_id: tenantId,
+          additional_tutor_name: JSON.stringify({is_staff: true, permissions}),
+        })
+        .eq('id', user.user.id);
+
+      created.push({id: user.user.id, email: r.email});
+    }
+
+    return ok(res, {created: created.length, failed});
+  }),
+);
+
 app.put(
   '/api/staff/:id',
   requireAuth,

@@ -1,8 +1,8 @@
 import {apiFetch} from '../lib/apiFetch';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
-import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2 } from 'lucide-react';
+import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -146,6 +146,85 @@ export function StaffManagement() {
     setIsDeletingId(null);
   };
 
+  const [isImporting, setIsImporting] = useState(false);
+  const csvRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadTemplate = () => {
+    const moduleIds = AVAILABLE_MODULES.map(m => m.id).join('|');
+    const csvContent =
+      "data:text/csv;charset=utf-8,first_name,last_name,email,permissions\n" +
+      `Ana,Gomez,ana@correo.com,dashboard|checkin\n` +
+      `Luis,Torres,luis@correo.com,${moduleIds}\n`;
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", "plantilla_staff.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const csv = event.target?.result as string;
+      const lines = csv.split('\n');
+      setIsImporting(true);
+
+      const rows = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split(',');
+
+        const first_name = cols[0]?.trim();
+        const last_name = cols[1]?.trim();
+        const email = cols[2]?.trim();
+        if (first_name?.toLowerCase() === 'first_name' || !first_name || !email) continue;
+
+        const permissions = (cols[3] || '')
+          .split('|')
+          .map(p => p.trim())
+          .filter(p => AVAILABLE_MODULES.some(m => m.id === p));
+
+        rows.push({first_name, last_name, email, permissions});
+      }
+
+      if (rows.length === 0) {
+        alert('El archivo CSV no contiene filas válidas.');
+        setIsImporting(false);
+        if (csvRef.current) csvRef.current.value = '';
+        return;
+      }
+
+      try {
+        const res = await apiFetch('/api/staff/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ staff: rows, tenant_id: profile?.tenant_id })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Error al importar');
+
+        const { created: createdCount, failed } = json.data || {};
+        const message = failed?.length > 0
+          ? `Se crearon ${createdCount} de ${rows.length}.\n\nNo se pudieron crear ${failed.length}:\n` +
+            failed.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
+          : `Se crearon ${createdCount} miembros del personal correctamente.`;
+        alert(message);
+        fetchStaff();
+      } catch (error: any) {
+        alert('Error al importar: ' + error.message);
+      }
+
+      setIsImporting(false);
+      if (csvRef.current) csvRef.current.value = '';
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
   const openEditModal = (user: any) => {
     let perms = [];
     try {
@@ -183,17 +262,41 @@ export function StaffManagement() {
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">Crea usuarios para enfermeras, recepcionistas y guardias.</p>
           </div>
-          <button 
-            onClick={() => {
-              setEditingId(null);
-              setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
-          >
-            <Plus className="w-5 h-5" />
-            NUEVO STAFF
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              ref={csvRef}
+              onChange={handleCsvImport}
+            />
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-2 bg-white text-indigo-600 border border-indigo-100 px-4 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-50 transition-all shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              PLANTILLA
+            </button>
+            <button
+              onClick={() => csvRef.current?.click()}
+              disabled={isImporting}
+              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-4 rounded-[1.5rem] font-black text-xs hover:bg-slate-700 transition-all shadow-xl shadow-slate-200 active:scale-95 disabled:opacity-50"
+            >
+              {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              IMPORTAR
+            </button>
+            <button
+              onClick={() => {
+                setEditingId(null);
+                setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
+            >
+              <Plus className="w-5 h-5" />
+              NUEVO STAFF
+            </button>
+          </div>
         </header>
 
         {loading ? (
