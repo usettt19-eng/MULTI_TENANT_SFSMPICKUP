@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19 (ícono real de la app en iOS/Android).
+2026-08-19 (fix de crash de ubicación en iOS).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -175,6 +175,15 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   cuadrada, circular y de capa "adaptive" con zona segura). El ícono
   512×512 para la ficha de Google Play también quedó preparado, pendiente
   de subir cuando la cuenta de Play Console termine su verificación.
+- **2026-08-19 — Fix de crash de iOS al pedir ubicación**: en pruebas
+  reales de TestFlight, la app se cerraba al instante al activar la
+  geocerca. Causa: `Info.plist` no tenía
+  `NSLocationAlwaysAndWhenInUseUsageDescription` — el plugin
+  `@capacitor-community/background-geolocation` pide autorización
+  "Always" para la geocerca, y sin esa clave iOS mata la app en vez de
+  mostrar el diálogo de permiso (confirmado contra la documentación
+  oficial del plugin). Se agregaron `NSLocationAlwaysAndWhenInUseUsageDescription`,
+  `NSLocationAlwaysUsageDescription` y `UIBackgroundModes: [location]`.
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
