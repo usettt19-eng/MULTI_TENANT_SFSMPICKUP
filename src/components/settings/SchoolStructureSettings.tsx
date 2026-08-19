@@ -131,20 +131,34 @@ export function SchoolStructureSettings() {
     }
   };
 
-  const handleUpdateGradeField = async (gradeId: string, field: 'stage' | 'exit_time', value: string) => {
+  const handleUpdateGradeField = async (gradeId: string, field: 'stage' | 'exit_time' | 'name' | 'level_order', rawValue: string) => {
     setActionError(null);
     const prev = grades;
-    setGrades(grades.map(g => g.id === gradeId ? { ...g, [field]: value || null } as SchoolGrade : g));
+    // level_order es numérico en la base; el resto se guarda tal cual (o
+    // null si queda vacío).
+    const value: string | number | null = field === 'level_order'
+      ? (rawValue.trim() === '' ? null : Number(rawValue))
+      : (rawValue || null);
+    if (field === 'name' && !rawValue.trim()) return; // el nombre no puede quedar vacío
+    if (field === 'level_order' && rawValue.trim() !== '' && Number.isNaN(value as number)) return;
+    setGrades(grades.map(g => g.id === gradeId ? { ...g, [field]: value } as SchoolGrade : g));
     try {
       const { error } = await supabase
         .from('school_grades')
-        .update({ [field]: value || null })
+        .update({ [field]: value })
         .eq('id', gradeId);
       if (error) throw error;
     } catch (err: any) {
       setGrades(prev);
       handleError(err, 'Error al actualizar grado');
     }
+  };
+
+  // Actualiza el nombre/orden solo en pantalla mientras se escribe, sin
+  // pegarle a la base en cada tecla — el guardado real ocurre en onBlur,
+  // vía handleUpdateGradeField.
+  const updateGradeFieldLocal = (gradeId: string, field: 'name' | 'level_order', value: string) => {
+    setGrades(grades.map(g => g.id === gradeId ? { ...g, [field]: field === 'level_order' ? (value as any) : value } as SchoolGrade : g));
   };
 
   const handleDeleteGrade = async (id: string) => {
@@ -379,16 +393,29 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
             ) : (
               grades.map(grade => (
                 <div key={grade.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold">
-                        {grade.level_order}
-                      </span>
-                      <p className="font-bold text-slate-800">{grade.name}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <input
+                        type="number"
+                        min="1"
+                        value={grade.level_order ?? ''}
+                        onChange={e => updateGradeFieldLocal(grade.id, 'level_order', e.target.value)}
+                        onBlur={e => handleUpdateGradeField(grade.id, 'level_order', e.target.value)}
+                        title="Orden"
+                        className="w-11 h-9 rounded-full bg-slate-200 text-slate-600 text-center text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500 border-none"
+                      />
+                      <input
+                        type="text"
+                        value={grade.name}
+                        onChange={e => updateGradeFieldLocal(grade.id, 'name', e.target.value)}
+                        onBlur={e => handleUpdateGradeField(grade.id, 'name', e.target.value)}
+                        title="Nombre del grado"
+                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-800 text-sm outline-none focus:border-amber-500"
+                      />
                     </div>
                     <button
                       onClick={() => handleDeleteGrade(grade.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
