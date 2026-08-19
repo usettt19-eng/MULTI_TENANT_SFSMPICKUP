@@ -35,10 +35,6 @@ jobs:
       - name: Sincronizar assets web con el proyecto iOS
         run: npx cap sync ios
 
-      - name: Instalar CocoaPods
-        working-directory: ios/App
-        run: pod install
-
       - name: Compilar para el Simulador (sin firma)
         working-directory: ios/App
         run: |

@@ -1,0 +1,148 @@
+name: Deploy iOS a TestFlight
+
+# Compila la app firmada con el certificado de Apple Distribution y la sube a
+# App Store Connect (TestFlight). A diferencia de ios-build.yml (que solo
+# valida contra el Simulador, sin firma), este workflow genera un .ipa real
+# instalable vía TestFlight y publicable en la App Store.
+#
+# Requiere que estos Secrets ya estén cargados en el repo
+# (Settings → Secrets and variables → Actions):
+#
+#   IOS_TEAM_ID                      Team ID de Apple Developer (10 caracteres)
+#   IOS_CERTIFICATE_P12_BASE64       Certificado "Apple Distribution", exportado
+#                                     como .p12 y codificado en base64
+#   IOS_CERTIFICATE_PASSWORD         Contraseña puesta al exportar el .p12
+#   IOS_PROVISIONING_PROFILE_BASE64  Perfil de aprovisionamiento tipo "App Store"
+#                                     para com.safesmartpickup.app, en base64
+#   IOS_KEYCHAIN_PASSWORD            Cualquier contraseña — solo protege el
+#                                     keychain temporal de este run
+#   APPSTORE_CONNECT_API_KEY_ID      ID de la API Key de App Store Connect
+#   APPSTORE_CONNECT_API_ISSUER_ID   Issuer ID de esa misma API Key
+#   APPSTORE_CONNECT_API_KEY_BASE64  El archivo AuthKey_XXXX.p8 en base64
+#
+# Se dispara a mano desde la pestaña Actions de GitHub ("Run workflow"). No se
+# dispara solo en cada push -- subir a TestFlight consume un número de build,
+# así que solo debe correr cuando de verdad se quiere publicar una versión.
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Número de build (CFBundleVersion). Debe ser mayor al último subido a App Store Connect.'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar el frontend
+        run: npx vite build
+
+      - name: Sincronizar assets web con el proyecto iOS
+        run: npx cap sync ios
+
+      - name: Fijar el número de build
+        working-directory: ios/App
+        run: |
+          agvtool new-version -all "${{ inputs.build_number }}"
+
+      - name: Instalar certificado y perfil de aprovisionamiento
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo -n "$PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          mkdir -p ~/Library/MobileDevice/"Provisioning Profiles"
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/"Provisioning Profiles"/
+
+          PROFILE_UUID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      - name: Generar ExportOptions.plist
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.safesmartpickup.app</key><string>${PROFILE_UUID}</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Archivar (xcodebuild archive)
+        working-directory: ios/App
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            archive
+
+      - name: Exportar .ipa
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Subir a App Store Connect (TestFlight)
+        env:
+          API_KEY_ID: ${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}
+          API_KEY_BASE64: ${{ secrets.APPSTORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$API_KEY_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+          xcrun altool --upload-app \
+            -f "$RUNNER_TEMP/export/App.ipa" \
+            -t ios \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$API_ISSUER_ID"
+
+      - name: Subir el .ipa como artefacto (respaldo)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeSmartPickup-ios-build-${{ inputs.build_number }}
+          path: ${{ runner.temp }}/export/App.ipa
+          retention-days: 30
