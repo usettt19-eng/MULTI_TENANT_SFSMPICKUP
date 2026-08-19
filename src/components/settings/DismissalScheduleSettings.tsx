@@ -63,7 +63,12 @@ export function DismissalScheduleSettings() {
       setOverrides(overrideRes.data || []);
       if (settingsRes.data?.primary_dismissal_mode) setPrimaryMode(settingsRes.data.primary_dismissal_mode);
 
+      // Fuente de verdad: la columna sections del grado. Se une con las secciones
+      // que ya tengan asignaciones/excepciones (por si quedaron de antes de esta columna).
       const derived: Record<string, Set<string>> = {};
+      (gradesRes.data || []).forEach((g: SchoolGrade) => {
+        derived[g.id] = new Set(g.sections || []);
+      });
       [...(assignRes.data || []), ...(overrideRes.data || [])].forEach((row: any) => {
         if (!row.section) return;
         if (!derived[row.grade_id]) derived[row.grade_id] = new Set();
@@ -84,15 +89,39 @@ export function DismissalScheduleSettings() {
     }
   };
 
-  const addSection = (gradeId: string) => {
+  const saveSections = async (gradeId: string, sections: string[]) => {
+    const { error } = await supabase.from('school_grades').update({ sections }).eq('id', gradeId);
+    if (error) throw error;
+    setGrades(prev => prev.map(g => (g.id === gradeId ? { ...g, sections } : g)));
+  };
+
+  const addSection = async (gradeId: string) => {
     const value = (newSectionInput[gradeId] || '').trim();
     if (!value) return;
-    setSectionsByGrade(prev => {
-      const current = prev[gradeId] || [];
-      if (current.includes(value)) return prev;
-      return { ...prev, [gradeId]: [...current, value].sort() };
-    });
+    const current = sectionsByGrade[gradeId] || [];
+    if (current.includes(value)) { setNewSectionInput(prev => ({ ...prev, [gradeId]: '' })); return; }
+    const next = [...current, value].sort();
+    setSectionsByGrade(prev => ({ ...prev, [gradeId]: next }));
     setNewSectionInput(prev => ({ ...prev, [gradeId]: '' }));
+    try {
+      await saveSections(gradeId, next);
+    } catch (err: any) {
+      setSectionsByGrade(prev => ({ ...prev, [gradeId]: current }));
+      alert('Error al guardar la sección: ' + err.message);
+    }
+  };
+
+  const removeSection = async (gradeId: string, section: string) => {
+    if (!confirm(`¿Quitar la sección "${section}"? Los encargados ya asignados a esa sección no se borran, solo deja de aparecer aquí.`)) return;
+    const current = sectionsByGrade[gradeId] || [];
+    const next = current.filter(s => s !== section);
+    setSectionsByGrade(prev => ({ ...prev, [gradeId]: next }));
+    try {
+      await saveSections(gradeId, next);
+    } catch (err: any) {
+      setSectionsByGrade(prev => ({ ...prev, [gradeId]: current }));
+      alert('Error al quitar la sección: ' + err.message);
+    }
   };
 
   const staffLabel = (id: string | null | undefined) => {
@@ -301,9 +330,21 @@ export function DismissalScheduleSettings() {
               <div className="space-y-4">
                 {sections.map(section => (
                   <div key={section || '__default__'} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                    <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-3">
-                      Sección {section || '(todo el grado)'}
-                    </p>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-black text-slate-600 uppercase tracking-widest">
+                        Sección {section || '(todo el grado)'}
+                      </p>
+                      {section && (
+                        <button
+                          type="button"
+                          onClick={() => removeSection(grade.id, section)}
+                          title="Quitar sección"
+                          className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
 
                     {grade.stage === 'primaria' ? (
                       <div className="flex items-center gap-3">

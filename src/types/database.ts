@@ -249,6 +249,7 @@ export interface SchoolGrade {
   level_order: number;
   stage: SchoolStage;
   exit_time: string | null; // "HH:MM:SS"
+  sections: string[];
   created_at: string;
   updated_at: string;
 }
