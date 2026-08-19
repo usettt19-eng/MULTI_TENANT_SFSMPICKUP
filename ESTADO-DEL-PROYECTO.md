@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19 (política de privacidad y soporte publicadas para las tiendas).
+2026-08-19 (ícono real de la app en iOS/Android).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -167,6 +167,14 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   existente de la empresa (`816808791`). **Pendiente**: verificación de
   identidad por Google (varios días) y, después de esa, verificación de
   los números de teléfono — bloquea poder publicar hasta completarse.
+- **2026-08-19 — Ícono real de la app**: se reemplazó el ícono genérico
+  de Capacitor (una "X" azul de plantilla) por el escudo del logo real de
+  Safe Smart Pickup, recortado del banner de marketing (`public/logo.png`)
+  sin el texto (no se lee a tamaño de ícono). Actualizado en iOS
+  (`AppIcon-512@2x.png`) y Android (mipmaps de las 5 densidades, versión
+  cuadrada, circular y de capa "adaptive" con zona segura). El ícono
+  512×512 para la ficha de Google Play también quedó preparado, pendiente
+  de subir cuando la cuenta de Play Console termine su verificación.
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
