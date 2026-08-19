@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19.
+2026-08-19 (workflow de despliegue iOS).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -120,6 +120,16 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   requiere Node ≥22 para `@capacitor/cli`).
 - App iOS scaffold (en standby — pendiente de credenciales de Apple Developer
   del cliente).
+- **2026-08-19 — Workflow de despliegue a TestFlight** (`ios-deploy.yml`):
+  compila firmado con certificado de Apple Distribution y sube el `.ipa` a
+  App Store Connect. Se dispara a mano (consume un número de build por
+  corrida). Requiere Secrets en el repo: certificado `.p12` + contraseña,
+  perfil de aprovisionamiento tipo App Store, Team ID, y API Key de App
+  Store Connect (Key ID + Issuer ID + `.p8`). De paso se corrigió
+  `ios-build.yml` (el paso `pod install` fallaba siempre: el proyecto usa
+  Swift Package Manager, no CocoaPods — se quitó, ese workflow solo valida
+  contra el Simulador). **Pendiente**: cargar los Secrets y correr la
+  primera subida real.
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
