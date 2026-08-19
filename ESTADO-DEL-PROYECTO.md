@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19 (workflow de despliegue iOS).
+2026-08-19 (primer build de iOS en TestFlight).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -120,16 +120,38 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   requiere Node ≥22 para `@capacitor/cli`).
 - App iOS scaffold (en standby — pendiente de credenciales de Apple Developer
   del cliente).
-- **2026-08-19 — Workflow de despliegue a TestFlight** (`ios-deploy.yml`):
-  compila firmado con certificado de Apple Distribution y sube el `.ipa` a
-  App Store Connect. Se dispara a mano (consume un número de build por
-  corrida). Requiere Secrets en el repo: certificado `.p12` + contraseña,
-  perfil de aprovisionamiento tipo App Store, Team ID, y API Key de App
-  Store Connect (Key ID + Issuer ID + `.p8`). De paso se corrigió
-  `ios-build.yml` (el paso `pod install` fallaba siempre: el proyecto usa
-  Swift Package Manager, no CocoaPods — se quitó, ese workflow solo valida
-  contra el Simulador). **Pendiente**: cargar los Secrets y correr la
-  primera subida real.
+- **2026-08-19 — Primer build de iOS subido a TestFlight, de punta a punta**:
+  se generaron en Apple Developer/App Store Connect el App ID
+  (`com.safesmartpickup.app`), el certificado "Apple Distribution", el
+  perfil de aprovisionamiento tipo App Store, y una API Key de App Store
+  Connect (rol "App Manager") — cargados como Secrets del repo. Workflow
+  `ios-deploy.yml`: compila firmado y sube el `.ipa` a App Store Connect,
+  se dispara a mano desde Actions (consume un número de build por
+  corrida). Tres bugs reales del proyecto, encontrados y corregidos
+  durante el primer despliegue (no simulados, cada uno rompió un intento
+  real):
+  1. `ios-build.yml` tenía un paso `pod install` que siempre fallaba — el
+     proyecto usa Swift Package Manager, no CocoaPods, no hay Podfile.
+  2. Ambos workflows compilaban con `-workspace App.xcworkspace`, que
+     nunca existió (ese archivo lo genera CocoaPods) — se cambió a
+     `-project App.xcodeproj`.
+  3. El proyecto no tenía ningún **esquema de Xcode compartido**
+     committeado (`xcuserdata` está en `.gitignore`, así que el esquema
+     autogenerado por Xcode nunca se subió) — se agregó a mano
+     `ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`, sin el
+     cual `xcodebuild -scheme App` no resuelve nada en un checkout limpio
+     de CI.
+  4. El target tiene `CODE_SIGN_IDENTITY = "iPhone Developer"` fijo en el
+     proyecto (config heredada del template de Capacitor); sin
+     sobreescribirlo, el archive pedía un certificado de desarrollo en vez
+     de usar el de distribución cargado — se agregó
+     `CODE_SIGN_IDENTITY="Apple Distribution"` al `xcodebuild archive`.
+  Build 3 (`build_number: 3`) subió con éxito. La app iOS ya se puede
+  distribuir por TestFlight; falta invitar testers y, cuando se quiera
+  publicar, completar la ficha de la App Store (capturas, descripción) en
+  App Store Connect.
+- App Android sigue funcionando de punta a punta como antes (sin cambios
+  en esta sesión).
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
