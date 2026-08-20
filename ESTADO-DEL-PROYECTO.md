@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-19 (fix de crash de ubicación en iOS).
+2026-08-20 (app iOS enviada a revisión de Apple).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -184,6 +184,55 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   mostrar el diálogo de permiso (confirmado contra la documentación
   oficial del plugin). Se agregaron `NSLocationAlwaysAndWhenInUseUsageDescription`,
   `NSLocationAlwaysUsageDescription` y `UIBackgroundModes: [location]`.
+- **2026-08-20 — App iOS enviada a revisión de Apple** (build 5, versión
+  1.0). Se completó toda la ficha de App Store Connect:
+  - Categoría: Educación. Subtítulo, descripción, palabras clave, texto
+    promocional, URLs de soporte/marketing/privacidad, copyright.
+  - Ícono de la app: mismo escudo recortado del logo real (ver más
+    arriba).
+  - 5 capturas de iPhone (6,5"), reales, tomadas por el usuario en su
+    propio dispositivo desde TestFlight — se limpiaron 3 de ellas con
+    edición de imagen (recorte/relleno de color) para quitar el banner
+    de "TestFlight" que aparece superpuesto sobre la UI real cuando se
+    corre desde ahí, ya que Apple no permite mostrar chrome de otras
+    apps en las capturas de la ficha.
+  - 2 capturas de iPad (13"), generadas localmente: `safesmartpickup.com`
+    y el proyecto de Supabase están bloqueados por la política de red de
+    este entorno de trabajo (egress proxy — confirmado con `curl` contra
+    el endpoint de estado del proxy, error 403 de política, no un
+    problema de configuración), así que no se pudo automatizar un login
+    real contra producción. En su lugar se corrió el frontend localmente
+    (`npx vite`, con `.env.local` temporal con las credenciales públicas
+    del proyecto Supabase, borrado después) y se capturó con Playwright
+    a la resolución nativa exacta de iPad de 13" (2064×2752, viewport
+    1032×1376 @2x) — solo alcanzó para la pantalla de login/marca (no
+    requiere backend), suficiente para cumplir el mínimo de Apple.
+  - Cuenta de revisión para el equipo de Apple: se creó una cuenta de
+    padre de prueba (`applereview@safesmartpickup.com`) en el tenant de
+    pruebas vacío "Colegio Loyola 2", con un alumno ficticio ya
+    vinculado, insertada directamente en `auth.users`/`auth.identities`
+    vía SQL (con `pgcrypto`) para que tenga contraseña utilizable sin
+    pasar por el flujo de invitación por correo (los revisores no pueden
+    recibir/abrir esos correos).
+  - Clasificación por edad: 13+ (por el módulo de bienestar/medicación,
+    marcado como "poco frecuente" — honesto en vez de declarar "ninguno"
+    para evitar un rechazo posterior por inconsistencia).
+  - Cumplimiento de cifrado (export compliance): cifrado estándar
+    (HTTPS/TLS), sin distribución en Francia.
+  - Reglamento de Servicios Digitales (DSA) de la UE: declarado "no
+    comerciante / sin intención de distribuir en la UE" — coherente con
+    que la disponibilidad de la app se limitó a 39 países (Panamá +
+    Latinoamérica + EE. UU./Canadá), sin Europa.
+  - Privacidad de la app ("nutrition label"): 9 tipos de datos declarados
+    (nombre, correo, teléfono, salud, ubicación exacta, fotos/vídeos,
+    otro contenido del usuario, historial de búsqueda, ID de usuario),
+    todos con finalidad única "Funcionalidad de la app", vinculados a la
+    identidad del usuario, sin uso para tracking.
+  - Precio: gratis. Disponibilidad: Estados Unidos, Canadá, y toda
+    América Latina y el Caribe (39 países) — sin Europa ni Asia-Pacífico.
+  - Publicación: manual (no automática al aprobarse), para controlar el
+    momento exacto del lanzamiento público.
+  **Estado: en cola de revisión de Apple, hasta 48 horas.**
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
