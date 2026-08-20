@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Firma de Android: nunca se comitea, se genera en cada corrida de CI a
+# partir de secrets de GitHub Actions.
+android/keystore.properties
+android/app/upload-keystore.jks
+*.jks
+*.keystore
