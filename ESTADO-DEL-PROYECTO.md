@@ -344,6 +344,21 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   usuario veía el error genérico de nginx en vez de la respuesta del backend.
   Se subió a `proxy_connect_timeout 10s` / `proxy_send_timeout 600s` /
   `proxy_read_timeout 600s`.
+- **2026-08-20 — Importación CSV de padres/staff en lotes con progreso
+  animado**: con el timeout de nginx ya corregido, apareció un caso distinto
+  — una importación de 451 filas de padres falló con "Failed to fetch". Los
+  logs mostraron `POST /api/parents/bulk` con código `499` (nginx: el
+  *cliente* cerró la conexión mientras el servidor seguía trabajando) a los
+  27s, muy por debajo de cualquier timeout configurado — el problema real es
+  que una sola petición HTTP larga y monolítica para cientos de invitaciones
+  secuenciales es frágil ante cualquier corte de red del navegador, y además
+  no daba ninguna señal de progreso mientras corría. Se cambió
+  `GuardiansRegistry.tsx` y `StaffManagement.tsx` para trocear el CSV en
+  lotes de 25 filas y subirlos uno por uno contra `/api/parents/bulk` /
+  `/api/staff/bulk`, con una ventana modal animada (spinner + barra de
+  progreso "X de Y") mientras dura la subida. Si un lote falla a mitad de
+  camino, el mensaje de error ahora informa cuántas filas se alcanzaron a
+  crear antes del fallo, en vez de perder todo el progreso sin explicación.
 
 ---
 
