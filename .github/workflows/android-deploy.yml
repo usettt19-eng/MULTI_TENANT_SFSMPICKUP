@@ -61,6 +61,11 @@ jobs:
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
+          # Falla rápido (segundos, no minutos de build) con un mensaje claro
+          # si el secreto ANDROID_KEYSTORE_BASE64 se pegó incompleto/corrupto.
+          echo "Tamaño del keystore decodificado: $(wc -c < app/upload-keystore.jks) bytes"
+          keytool -list -keystore app/upload-keystore.jks -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            || { echo "::error::El keystore no se pudo leer con la contraseña dada — revisa que ANDROID_KEYSTORE_BASE64 se haya pegado completo (sin cortar) en los secrets de GitHub."; exit 1; }
 
       - name: Compilar Android App Bundle firmado
         working-directory: android
