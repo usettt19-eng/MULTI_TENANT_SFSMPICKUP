@@ -271,9 +271,11 @@ export interface DismissalAssignment {
   schedule_type: DismissalScheduleType;
   day_of_week: number; // 0=domingo ... 6=sábado
   staff_id: string;
+  staff_id_2: string | null;
   created_at: string;
   updated_at: string;
   staff?: Pick<Profile, 'first_name' | 'last_name'>;
+  staff2?: Pick<Profile, 'first_name' | 'last_name'>;
 }
 
 export interface DismissalOverride {
@@ -284,6 +286,7 @@ export interface DismissalOverride {
   schedule_type: DismissalScheduleType;
   override_date: string; // "YYYY-MM-DD"
   staff_id: string;
+  slot: 1 | 2;
   created_by: string | null;
   created_at: string;
   staff?: Pick<Profile, 'first_name' | 'last_name'>;

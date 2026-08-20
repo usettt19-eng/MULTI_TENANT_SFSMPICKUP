@@ -7,7 +7,7 @@ import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
 } from '../lib/backgroundGeolocation';
-import { resolveResponsibleStaff } from '../lib/dismissalSchedule';
+import { resolveResponsibleStaffIds } from '../lib/dismissalSchedule';
 import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
@@ -834,17 +834,19 @@ export function ParentDashboard() {
           ? ` (Pool day: recoge en lugar de ${carpoolParent.first_name} ${carpoolParent.last_name}.)`
           : '';
 
-        const responsibleStaffId = await resolveResponsibleStaff(
+        const responsibleStaffIds = await resolveResponsibleStaffIds(
           profile.tenant_id, student.grade, student.section, 'regular',
         );
-        if (responsibleStaffId) {
-          await supabase.from('notifications').insert({
-            user_id: responsibleStaffId,
-            title: `${profile.first_name} ${profile.last_name} llegó`,
-            message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
-            type: 'info',
-            tenant_id: profile.tenant_id,
-          });
+        if (responsibleStaffIds.length > 0) {
+          await supabase.from('notifications').insert(
+            responsibleStaffIds.map(staffId => ({
+              user_id: staffId,
+              title: `${profile.first_name} ${profile.last_name} llegó`,
+              message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
+              type: 'info',
+              tenant_id: profile.tenant_id,
+            }))
+          );
         }
 
         // El padre no tiene permiso para leer la lista de administradores

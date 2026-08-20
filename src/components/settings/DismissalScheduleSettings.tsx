@@ -14,6 +14,9 @@ const WEEKDAYS: { value: number; label: string }[] = [
   { value: 5, label: 'Vie' },
 ];
 
+const ASSIGNMENT_SELECT =
+  '*, staff:profiles!dismissal_assignments_staff_id_fkey(first_name, last_name), staff2:profiles!dismissal_assignments_staff_id_2_fkey(first_name, last_name)';
+
 export function DismissalScheduleSettings() {
   const { profile } = useAuth() as any;
   const [grades, setGrades] = useState<SchoolGrade[]>([]);
@@ -32,6 +35,7 @@ export function DismissalScheduleSettings() {
   const [ovGradeId, setOvGradeId] = useState('');
   const [ovSection, setOvSection] = useState('');
   const [ovDate, setOvDate] = useState('');
+  const [ovSlot, setOvSlot] = useState<1 | 2>(1);
   const [ovStaffId, setOvStaffId] = useState('');
   const [savingOverride, setSavingOverride] = useState(false);
 
@@ -48,7 +52,7 @@ export function DismissalScheduleSettings() {
       const [gradesRes, staffRes, assignRes, overrideRes, settingsRes] = await Promise.all([
         supabase.from('school_grades').select('*').eq('tenant_id', profile.tenant_id).order('level_order'),
         supabase.from('profiles').select('id, first_name, last_name').eq('tenant_id', profile.tenant_id).eq('role', 'admin'),
-        supabase.from('dismissal_assignments').select('*, staff:profiles(first_name, last_name)').eq('tenant_id', profile.tenant_id),
+        supabase.from('dismissal_assignments').select(ASSIGNMENT_SELECT).eq('tenant_id', profile.tenant_id),
         supabase.from('dismissal_overrides').select('*, staff:profiles!staff_id(first_name, last_name)').eq('tenant_id', profile.tenant_id).gte('override_date', today).order('override_date'),
         supabase.from('school_settings').select('primary_dismissal_mode').eq('tenant_id', profile.tenant_id).maybeSingle(),
       ]);
@@ -135,14 +139,26 @@ export function DismissalScheduleSettings() {
 
   const scheduleLabel = scheduleType === 'regular' ? 'salida regular' : 'post school';
 
-  const handleAssignDay = async (grade: SchoolGrade, section: string, dayOfWeek: number, staffId: string) => {
-    const key = `${grade.id}|${section}|${dayOfWeek}`;
+  /**
+   * Cada fila de dismissal_assignments guarda hasta 2 personas (staff_id y
+   * staff_id_2). staff_id es obligatorio en la base de datos: si se vacía el
+   * slot 1 pero el slot 2 tiene a alguien, se promueve al slot 1 en vez de
+   * dejar la fila en un estado inválido. Si los dos quedan vacíos, se borra
+   * la fila entera (mismo comportamiento que antes de tener 2 slots).
+   */
+  const handleAssignSlot = async (grade: SchoolGrade, section: string, dayOfWeek: number, slot: 1 | 2, staffId: string) => {
+    const key = `${grade.id}|${section}|${dayOfWeek}|${slot}`;
     setSavingKey(key);
     const existing = getAssignment(grade.id, section, dayOfWeek);
-    const previousStaffId = existing?.staff_id || null;
+    const previousStaffId = slot === 1 ? (existing?.staff_id || null) : (existing?.staff_id_2 || null);
+
+    let nextSlot1: string | null = existing?.staff_id || null;
+    let nextSlot2: string | null = existing?.staff_id_2 || null;
+    if (slot === 1) nextSlot1 = staffId || null; else nextSlot2 = staffId || null;
+    if (!nextSlot1 && nextSlot2) { nextSlot1 = nextSlot2; nextSlot2 = null; }
 
     try {
-      if (!staffId) {
+      if (!nextSlot1) {
         if (existing) {
           const { error } = await supabase.from('dismissal_assignments').delete().eq('id', existing.id);
           if (error) throw error;
@@ -152,10 +168,10 @@ export function DismissalScheduleSettings() {
         const { data, error } = await supabase
           .from('dismissal_assignments')
           .upsert(
-            { tenant_id: profile.tenant_id, grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: dayOfWeek, staff_id: staffId },
+            { tenant_id: profile.tenant_id, grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: dayOfWeek, staff_id: nextSlot1, staff_id_2: nextSlot2 },
             { onConflict: 'tenant_id,grade_id,section,schedule_type,day_of_week' }
           )
-          .select('*, staff:profiles(first_name, last_name)')
+          .select(ASSIGNMENT_SELECT)
           .single();
         if (error) throw error;
         setAssignments(prev => [
@@ -168,10 +184,10 @@ export function DismissalScheduleSettings() {
         const dayLabel = WEEKDAYS.find(d => d.value === dayOfWeek)?.label || String(dayOfWeek);
         await logActivity(
           'DISMISSAL_SCHEDULE',
-          `Horario de ${scheduleLabel} actualizado: ${grade.name}${section ? ' - ' + section : ''}, ${dayLabel}. ` +
+          `Horario de ${scheduleLabel} actualizado (persona ${slot}): ${grade.name}${section ? ' - ' + section : ''}, ${dayLabel}. ` +
           `Antes: ${staffLabel(previousStaffId)}. Ahora: ${staffLabel(staffId)}.`,
           actorName(),
-          { grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: dayOfWeek, previous_staff_id: previousStaffId, new_staff_id: staffId || null },
+          { grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: dayOfWeek, slot, previous_staff_id: previousStaffId, new_staff_id: staffId || null },
           profile.tenant_id,
         );
       }
@@ -182,28 +198,52 @@ export function DismissalScheduleSettings() {
     }
   };
 
-  // Primaria: un solo encargado aplicado a los 5 días de una vez.
-  const handleAssignAllWeek = async (grade: SchoolGrade, section: string, staffId: string) => {
-    if (!staffId) return;
-    setSavingKey(`${grade.id}|${section}|all`);
+  // Primaria: un encargado por slot, aplicado a los 5 días de una vez.
+  const handleAssignAllWeekSlot = async (grade: SchoolGrade, section: string, slot: 1 | 2, staffId: string) => {
+    setSavingKey(`${grade.id}|${section}|all|${slot}`);
     try {
-      const rows = WEEKDAYS.map(d => ({
-        tenant_id: profile.tenant_id, grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: d.value, staff_id: staffId,
-      }));
-      const { data, error } = await supabase
-        .from('dismissal_assignments')
-        .upsert(rows, { onConflict: 'tenant_id,grade_id,section,schedule_type,day_of_week' })
-        .select('*, staff:profiles(first_name, last_name)');
-      if (error) throw error;
+      const rows = WEEKDAYS.map(d => {
+        const existing = getAssignment(grade.id, section, d.value);
+        let nextSlot1: string | null = existing?.staff_id || null;
+        let nextSlot2: string | null = existing?.staff_id_2 || null;
+        if (slot === 1) nextSlot1 = staffId || null; else nextSlot2 = staffId || null;
+        if (!nextSlot1 && nextSlot2) { nextSlot1 = nextSlot2; nextSlot2 = null; }
+        return { day: d.value, nextSlot1, nextSlot2, existingId: existing?.id };
+      });
+
+      const toDelete = rows.filter(r => !r.nextSlot1 && r.existingId).map(r => r.existingId as string);
+      const toUpsert = rows.filter(r => r.nextSlot1);
+
+      if (toDelete.length > 0) {
+        const { error } = await supabase.from('dismissal_assignments').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+
+      let upserted: DismissalAssignment[] = [];
+      if (toUpsert.length > 0) {
+        const { data, error } = await supabase
+          .from('dismissal_assignments')
+          .upsert(
+            toUpsert.map(r => ({
+              tenant_id: profile.tenant_id, grade_id: grade.id, section, schedule_type: scheduleType,
+              day_of_week: r.day, staff_id: r.nextSlot1, staff_id_2: r.nextSlot2,
+            })),
+            { onConflict: 'tenant_id,grade_id,section,schedule_type,day_of_week' }
+          )
+          .select(ASSIGNMENT_SELECT);
+        if (error) throw error;
+        upserted = data || [];
+      }
+
       setAssignments(prev => [
         ...prev.filter(a => !(a.grade_id === grade.id && a.section === section && a.schedule_type === scheduleType)),
-        ...(data || []),
+        ...upserted,
       ]);
       await logActivity(
         'DISMISSAL_SCHEDULE',
-        `Encargado de ${scheduleLabel} actualizado para toda la semana: ${grade.name}${section ? ' - ' + section : ''}. Ahora: ${staffLabel(staffId)}.`,
+        `Encargado ${slot} de ${scheduleLabel} actualizado para toda la semana: ${grade.name}${section ? ' - ' + section : ''}. Ahora: ${staffLabel(staffId)}.`,
         actorName(),
-        { grade_id: grade.id, section, schedule_type: scheduleType, new_staff_id: staffId },
+        { grade_id: grade.id, section, schedule_type: scheduleType, slot, new_staff_id: staffId || null },
         profile.tenant_id,
       );
     } catch (err: any) {
@@ -222,8 +262,8 @@ export function DismissalScheduleSettings() {
       const { data, error } = await supabase
         .from('dismissal_overrides')
         .upsert(
-          { tenant_id: profile.tenant_id, grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, staff_id: ovStaffId, created_by: profile.id },
-          { onConflict: 'tenant_id,grade_id,section,schedule_type,override_date' }
+          { tenant_id: profile.tenant_id, grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, slot: ovSlot, staff_id: ovStaffId, created_by: profile.id },
+          { onConflict: 'tenant_id,grade_id,section,schedule_type,override_date,slot' }
         )
         .select('*, staff:profiles!staff_id(first_name, last_name)')
         .single();
@@ -232,13 +272,13 @@ export function DismissalScheduleSettings() {
 
       await logActivity(
         'DISMISSAL_OVERRIDE',
-        `Reasignación de un solo día: ${grade?.name || ''}${ovSection ? ' - ' + ovSection : ''}, ${ovDate} → ${staffLabel(ovStaffId)} (${scheduleLabel}).`,
+        `Reasignación de un solo día (persona ${ovSlot}): ${grade?.name || ''}${ovSection ? ' - ' + ovSection : ''}, ${ovDate} → ${staffLabel(ovStaffId)} (${scheduleLabel}).`,
         actorName(),
-        { grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, staff_id: ovStaffId },
+        { grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, slot: ovSlot, staff_id: ovStaffId },
         profile.tenant_id,
       );
 
-      setOvGradeId(''); setOvSection(''); setOvDate(''); setOvStaffId('');
+      setOvGradeId(''); setOvSection(''); setOvDate(''); setOvSlot(1); setOvStaffId('');
     } catch (err: any) {
       alert('Error al crear la excepción: ' + err.message);
     } finally {
@@ -247,7 +287,7 @@ export function DismissalScheduleSettings() {
   };
 
   const handleDeleteOverride = async (ov: DismissalOverride) => {
-    if (!confirm('¿Eliminar esta excepción? Ese día se vuelve a usar el horario regular.')) return;
+    if (!confirm('¿Eliminar esta excepción? Ese día se vuelve a usar el horario regular para esa persona.')) return;
     try {
       const { error } = await supabase.from('dismissal_overrides').delete().eq('id', ov.id);
       if (error) throw error;
@@ -255,9 +295,9 @@ export function DismissalScheduleSettings() {
       const grade = grades.find(g => g.id === ov.grade_id);
       await logActivity(
         'DISMISSAL_OVERRIDE',
-        `Excepción eliminada: ${grade?.name || ''}${ov.section ? ' - ' + ov.section : ''}, ${ov.override_date}. Vuelve al horario regular.`,
+        `Excepción eliminada (persona ${ov.slot}): ${grade?.name || ''}${ov.section ? ' - ' + ov.section : ''}, ${ov.override_date}. Vuelve al horario regular.`,
         actorName(),
-        { grade_id: ov.grade_id, section: ov.section, schedule_type: ov.schedule_type, override_date: ov.override_date },
+        { grade_id: ov.grade_id, section: ov.section, schedule_type: ov.schedule_type, override_date: ov.override_date, slot: ov.slot },
         profile.tenant_id,
       );
     } catch (err: any) {
@@ -347,36 +387,46 @@ export function DismissalScheduleSettings() {
                     </div>
 
                     {grade.stage === 'primaria' ? (
-                      <div className="flex items-center gap-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">{staffModeLabel}</label>
-                        <select
-                          value={getAssignment(grade.id, section, 1)?.staff_id || ''}
-                          onChange={e => handleAssignAllWeek(grade, section, e.target.value)}
-                          disabled={savingKey === `${grade.id}|${section}|all`}
-                          className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500"
-                        >
-                          <option value="">— Sin asignar —</option>
-                          {staff.map(s => (
-                            <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
-                          ))}
-                        </select>
+                      <div className="space-y-2">
+                        {([1, 2] as const).map(slot => (
+                          <div key={slot} className="flex items-center gap-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">
+                              {staffModeLabel} {slot}
+                            </label>
+                            <select
+                              value={(slot === 1 ? getAssignment(grade.id, section, 1)?.staff_id : getAssignment(grade.id, section, 1)?.staff_id_2) || ''}
+                              onChange={e => handleAssignAllWeekSlot(grade, section, slot, e.target.value)}
+                              disabled={savingKey === `${grade.id}|${section}|all|${slot}`}
+                              className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500"
+                            >
+                              <option value="">— Sin asignar —</option>
+                              {staff.map(s => (
+                                <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="grid grid-cols-5 gap-2">
                         {WEEKDAYS.map(day => (
-                          <div key={day.value}>
+                          <div key={day.value} className="space-y-1">
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">{day.label}</label>
-                            <select
-                              value={getAssignment(grade.id, section, day.value)?.staff_id || ''}
-                              onChange={e => handleAssignDay(grade, section, day.value, e.target.value)}
-                              disabled={savingKey === `${grade.id}|${section}|${day.value}`}
-                              className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-medium outline-none focus:border-indigo-500"
-                            >
-                              <option value="">—</option>
-                              {staff.map(s => (
-                                <option key={s.id} value={s.id}>{s.first_name} {(s.last_name || '').slice(0, 1)}.</option>
-                              ))}
-                            </select>
+                            {([1, 2] as const).map(slot => (
+                              <select
+                                key={slot}
+                                value={(slot === 1 ? getAssignment(grade.id, section, day.value)?.staff_id : getAssignment(grade.id, section, day.value)?.staff_id_2) || ''}
+                                onChange={e => handleAssignSlot(grade, section, day.value, slot, e.target.value)}
+                                disabled={savingKey === `${grade.id}|${section}|${day.value}|${slot}`}
+                                title={`Persona ${slot}`}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-medium outline-none focus:border-indigo-500"
+                              >
+                                <option value="">—</option>
+                                {staff.map(s => (
+                                  <option key={s.id} value={s.id}>{s.first_name} {(s.last_name || '').slice(0, 1)}.</option>
+                                ))}
+                              </select>
+                            ))}
                           </div>
                         ))}
                       </div>
@@ -412,11 +462,12 @@ export function DismissalScheduleSettings() {
           <CalendarClock className="w-5 h-5 text-amber-500" /> Excepciones de un Día ({scheduleLabel})
         </h3>
         <p className="text-xs text-slate-500 font-medium leading-relaxed">
-          Para cuando el encargado habitual no está ese día. Se aplica solo en la fecha indicada — al día siguiente
-          vuelve automáticamente al horario preprogramado. Queda registrado en la bitácora de actividad.
+          Para cuando una de las personas encargadas no está ese día — se reemplaza solo a esa, la otra sigue igual.
+          Se aplica solo en la fecha indicada — al día siguiente vuelve automáticamente al horario preprogramado.
+          Queda registrado en la bitácora de actividad.
         </p>
 
-        <form onSubmit={handleCreateOverride} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <form onSubmit={handleCreateOverride} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-1">
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Grado</label>
             <select required value={ovGradeId} onChange={e => setOvGradeId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500">
@@ -431,6 +482,13 @@ export function DismissalScheduleSettings() {
           <div>
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fecha</label>
             <input required type="date" value={ovDate} onChange={e => setOvDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Reemplaza a</label>
+            <select required value={ovSlot} onChange={e => setOvSlot(Number(e.target.value) as 1 | 2)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500">
+              <option value={1}>Persona 1</option>
+              <option value={2}>Persona 2</option>
+            </select>
           </div>
           <div>
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Encargado ese día</label>
@@ -454,7 +512,7 @@ export function DismissalScheduleSettings() {
                 <div key={ov.id} className="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100">
                   <div className="text-sm">
                     <span className="font-black text-slate-800">{ov.override_date}</span>
-                    <span className="text-slate-500"> — {grade?.name || 'Grado'}{ov.section ? ` - ${ov.section}` : ''}: </span>
+                    <span className="text-slate-500"> — {grade?.name || 'Grado'}{ov.section ? ` - ${ov.section}` : ''} (persona {ov.slot}): </span>
                     <span className="font-bold text-amber-700">{staffLabel(ov.staff_id)}</span>
                   </div>
                   <button onClick={() => handleDeleteOverride(ov)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
