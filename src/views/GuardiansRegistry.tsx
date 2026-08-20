@@ -264,7 +264,7 @@ export function GuardiansRegistry() {
             const res = await apiFetch('/api/parents/bulk', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ parents: batch })
+              body: JSON.stringify({ parents: batch, tenant_id: profile?.tenant_id })
             });
             const json = await res.json();
             if (!res.ok || !json.success) throw new Error(json.error || 'API Error al importar padres');

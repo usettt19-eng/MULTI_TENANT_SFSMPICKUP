@@ -324,7 +324,9 @@ app.post(
     if (parents.length === 0) return fail(res, 400, 'No se recibió ningún padre.');
     if (parents.length > 500) return fail(res, 400, 'Máximo 500 padres por importación.');
 
-    const tenantId = req.caller!.tenantId;
+    // Mismo motivo que /api/parents: el colegio lo decide el llamante, no
+    // el cuerpo, salvo que sea super_admin operando sobre otro colegio.
+    const tenantId = req.caller!.role === 'super_admin' ? req.body?.tenant_id : req.caller!.tenantId;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'Sin permisos en ese colegio.');
 
     const created: unknown[] = [];
