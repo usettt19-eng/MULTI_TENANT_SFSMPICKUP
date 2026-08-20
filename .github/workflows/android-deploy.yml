@@ -1,0 +1,88 @@
+name: Publicar Android en Google Play
+
+# Compila un Android App Bundle FIRMADO (release, para Play Store — distinto
+# del APK de depuración de android-apk.yml, que es para descarga directa
+# fuera de Play) y lo sube al track de Internal Testing usando la API de
+# Google Play. Solo corre manualmente: publicar no debe ser automático en
+# cada push.
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Track de Google Play'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar el frontend
+        run: npx vite build
+
+      - name: Sincronizar assets web con el proyecto Android
+        run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Dar permisos de ejecución a gradlew
+        run: chmod +x android/gradlew
+
+      - name: Preparar keystore de firma
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/upload-keystore.jks
+          cat > keystore.properties <<EOF
+          storeFile=app/upload-keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - name: Compilar Android App Bundle firmado
+        working-directory: android
+        env:
+          # Google Play exige un versionCode más alto en cada subida. El
+          # número de ejecución del workflow siempre sube, así que sirve
+          # como versionCode sin tener que llevar la cuenta a mano.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: "1.0.${{ github.run_number }}"
+        run: ./gradlew bundleRelease
+
+      - name: Subir a Google Play (${{ inputs.track }})
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.safesmartpickup.app
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: ${{ inputs.track }}
+          status: completed
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: safe-smart-pickup-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
