@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-20 (fix de bug de tenant en import masivo de padres).
+2026-08-20 (2 encargados de salida por sección).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -254,6 +254,32 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
     (mismo patrón `role === 'super_admin' ? body.tenant_id : caller.tenantId`
     que ya usaban los otros endpoints) y reasignados los 433 registros a
     mano con una `UPDATE` directa en Supabase.
+  - Además, la vinculación automática padre↔alumno del import había fallado
+    para esos mismos 433 padres (el backend buscaba los alumnos en el
+    colegio equivocado por el mismo bug). Se reconstruyeron los 577 vínculos
+    faltantes a mano, cruzando el CSV original contra el roster real de
+    TCS ALBROOK por nombre — 12 nombres de hijos no encontraron alumno
+    exacto en el roster (probablemente orden de nombre invertido) y quedaron
+    pendientes de vincular manualmente desde el Directorio de Padres.
+- **2026-08-20 — Horarios de Salida: 2 encargados por sección en vez de 1**.
+  El colegio pidió poder asignar 2 personas de staff por salón para la
+  salida, que el aviso de "padre llegó" les llegue a ambas, y poder
+  reemplazar solo a una de las dos por un día suelto sin tocar a la otra.
+  - `dismissal_assignments` ganó la columna `staff_id_2` (nullable;
+    `staff_id` sigue siendo obligatorio — si se vacía el slot 1 pero el 2
+    tiene a alguien, se promueve automáticamente al slot 1 en vez de dejar
+    la fila inválida).
+  - `dismissal_overrides` ganó la columna `slot` (1 o 2) y su UNIQUE pasó a
+    incluirla, para poder reemplazar a una sola de las dos personas en un
+    día específico.
+  - `resolveResponsibleStaff` (en `lib/dismissalSchedule.ts`) pasó a
+    `resolveResponsibleStaffIds`, devolviendo hasta 2 ids; el aviso de
+    llegada en `ParentDashboard.tsx` ahora inserta una notificación por
+    cada encargado resuelto (deduplicado con `Set` por si es la misma
+    persona en ambos slots).
+  - `DismissalScheduleSettings.tsx`: cada sección/día ahora muestra 2
+    selects apilados ("Persona 1" / "Persona 2"), y el formulario de
+    excepciones de un día agregó un selector "Reemplaza a" (Persona 1/2).
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
