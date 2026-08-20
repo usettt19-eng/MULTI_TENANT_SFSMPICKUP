@@ -147,6 +147,7 @@ export function StaffManagement() {
   };
 
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const csvRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadTemplate = () => {
@@ -199,24 +200,50 @@ export function StaffManagement() {
         return;
       }
 
-      try {
-        const res = await apiFetch('/api/staff/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ staff: rows, tenant_id: profile?.tenant_id })
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json.error || 'Error al importar');
+      // Subir en lotes chicos en vez de una sola petición larga: con muchas
+      // filas, una petición de varios minutos es frágil ante cualquier corte
+      // de red (el navegador la aborta y se pierde todo el progreso). En
+      // lotes, cada petición dura segundos y una falla no arrastra al resto.
+      const BATCH_SIZE = 25;
+      const batches: typeof rows[] = [];
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        batches.push(rows.slice(i, i + BATCH_SIZE));
+      }
 
-        const { created: createdCount, failed } = json.data || {};
-        const message = failed?.length > 0
-          ? `Se crearon ${createdCount} de ${rows.length}.\n\nNo se pudieron crear ${failed.length}:\n` +
-            failed.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
-          : `Se crearon ${createdCount} miembros del personal correctamente.`;
+      let totalCreated = 0;
+      const allFailed: any[] = [];
+      setImportProgress({ done: 0, total: rows.length });
+
+      try {
+        for (const batch of batches) {
+          const res = await apiFetch('/api/staff/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ staff: batch, tenant_id: profile?.tenant_id })
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) throw new Error(json.error || 'Error al importar');
+
+          const { created: createdCount, failed } = json.data || {};
+          totalCreated += createdCount || 0;
+          if (failed?.length) allFailed.push(...failed);
+
+          setImportProgress(prev => prev ? { ...prev, done: prev.done + batch.length } : prev);
+        }
+
+        const message = allFailed.length > 0
+          ? `Se crearon ${totalCreated} de ${rows.length}.\n\nNo se pudieron crear ${allFailed.length}:\n` +
+            allFailed.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
+          : `Se crearon ${totalCreated} miembros del personal correctamente.`;
         alert(message);
         fetchStaff();
       } catch (error: any) {
-        alert('Error al importar: ' + error.message);
+        alert(
+          `Error al importar (se alcanzaron a crear ${totalCreated} de ${rows.length} antes de fallar): ` +
+          error.message
+        );
+      } finally {
+        setImportProgress(null);
       }
 
       setIsImporting(false);
@@ -369,6 +396,27 @@ export function StaffManagement() {
         onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
         confirmText="Eliminar Staff"
       />
+
+      {importProgress && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95">
+            <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+            <h3 className="text-lg font-black text-slate-800 mb-1">Importando personal...</h3>
+            <p className="text-sm text-slate-500 mb-5">
+              {importProgress.done} de {importProgress.total}
+            </p>
+            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${Math.min(100, Math.round((importProgress.done / importProgress.total) * 100))}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-3">No cierres esta pestaña</p>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in">

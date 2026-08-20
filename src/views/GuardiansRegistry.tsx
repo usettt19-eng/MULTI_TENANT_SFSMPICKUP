@@ -19,6 +19,7 @@ export function GuardiansRegistry() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [editingGuardianId, setEditingGuardianId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -242,40 +243,68 @@ export function GuardiansRegistry() {
       }
 
       if (parentsToInsert.length > 0) {
+        // Subir en lotes chicos en vez de una sola petición larga: con
+        // cientos de filas, una petición de varios minutos es frágil ante
+        // cualquier corte de red (el navegador la aborta y se pierde todo
+        // el progreso, sin aviso claro de qué pasó). En lotes, cada
+        // petición dura segundos, y si una falla solo se pierde ese lote.
+        const BATCH_SIZE = 25;
+        const batches: typeof parentsToInsert[] = [];
+        for (let i = 0; i < parentsToInsert.length; i += BATCH_SIZE) {
+          batches.push(parentsToInsert.slice(i, i + BATCH_SIZE));
+        }
+
+        let totalCreated = 0;
+        const allFailed: any[] = [];
+        const allLinkWarnings: any[] = [];
+        setImportProgress({ done: 0, total: parentsToInsert.length });
+
         try {
-          const res = await apiFetch('/api/parents/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ parents: parentsToInsert })
-          });
-          const json = await res.json();
-          if (!res.ok || !json.success) throw new Error(json.error || 'API Error al importar padres');
+          for (const batch of batches) {
+            const res = await apiFetch('/api/parents/bulk', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ parents: batch })
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error || 'API Error al importar padres');
+
+            const { created: createdCount, failed: failedRows, linkWarnings } = json.data || {};
+            totalCreated += createdCount || 0;
+            if (failedRows?.length) allFailed.push(...failedRows);
+            if (linkWarnings?.length) allLinkWarnings.push(...linkWarnings);
+
+            setImportProgress(prev => prev ? { ...prev, done: prev.done + batch.length } : prev);
+          }
 
           // El backend devuelve success:true aunque ALGUNAS filas fallen
           // (correo duplicado, etc.) — success solo dice que la petición se
           // procesó, no que cada padre se haya creado. Sin esto, una fila
           // fallida no mostraba ningún aviso: el admin creía que había
           // funcionado y el padre simplemente no aparecía en ningún lado.
-          const { created: createdCount, failed: failedRows, linkWarnings } = json.data || {};
-
-          let message = failedRows?.length > 0
-            ? `Importados ${createdCount} de ${parentsToInsert.length}.\n\n` +
-              `No se pudieron crear ${failedRows.length}:\n` +
-              failedRows.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
-            : `Se importaron ${createdCount} padres correctamente.`;
+          let message = allFailed.length > 0
+            ? `Importados ${totalCreated} de ${parentsToInsert.length}.\n\n` +
+              `No se pudieron crear ${allFailed.length}:\n` +
+              allFailed.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
+            : `Se importaron ${totalCreated} padres correctamente.`;
 
           // Vincular por nombre es opcional y no bloquea la creación del
           // padre: si un nombre no coincide con ningún alumno (o coincide
           // con más de uno), se avisa aparte para que el staff lo revise y
           // lo vincule a mano, en vez de fallar la importación entera.
-          if (linkWarnings?.length > 0) {
+          if (allLinkWarnings.length > 0) {
             message += `\n\nAlgunos hijos no se pudieron vincular automáticamente (revísalos manualmente):\n` +
-              linkWarnings.map((w: any) => `• ${w.email} → "${w.student_name}": ${w.reason}`).join('\n');
+              allLinkWarnings.map((w: any) => `• ${w.email} → "${w.student_name}": ${w.reason}`).join('\n');
           }
 
           alert(message);
         } catch (error: any) {
-          alert('Error al importar: ' + error.message);
+          alert(
+            `Error al importar (se alcanzaron a crear ${totalCreated} de ${parentsToInsert.length} antes de fallar): ` +
+            error.message
+          );
+        } finally {
+          setImportProgress(null);
         }
       }
 
@@ -654,6 +683,28 @@ export function GuardiansRegistry() {
           onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
           confirmText="Eliminar Tutor"
         />
+
+        {/* Overlay de progreso de importación CSV */}
+        {importProgress && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-primary/30 backdrop-blur-md">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95">
+              <Loader2 className="w-10 h-10 text-secondary animate-spin mb-4" />
+              <h3 className="text-lg font-black text-primary mb-1">Importando padres...</h3>
+              <p className="text-sm text-slate-500 mb-5">
+                {importProgress.done} de {importProgress.total}
+              </p>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-secondary rounded-full transition-all duration-500 ease-out"
+                  style={{
+                    width: `${Math.min(100, Math.round((importProgress.done / importProgress.total) * 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-3">No cierres esta pestaña</p>
+            </div>
+          </div>
+        )}
 
         {/* REDESIGNED COMPACT MODAL */}
         {isModalOpen && (
