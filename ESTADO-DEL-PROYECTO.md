@@ -2,7 +2,7 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-20 (app iOS enviada a revisión de Apple).
+2026-08-20 (fix de bug de tenant en import masivo de padres).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -233,6 +233,27 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   - Publicación: manual (no automática al aprobarse), para controlar el
     momento exacto del lanzamiento público.
   **Estado: en cola de revisión de Apple, hasta 48 horas.**
+- **2026-08-20 — Animación de progreso en import CSV + fix de bug de tenant
+  en import masivo de padres en Modo Super Admin**:
+  - El import de padres/personal por CSV ahora sube en lotes de 25 filas
+    (antes era una sola petición larga por las cientos de filas, frágil
+    ante cualquier corte de red — el navegador la abortaba y se perdía
+    todo el progreso sin aviso claro). Se agregó un overlay animado
+    (`GuardiansRegistry.tsx`, `StaffManagement.tsx`) con barra de
+    progreso "Importando X de Y" mientras sube.
+  - **Bug encontrado en producción**: al importar 451 padres para
+    "TCS ALBROOK" en Modo Super Admin, saltó error de "correo duplicado"
+    y no aparecía nadie en el directorio. Causa: `/api/parents/bulk`
+    (a diferencia de `/api/parents` y `/api/staff/bulk`, que sí lo hacen)
+    usaba siempre `req.caller.tenantId` — el colegio *real* del
+    super_admin — en vez del colegio que estaba configurando. Los 433
+    padres creados quedaron con `tenant_id` de "The Casco School" en vez
+    de "TCS ALBROOK". Los correos de invitación SÍ habían salido
+    correctamente (eso no depende del tenant_id); el import solo quedó
+    mal archivado internamente. Corregido en `server/src/index.ts`
+    (mismo patrón `role === 'super_admin' ? body.tenant_id : caller.tenantId`
+    que ya usaban los otros endpoints) y reasignados los 433 registros a
+    mano con una `UPDATE` directa en Supabase.
 - Distribución del APK por bucket público de Supabase Storage.
 - Geocerca en segundo plano para llegada/salida automática del padre.
 - Auto-confirmación de recogida si el padre sale del perímetro sin confirmar.
