@@ -300,6 +300,16 @@
       to { opacity: 1; transform: translateY(0); }
     }
   }
+
+  @media print {
+    body { background: #ffffff; }
+    .wrap { padding: 0.4in 0.3in; max-width: 100%; }
+    .card { box-shadow: none; border: 1px solid #c7d3d5; break-inside: avoid; }
+    .copy-btn { display: none; }
+    .link-row { border-style: dashed; }
+    .link-row code { white-space: normal; overflow: visible; word-break: break-all; }
+    header { margin-bottom: 1.5rem; }
+  }
 </style>
 
 </head>
