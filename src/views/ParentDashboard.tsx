@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
+import { Share } from '@capacitor/share';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
@@ -399,7 +400,7 @@ export function ParentDashboard() {
     }
   }, [profile?.additional_tutor_name]);
 
-  const handleShareQR = (replacement: any) => {
+  const handleShareQR = async (replacement: any) => {
     const qrData = JSON.stringify({
       type: 'replacement_pickup',
       parent_id: profile.id,
@@ -408,15 +409,30 @@ export function ParentDashboard() {
       token: replacement.token,
       students: students.map(s => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }))
     });
-    
-    if (navigator.share) {
-      navigator.share({
-        title: 'Pase de Recogida - Safe SmartPickUP',
-        text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
-        url: window.location.origin + '/external?qr=' + encodeURIComponent(qrData)
-      }).catch(console.error);
-    } else {
-      alert("QR listo para ser escaneado desde tu pantalla.");
+    const url = window.location.origin + '/external?qr=' + encodeURIComponent(qrData);
+
+    // En apps nativas (Android/iOS) el WebView no siempre implementa la Web
+    // Share API del navegador, así que el share.can().value salía en false
+    // y no pasaba nada al tocar "Enviar". El plugin de Capacitor sí abre la
+    // hoja de compartir nativa (WhatsApp, SMS, etc.) en ambas plataformas.
+    try {
+      if (isNativeApp()) {
+        await Share.share({
+          title: 'Pase de Recogida - Safe SmartPickUP',
+          text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
+          url,
+        });
+      } else if (navigator.share) {
+        await navigator.share({
+          title: 'Pase de Recogida - Safe SmartPickUP',
+          text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
+          url,
+        });
+      } else {
+        alert("QR listo para ser escaneado desde tu pantalla.");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
