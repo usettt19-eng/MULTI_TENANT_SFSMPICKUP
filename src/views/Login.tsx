@@ -52,12 +52,15 @@ export function Login() {
     try {
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
       });
       if (otpError) throw otpError;
       setMagicLinkSent(true);
     } catch (err: any) {
-      setError(err?.message || 'No se pudo enviar el enlace de acceso.');
+      const message = /signups not allowed|user not found/i.test(err?.message || '')
+        ? 'Ese correo no está registrado en ningún colegio. Pide a tu administrador que te invite primero.'
+        : err?.message || 'No se pudo enviar el enlace de acceso.';
+      setError(message);
     } finally {
       setLoading(false);
     }
