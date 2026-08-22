@@ -649,23 +649,40 @@ export function ParentDashboard() {
   };
 
   const startLocationWatch = () => {
-    if ("geolocation" in navigator) {
-      watchId.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setParentPos({ lat: latitude, lng: longitude });
-          const dist = calculateDistance(latitude, longitude, schoolPosRef.current.lat, schoolPosRef.current.lng);
-          setDistance(dist);
-          setIsInside(dist <= schoolPosRef.current.radius);
-          setErrorMessage(null);
-        },
-        (error) => {
-          setErrorMessage("Permiso de ubicación denegado.");
-          setIsLocationEnabled(false);
-        },
-        { enableHighAccuracy: true }
-      );
+    if (!("geolocation" in navigator)) {
+      setErrorMessage("Este navegador no permite compartir ubicación.");
+      setIsLocationEnabled(false);
+      return;
     }
+
+    watchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setParentPos({ lat: latitude, lng: longitude });
+        const dist = calculateDistance(latitude, longitude, schoolPosRef.current.lat, schoolPosRef.current.lng);
+        setDistance(dist);
+        setIsInside(dist <= schoolPosRef.current.radius);
+        setErrorMessage(null);
+      },
+      (error) => {
+        // El código 1 (PERMISSION_DENIED) en iOS suele quedar así para
+        // siempre una vez negado: Safari no vuelve a mostrar el diálogo del
+        // sistema, así que hay que decirle al padre exactamente dónde
+        // activarlo a mano (o, si abrió el enlace dentro de otra app como
+        // Gmail/Outlook, que lo abra directo en Safari).
+        if (error.code === error.PERMISSION_DENIED) {
+          setErrorMessage(
+            'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización → Safari (páginas web) y actívalo. Si abriste el enlace desde otra app (Gmail, Outlook, etc.), ábrelo directo en Safari y vuelve a intentar.'
+          );
+        } else if (error.code === error.TIMEOUT) {
+          setErrorMessage("No se pudo obtener tu ubicación a tiempo. Verifica tu señal e intenta de nuevo.");
+        } else {
+          setErrorMessage("No se pudo obtener tu ubicación en este momento. Intenta de nuevo.");
+        }
+        setIsLocationEnabled(false);
+      },
+      { enableHighAccuracy: true }
+    );
   };
 
   const stopLocationWatch = () => {
