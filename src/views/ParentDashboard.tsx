@@ -672,7 +672,7 @@ export function ParentDashboard() {
         // Gmail/Outlook, que lo abra directo en Safari).
         if (error.code === error.PERMISSION_DENIED) {
           setErrorMessage(
-            'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización → Safari (páginas web) y actívalo. Si abriste el enlace desde otra app (Gmail, Outlook, etc.), ábrelo directo en Safari y vuelve a intentar.'
+            'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización y actívala si está apagada (interruptor arriba); luego, dentro de esa misma pantalla, busca Safari (páginas web) y ponlo en "Preguntar" o "Mientras se usa la app". Si abriste el enlace desde otra app (Gmail, Outlook, etc.), ábrelo directo en Safari y vuelve a intentar.'
           );
         } else if (error.code === error.TIMEOUT) {
           setErrorMessage("No se pudo obtener tu ubicación a tiempo. Verifica tu señal e intenta de nuevo.");
