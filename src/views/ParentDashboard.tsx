@@ -7,6 +7,7 @@ import { Share } from '@capacitor/share';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
+  isLikelyIOSInAppBrowser,
 } from '../lib/backgroundGeolocation';
 import { resolveResponsibleStaffIds } from '../lib/dismissalSchedule';
 import {
@@ -84,6 +85,7 @@ export function ParentDashboard() {
   // permiso "Permitir siempre" una vez, con una pantalla propia explicando
   // el motivo antes del prompt del sistema.
   const isNative = isNativeApp();
+  const isInAppBrowser = !isNative && isLikelyIOSInAppBrowser();
   const [showLocationRationale, setShowLocationRationale] = useState(false);
   const [isBackgroundTrackingActive, setIsBackgroundTrackingActive] = useState(false);
 
@@ -672,7 +674,9 @@ export function ParentDashboard() {
         // Gmail/Outlook, que lo abra directo en Safari).
         if (error.code === error.PERMISSION_DENIED) {
           setErrorMessage(
-            'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización y actívala si está apagada (interruptor arriba); luego, dentro de esa misma pantalla, busca Safari (páginas web) y ponlo en "Preguntar" o "Mientras se usa la app". Si abriste el enlace desde otra app (Gmail, Outlook, etc.), ábrelo directo en Safari y vuelve a intentar.'
+            isInAppBrowser
+              ? 'No se pudo activar la ubicación porque abriste el enlace dentro de Gmail/Correo, y ese navegador interno no puede pedir permiso de ubicación aunque tu iPhone lo tenga activado. Toca el botón de menú (⋯) o compartir arriba de la pantalla y elige "Abrir en Safari", y ahí sí funcionará.'
+              : 'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización y actívala si está apagada (interruptor arriba); luego, dentro de esa misma pantalla, busca Safari (páginas web) y ponlo en "Preguntar" o "Mientras se usa la app".'
           );
         } else if (error.code === error.TIMEOUT) {
           setErrorMessage("No se pudo obtener tu ubicación a tiempo. Verifica tu señal e intenta de nuevo.");
@@ -1017,6 +1021,13 @@ export function ParentDashboard() {
 
       <div className="max-w-md mx-auto p-6 space-y-6">
         
+        {isInAppBrowser && !isLocationEnabled && !errorMessage && (
+          <div className="bg-amber-50 text-amber-700 p-4 rounded-2xl text-xs font-bold flex items-center gap-3 border border-amber-100 animate-in slide-in-from-top-2">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            Parece que abriste este enlace dentro de Gmail o Correo. Para poder compartir tu ubicación con el colegio, toca el menú (⋯) o el ícono de compartir arriba y elige "Abrir en Safari".
+          </div>
+        )}
+
         {errorMessage && (
           <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 border border-red-100 animate-in slide-in-from-top-2">
             <AlertTriangle className="w-5 h-5" />

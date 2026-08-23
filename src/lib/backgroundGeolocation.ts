@@ -39,6 +39,24 @@ export function isNativeApp(): boolean {
   return Capacitor.isNativePlatform();
 }
 
+/**
+ * Detecta el navegador embebido de apps como Gmail o Correo en iOS: a
+ * diferencia de Safari real, ese WebView casi nunca puede conceder permiso
+ * de ubicación aunque el padre tenga todo activado en Ajustes — hay que
+ * abrir el enlace directo en Safari para que funcione.
+ */
+export function isLikelyIOSInAppBrowser(): boolean {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua);
+  if (!isIOS) return false;
+  // Safari real siempre trae "Version/X" junto a "Safari/Y"; los WebView
+  // embebidos de otras apps (Gmail, Correo, redes sociales) casi nunca lo
+  // incluyen, o traen su propia marca (FBAN/FBAV, Instagram, GSA, etc.).
+  const hasSafariVersionTag = /Version\/[\d.]+.*Safari/.test(ua);
+  const knownEmbeddedMarkers = /FBAN|FBAV|Instagram|Line\/|GSA\/|EdgiOS|OPT\/|Twitter|Snapchat/.test(ua);
+  return knownEmbeddedMarkers || !hasSafariVersionTag;
+}
+
 export function hasSeenLocationRationale(): boolean {
   return localStorage.getItem(RATIONALE_SEEN_KEY) === 'true';
 }
