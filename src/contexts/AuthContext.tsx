@@ -191,7 +191,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*, tenant:tenants(*)')
+        // Hint de FK explícito: desde que existe staff_school_access
+        // (también relaciona profiles<->tenants, vía staff_id/tenant_id),
+        // PostgREST ve DOS caminos posibles entre profiles y tenants y
+        // responde 300 "ambiguous embed" sin el hint — tumbaba el login de
+        // TODOS los usuarios, no solo el de un colegio en particular.
+        .select('*, tenant:tenants!profiles_tenant_id_fkey(*)')
         .eq('id', userId);
 
       if (error) {
