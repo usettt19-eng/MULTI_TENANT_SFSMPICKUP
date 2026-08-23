@@ -1,6 +1,6 @@
 import express from 'express';
 import {admin} from './supabase.js';
-import {fail, isAdminOf, isStaffOf, ok, requireAuth, requireSuperAdmin} from './auth.js';
+import {fail, isAdminOf, isStaffOf, ok, requireAuth, requireSuperAdmin, resolveTenantId} from './auth.js';
 
 const app = express();
 app.use(express.json({limit: '10mb'})); // las fotos llegan en base64
@@ -222,7 +222,7 @@ app.post(
     const body = req.body ?? {};
     // El colegio lo decide el llamante, NO el cuerpo de la petición: si no,
     // un admin podría crear padres en otro colegio enviando otro tenant_id.
-    const tenantId = req.caller!.role === 'super_admin' ? body.tenant_id : req.caller!.tenantId;
+    const tenantId = resolveTenantId(req.caller, body.tenant_id);
 
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
     if (!body.email) return fail(res, 400, 'Falta el correo.');
@@ -326,7 +326,7 @@ app.post(
 
     // Mismo motivo que /api/parents: el colegio lo decide el llamante, no
     // el cuerpo, salvo que sea super_admin operando sobre otro colegio.
-    const tenantId = req.caller!.role === 'super_admin' ? req.body?.tenant_id : req.caller!.tenantId;
+    const tenantId = resolveTenantId(req.caller, req.body?.tenant_id);
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'Sin permisos en ese colegio.');
 
     const created: unknown[] = [];
@@ -427,11 +427,40 @@ app.post(
   requireAuth,
   wrap(async (req, res) => {
     const body = req.body ?? {};
-    const tenantId = req.caller!.role === 'super_admin' ? body.tenant_id : req.caller!.tenantId;
+    const tenantId = resolveTenantId(req.caller, body.tenant_id);
 
     // Crear personal es más sensible que crear padres: exige ser admin.
     if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
     if (!body.email) return fail(res, 400, 'Falta el correo.');
+
+    // Si el correo ya tiene cuenta (típicamente porque es personal de OTRO
+    // colegio de la misma organización), no se le invita de nuevo ni se toca
+    // su perfil "de casa": se le concede acceso a este colegio vía
+    // staff_school_access (ver AuthContext.switchStaffSchool en el frontend).
+    const {data: existing, error: existingError} = await admin
+      .from('profiles')
+      .select('id, tenant_id')
+      .eq('email', body.email)
+      .maybeSingle();
+    if (existingError) return fail(res, 500, existingError.message);
+
+    if (existing) {
+      if (existing.tenant_id === tenantId) {
+        return fail(res, 409, 'Ese correo ya es personal de este colegio.');
+      }
+      const {error: grantError} = await admin.from('staff_school_access').upsert(
+        {
+          staff_id: existing.id,
+          tenant_id: tenantId,
+          role: 'admin',
+          permissions: body.permissions ?? [],
+          granted_by: req.caller!.id,
+        },
+        {onConflict: 'staff_id,tenant_id'},
+      );
+      if (grantError) return fail(res, 500, grantError.message);
+      return ok(res, {granted_existing: true, staff_id: existing.id});
+    }
 
     const {data: created, error} = await admin.auth.admin.inviteUserByEmail(body.email, {
       redirectTo: process.env.PUBLIC_APP_URL || undefined,
@@ -481,10 +510,11 @@ app.post(
     if (rows.length === 0) return fail(res, 400, 'No se recibió ningún miembro del personal.');
     if (rows.length > 500) return fail(res, 400, 'Máximo 500 filas por importación.');
 
-    const tenantId = req.caller!.role === 'super_admin' ? req.body?.tenant_id : req.caller!.tenantId;
+    const tenantId = resolveTenantId(req.caller, req.body?.tenant_id);
     if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
 
     const created: unknown[] = [];
+    const granted: unknown[] = [];
     const failed: {email: string; error: string}[] = [];
 
     // Secuencial a propósito: en paralelo se dispara el rate limit de Auth
@@ -492,6 +522,40 @@ app.post(
     for (const r of rows) {
       if (!r?.email) {
         failed.push({email: '(sin correo)', error: 'Falta el correo'});
+        continue;
+      }
+
+      // Mismo criterio que /api/staff: un correo que ya tiene cuenta en otro
+      // colegio recibe acceso concedido, no una invitación nueva.
+      const {data: existing, error: existingError} = await admin
+        .from('profiles')
+        .select('id, tenant_id')
+        .eq('email', r.email)
+        .maybeSingle();
+      if (existingError) {
+        failed.push({email: r.email, error: existingError.message});
+        continue;
+      }
+      if (existing) {
+        if (existing.tenant_id === tenantId) {
+          failed.push({email: r.email, error: 'Ya es personal de este colegio'});
+          continue;
+        }
+        const {error: grantError} = await admin.from('staff_school_access').upsert(
+          {
+            staff_id: existing.id,
+            tenant_id: tenantId,
+            role: 'admin',
+            permissions: Array.isArray(r.permissions) ? r.permissions : [],
+            granted_by: req.caller!.id,
+          },
+          {onConflict: 'staff_id,tenant_id'},
+        );
+        if (grantError) {
+          failed.push({email: r.email, error: grantError.message});
+        } else {
+          granted.push({id: existing.id, email: r.email});
+        }
         continue;
       }
 
@@ -527,7 +591,7 @@ app.post(
       created.push({id: user.user.id, email: r.email});
     }
 
-    return ok(res, {created: created.length, failed});
+    return ok(res, {created: created.length, granted: granted.length, failed});
   }),
 );
 
@@ -592,6 +656,30 @@ app.delete(
 
     await admin.from('profiles').delete().eq('id', id);
     return ok(res, {id});
+  }),
+);
+
+/**
+ * Revoca el acceso concedido de un staff a un colegio que NO es el suyo
+ * (ver /api/staff y staff_school_access) — a diferencia de DELETE
+ * /api/staff/:id, esto NO borra la cuenta ni su perfil "de casa", solo
+ * la fila de acceso a este colegio en particular.
+ */
+app.delete(
+  '/api/staff/school-access/:staffId/:tenantId',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {staffId, tenantId} = req.params;
+    if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
+
+    const {error} = await admin
+      .from('staff_school_access')
+      .delete()
+      .eq('staff_id', staffId)
+      .eq('tenant_id', tenantId);
+
+    if (error) return fail(res, 500, error.message);
+    return ok(res, {staff_id: staffId, tenant_id: tenantId});
   }),
 );
 

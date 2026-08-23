@@ -43,8 +43,16 @@ export function StaffManagement() {
     permissions: [] as string[]
   });
 
+  // Personal que ya tenía cuenta en OTRO colegio y al que se le dio acceso a
+  // este también (ver /api/staff y tabla staff_school_access) — no aparece
+  // en `staff` porque su fila de profiles sigue perteneciendo a su colegio
+  // de casa.
+  const [grantedAccess, setGrantedAccess] = useState<any[]>([]);
+  const [revokingStaffId, setRevokingStaffId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchStaff();
+    fetchGrantedAccess();
   }, [profile?.tenant_id]);
 
   const fetchStaff = async () => {
@@ -70,6 +78,31 @@ export function StaffManagement() {
       setStaff(staffUsers);
     }
     setLoading(false);
+  };
+
+  const fetchGrantedAccess = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('staff_school_access')
+      .select('staff_id, created_at, staff:profiles!staff_school_access_staff_id_fkey(first_name, last_name, email)')
+      .eq('tenant_id', profile.tenant_id)
+      .order('created_at', { ascending: false });
+    setGrantedAccess(data || []);
+  };
+
+  const handleRevokeAccess = async (staffId: string) => {
+    if (!profile?.tenant_id) return;
+    setRevokingStaffId(staffId);
+    try {
+      const res = await apiFetch(`/api/staff/school-access/${staffId}/${profile.tenant_id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al revocar el acceso');
+      setGrantedAccess(prev => prev.filter(g => g.staff_id !== staffId));
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setRevokingStaffId(null);
+    }
   };
 
   const handleTogglePermission = (moduleId: string) => {
@@ -110,6 +143,12 @@ export function StaffManagement() {
         });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'Error de permisos o falta de Backend (Verifique VITE_SUPABASE_SERVICE_KEY en .env)');
+
+        // Ese correo ya tenía cuenta (típicamente personal de otro colegio):
+        // se le dio acceso a este, sin mandarle una invitación nueva.
+        if (json.data?.granted_existing) {
+          alert('Ese correo ya tenía cuenta en otro colegio — se le dio acceso a este también, con el mismo correo y contraseña de siempre.');
+        }
       }
 
       setIsModalOpen(false);
@@ -211,6 +250,7 @@ export function StaffManagement() {
       }
 
       let totalCreated = 0;
+      let totalGranted = 0;
       const allFailed: any[] = [];
       setImportProgress({ done: 0, total: rows.length });
 
@@ -224,17 +264,21 @@ export function StaffManagement() {
           const json = await res.json();
           if (!res.ok || !json.success) throw new Error(json.error || 'Error al importar');
 
-          const { created: createdCount, failed } = json.data || {};
+          const { created: createdCount, granted: grantedCount, failed } = json.data || {};
           totalCreated += createdCount || 0;
+          totalGranted += grantedCount || 0;
           if (failed?.length) allFailed.push(...failed);
 
           setImportProgress(prev => prev ? { ...prev, done: prev.done + batch.length } : prev);
         }
 
+        const grantedNote = totalGranted > 0
+          ? `\n${totalGranted} ya tenían cuenta en otro colegio y se les dio acceso a este.`
+          : '';
         const message = allFailed.length > 0
-          ? `Se crearon ${totalCreated} de ${rows.length}.\n\nNo se pudieron crear ${allFailed.length}:\n` +
+          ? `Se crearon ${totalCreated} de ${rows.length}.${grantedNote}\n\nNo se pudieron crear ${allFailed.length}:\n` +
             allFailed.map((f: any) => `• ${f.email}: ${f.error}`).join('\n')
-          : `Se crearon ${totalCreated} miembros del personal correctamente.`;
+          : `Se crearon ${totalCreated} miembros del personal correctamente.${grantedNote}`;
         alert(message);
         fetchStaff();
       } catch (error: any) {
@@ -385,6 +429,42 @@ export function StaffManagement() {
               );
             })}
           </div>
+        )}
+
+        {grantedAccess.length > 0 && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-800">
+                Acceso de otros colegios <span className="text-xs font-bold text-slate-400">({grantedAccess.length})</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Ya tienen cuenta en otro colegio de la organización y se les dio acceso a este también.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {grantedAccess.map((g: any) => (
+                <div key={g.staff_id} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 shrink-0 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-black text-slate-800 text-sm truncate">{g.staff?.first_name} {g.staff?.last_name}</h3>
+                      <p className="text-xs font-bold text-slate-400 truncate">{g.staff?.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRevokeAccess(g.staff_id)}
+                    disabled={revokingStaffId === g.staff_id}
+                    className="shrink-0 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
+                    title="Revocar acceso a este colegio"
+                  >
+                    {revokingStaffId === g.staff_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </div>
 

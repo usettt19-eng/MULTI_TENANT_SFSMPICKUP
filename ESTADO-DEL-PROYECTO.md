@@ -341,6 +341,34 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - `SuperAdminDashboard` ahora muestra el administrador principal de cada
   colegio (nombre, correo, teléfono).
 
+### Staff en más de un colegio de la misma organización (agosto 2026)
+- Tabla nueva `staff_school_access` (`staff_id, tenant_id, role, permissions,
+  granted_by`) para dar acceso a un colegio ADEMÁS del propio, sin duplicar
+  la fila en `profiles` — se evaluó y descartó darle a una persona 2 filas en
+  `profiles` (una por colegio) porque ~18 foreign keys de otras tablas
+  (`dismissal_assignments.staff_id`, `student_incidents.reported_by`,
+  `wellness_logs.logged_by`, etc.) apuntan a `profiles.id` asumiendo una sola
+  fila por persona.
+- `is_staff_of()`/`user_tenant_ids()` (las funciones RLS centrales) ahora
+  también consultan `staff_school_access`, así que el acceso se propaga solo
+  a casi todas las políticas del esquema sin tocarlas una por una.
+- Mismo patrón que "Entrar como Admin": el frontend "disfraza" el `profile`
+  activo con el colegio concedido (`AuthContext.switchStaffSchool`), sin
+  crear una segunda cuenta ni tocar el perfil real. Selector de colegio en
+  `ImpersonationBanner.tsx` (antes solo mostraba el aviso de super_admin).
+- `POST /api/staff` y `/api/staff/bulk`: si el correo ya tiene cuenta (típico
+  de alguien que ya es personal de otro colegio), en vez de fallar con "ya
+  existe" se le concede acceso al colegio nuevo (`staff_school_access`) sin
+  mandar invitación ni tocar su cuenta original.
+- `server/src/auth.ts`: `Caller.grants` + `resolveTenantId()` reemplaza el
+  patrón repetido `role === 'super_admin' ? body.tenant_id : caller.tenantId`
+  en los 4 endpoints que lo usaban (`/api/parents`, `/api/parents/bulk`,
+  `/api/staff`, `/api/staff/bulk`), para que también honre el acceso
+  concedido y no solo al super_admin.
+- `StaffManagement.tsx`: sección "Acceso de otros colegios" para que el admin
+  vea y revoque (`DELETE /api/staff/school-access/:staffId/:tenantId`) los
+  accesos concedidos a su colegio.
+
 ### Configuración escolar (grados, secciones, horarios)
 - Horario de salida por grado/sección/día (con excepciones de un día) —
   tabla `dismissal_assignments` + `dismissal_overrides`.
@@ -459,6 +487,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 |---|---|---|
 | `tenants` | `id, name, domain, status, subscription_plan, created_at, updated_at` | La tabla raíz del multi-tenant |
 | `profiles` | `id, role(user_role), first_name, last_name, phone, created_at, updated_at, pin_code, photo_url, email, additional_tutor_name, additional_tutor_phone, tenant_id` | `PRIMARY KEY (id)` — un padre con hijos en 2 colegios comparte una sola fila; `additional_tutor_name` guarda JSON con `{is_staff, permissions}` para el personal que no es `admin`/`teacher`/`guard` |
+| `staff_school_access` | `staff_id, tenant_id, role, permissions jsonb, granted_by, created_at` | `PRIMARY KEY (staff_id, tenant_id)` — acceso de un staff a un colegio ADEMÁS del suyo (`profiles.tenant_id`), sin duplicar su perfil |
 | `students` | `id, first_name, last_name, grade, section, created_at, photo_url, tenant_id` | |
 | `parent_students` | `parent_id, student_id` | Sin `id` propio, sin `tenant_id` — es la tabla puente |
 | `school_grades` | `id, name, level_order, created_at, updated_at, tenant_id, stage, exit_time, sections text[]` | `sections` agregada 2026-08-19 (antes no persistía) |

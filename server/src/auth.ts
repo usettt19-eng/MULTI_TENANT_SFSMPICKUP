@@ -8,6 +8,10 @@ export interface Caller {
   role: 'parent' | 'admin' | 'super_admin';
   tenantId: string | null;
   isStaff: boolean;
+  // Colegios ADEMÁS del propio a los que se le concedió acceso (ver tabla
+  // staff_school_access) — personal que trabaja en más de un colegio de la
+  // misma organización, sin tener una segunda fila en `profiles`.
+  grants: {tenantId: string; role: 'admin' | 'staff'}[];
 }
 
 declare global {
@@ -78,12 +82,18 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     isStaffFlag = false;
   }
 
+  const {data: grantRows} = await admin
+    .from('staff_school_access')
+    .select('tenant_id, role')
+    .eq('staff_id', profile.id);
+
   req.caller = {
     id: profile.id,
     email: profile.email,
     role: profile.role,
     tenantId: profile.tenant_id,
     isStaff: profile.role === 'admin' || profile.role === 'super_admin' || isStaffFlag,
+    grants: (grantRows ?? []).map((g) => ({tenantId: g.tenant_id, role: g.role as 'admin' | 'staff'})),
   };
 
   return next();
@@ -102,7 +112,8 @@ export function isStaffOf(caller: Caller | undefined, tenantId: string | null | 
   if (!caller) return false;
   if (caller.role === 'super_admin') return true;
   if (!tenantId) return false;
-  return caller.isStaff && caller.tenantId === tenantId;
+  if (caller.isStaff && caller.tenantId === tenantId) return true;
+  return caller.grants.some((g) => g.tenantId === tenantId);
 }
 
 /** Admin del colegio (no basta con ser personal). */
@@ -110,5 +121,19 @@ export function isAdminOf(caller: Caller | undefined, tenantId: string | null | 
   if (!caller) return false;
   if (caller.role === 'super_admin') return true;
   if (!tenantId) return false;
-  return caller.role === 'admin' && caller.tenantId === tenantId;
+  if (caller.role === 'admin' && caller.tenantId === tenantId) return true;
+  return caller.grants.some((g) => g.tenantId === tenantId && g.role === 'admin');
+}
+
+/**
+ * Colegio sobre el que opera la petición: el que pide el cuerpo, SI el
+ * llamante tiene acceso legítimo a él (su propio colegio, uno concedido, o
+ * cualquiera si es super_admin); si no, cae al colegio de casa del llamante.
+ * Reemplaza el patrón repetido `role === 'super_admin' ? body.tenant_id :
+ * caller.tenantId`, que ignoraba el acceso concedido a un segundo colegio.
+ */
+export function resolveTenantId(caller: Caller | undefined, bodyTenantId?: string | null): string | null {
+  if (!caller) return null;
+  if (bodyTenantId && isStaffOf(caller, bodyTenantId)) return bodyTenantId;
+  return caller.tenantId;
 }

@@ -27,6 +27,11 @@ interface AuthContextType {
   isImpersonating: boolean;
   enterTenantAsAdmin: (tenantId: string) => Promise<void>;
   exitImpersonation: () => void;
+  // Colegios extra a los que este staff tiene acceso concedido (además del
+  // suyo propio), y el mecanismo para "estar" en uno de ellos.
+  schoolAccessGrants: {tenant_id: string; tenant_name: string; role: 'admin' | 'staff'; permissions: string[]}[];
+  activeGrantTenantId: string | null;
+  switchStaffSchool: (tenantId: string | null) => void;
   error: string | null;
   // 'invite' | 'recovery' | null — set when the session came from an invite
   // or password-reset link, so the app can prompt for a password before
@@ -47,6 +52,9 @@ const AuthContext = createContext<AuthContextType>({
   isImpersonating: false,
   enterTenantAsAdmin: async () => {},
   exitImpersonation: () => {},
+  schoolAccessGrants: [],
+  activeGrantTenantId: null,
+  switchStaffSchool: () => {},
   error: null,
   authRedirectType: null,
   clearAuthRedirectType: () => {},
@@ -60,6 +68,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authRedirectType, setAuthRedirectType] = useState<string | null>(null);
+
+  // Colegios ADEMÁS del propio a los que este staff tiene acceso concedido
+  // (ver tabla staff_school_access) — típico de personal que trabaja en más
+  // de un colegio de la misma organización.
+  const [schoolAccessGrants, setSchoolAccessGrants] = useState<
+    {tenant_id: string; tenant_name: string; role: 'admin' | 'staff'; permissions: string[]}[]
+  >([]);
+  const [activeGrantTenantId, setActiveGrantTenantId] = useState<string | null>(null);
 
   // "Entrar como Admin": el super admin puede meterse a las pantallas
   // normales de administración de un colegio puntual (para hacer la
@@ -77,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthRedirectType((prev) => prev ?? passwordSetupTypeFor('INITIAL_SESSION', session));
       if (session?.user) {
         fetchProfiles(session.user.id);
+        fetchSchoolAccessGrants(session.user.id);
       } else {
         setLoading(false);
       }
@@ -88,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfiles([]);
         setProfile(null);
         setAuthRedirectType(null);
+        setSchoolAccessGrants([]);
+        setActiveGrantTenantId(null);
       }
       const redirectType = passwordSetupTypeFor(_event, session);
       if (redirectType) setAuthRedirectType(redirectType);
@@ -95,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfiles(session.user.id);
+        fetchSchoolAccessGrants(session.user.id);
       } else {
         setProfile(null);
         setProfiles([]);
@@ -145,9 +165,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // perfil expuesto. RLS y el backend ya tratan a super_admin como
   // autorizado en cualquier colegio (ver is_staff_of()/isStaffOf()), así que
   // esto es puramente cosmético del lado del cliente, no un permiso nuevo.
+  // Igual que la impersonación de super_admin: "disfraza" el perfil activo
+  // con el colegio concedido, sin tocar la fila real de `profiles`. RLS ya
+  // reconoce el acceso concedido (is_staff_of() consulta staff_school_access),
+  // así que esto solo hace que el resto de la app (que lee profile.tenant_id
+  // a ciegas) opere sobre el colegio correcto.
+  const activeGrant = activeGrantTenantId
+    ? schoolAccessGrants.find((g) => g.tenant_id === activeGrantTenantId)
+    : null;
+
   const effectiveProfile: Profile | null =
     profile?.role === 'super_admin' && impersonatedTenant
       ? ({ ...profile, tenant_id: impersonatedTenant.id, tenant: impersonatedTenant as any, role: 'admin' } as Profile)
+      : activeGrant
+      ? ({
+          ...profile,
+          tenant_id: activeGrant.tenant_id,
+          tenant: { id: activeGrant.tenant_id, name: activeGrant.tenant_name } as any,
+          role: 'admin',
+          additional_tutor_name: JSON.stringify({ is_staff: true, permissions: activeGrant.permissions }),
+        } as any as Profile)
       : profile;
 
   async function fetchProfiles(userId: string) {
@@ -163,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (data) {
         setError(null);
         setProfiles(data as Profile[]);
-        
+
         // Try to restore previous active profile/tenant from localStorage
         const savedTenantId = localStorage.getItem(`active_tenant_${userId}`);
         const active = data.find((p: any) => p.tenant_id === savedTenantId) || data[0];
@@ -176,12 +213,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function fetchSchoolAccessGrants(userId: string) {
+    const { data, error } = await supabase
+      .from('staff_school_access')
+      .select('tenant_id, role, permissions, tenant:tenants(name)')
+      .eq('staff_id', userId);
+
+    if (error) {
+      console.error('Error fetching staff_school_access:', error);
+      return;
+    }
+
+    const grants = (data ?? []).map((row: any) => ({
+      tenant_id: row.tenant_id,
+      tenant_name: row.tenant?.name ?? 'Colegio',
+      role: row.role,
+      permissions: Array.isArray(row.permissions) ? row.permissions : [],
+    }));
+    setSchoolAccessGrants(grants);
+
+    const saved = localStorage.getItem(`granted_school_${userId}`);
+    if (saved && grants.some((g) => g.tenant_id === saved)) {
+      setActiveGrantTenantId(saved);
+    }
+  }
+
   const switchProfile = (tenantId: string) => {
     const newProfile = profiles.find(p => p.tenant_id === tenantId);
     if (newProfile && user) {
       setProfile(newProfile);
       localStorage.setItem(`active_tenant_${user.id}`, tenantId);
     }
+  };
+
+  // Para el staff con acceso concedido a un segundo colegio: pasar `null` (o
+  // el tenant_id de su colegio de casa) vuelve a su perfil real.
+  const switchStaffSchool = (tenantId: string | null) => {
+    if (!user) return;
+    if (!tenantId || tenantId === profile?.tenant_id) {
+      setActiveGrantTenantId(null);
+      localStorage.removeItem(`granted_school_${user.id}`);
+      return;
+    }
+    const grant = schoolAccessGrants.find((g) => g.tenant_id === tenantId);
+    if (!grant) return;
+    setActiveGrantTenantId(tenantId);
+    localStorage.setItem(`granted_school_${user.id}`, tenantId);
   };
 
   const signOut = async () => {
@@ -211,6 +288,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isImpersonating: !!impersonatedTenant,
         enterTenantAsAdmin,
         exitImpersonation,
+        schoolAccessGrants,
+        activeGrantTenantId,
+        switchStaffSchool,
         error,
         authRedirectType,
         clearAuthRedirectType,
