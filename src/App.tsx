@@ -29,7 +29,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
   const [isLandingRoute, setIsLandingRoute] = useState(false);
-  const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType } = useAuth() as any;
+  const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType, error: authError } = useAuth() as any;
 
   useEffect(() => {
     // Check if we are on the /external route with a qr parameter
@@ -94,6 +94,9 @@ export default function App() {
           <p className="text-slate-500">
             Hubo un problema de conexión al cargar tu cuenta. Intenta de nuevo o cierra sesión y vuelve a entrar.
           </p>
+          {authError && (
+            <p className="mt-3 text-xs font-mono text-red-500 bg-red-50 rounded-lg p-2 break-all">{authError}</p>
+          )}
           <div className="mt-6 flex flex-col gap-2">
             <button
               onClick={() => window.location.reload()}
