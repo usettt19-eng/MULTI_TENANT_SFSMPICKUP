@@ -79,6 +79,40 @@ export default function App() {
     return <SetPassword type={authRedirectType} onDone={clearAuthRedirectType} />;
   }
 
+  // Hay sesión pero no se pudo cargar el perfil (fallo de red al consultar
+  // `profiles`, o la fila realmente no existe). SIN este freno, el código de
+  // abajo trataba "sin perfil" igual que "admin sin restricciones": caía de
+  // largo hasta el Layout normal con el sidebar completo y CUALQUIER vista
+  // navegable, sin ningún chequeo de permisos — un vacío de seguridad a
+  // nivel de UI (los datos seguían protegidos por RLS, pero la navegación
+  // no debería depender de eso).
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md">
+          <h2 className="text-2xl font-black text-slate-800 mb-2">No se pudo cargar tu perfil</h2>
+          <p className="text-slate-500">
+            Hubo un problema de conexión al cargar tu cuenta. Intenta de nuevo o cierra sesión y vuelve a entrar.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold w-full"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="text-slate-400 font-bold text-sm w-full"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // STRICT REDIRECT FOR SUPER ADMIN — a menos que haya "entrado" a un
   // colegio puntual (ver AuthContext.enterTenantAsAdmin), en cuyo caso
   // `profile` ya viene disfrazado de admin de ese tenant y sigue de largo
