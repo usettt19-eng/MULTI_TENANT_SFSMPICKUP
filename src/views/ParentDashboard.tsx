@@ -9,7 +9,6 @@ import {
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
   isLikelyIOSInAppBrowser,
 } from '../lib/backgroundGeolocation';
-import { resolveResponsibleStaffIds } from '../lib/dismissalSchedule';
 import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
@@ -864,27 +863,19 @@ export function ParentDashboard() {
       // hoy (excepción del día, si hay, si no el horario semanal). No
       // reemplaza la cola compartida que ya ven recepción y administración —
       // solo se suma para avisar directamente a la persona correcta.
+      //
+      // El padre no tiene permiso (RLS) para insertar una notificación
+      // dirigida a OTRO usuario (solo a sí mismo, o si fuera staff) — insertar
+      // esto directo desde aquí fallaba en silencio para TODOS los avisos de
+      // llegada. Por eso pasa por el backend, igual que el aviso de pool day
+      // al admin un poco más abajo.
       try {
         const isCarpool = !!(student as any)._isCarpool;
-        const carpoolParent = (student as any)._carpoolAuthorizingParent;
-        const carpoolNote = isCarpool && carpoolParent
-          ? ` (Pool day: recoge en lugar de ${carpoolParent.first_name} ${carpoolParent.last_name}.)`
-          : '';
 
-        const responsibleStaffIds = await resolveResponsibleStaffIds(
-          profile.tenant_id, student.grade, student.section, 'regular',
-        );
-        if (responsibleStaffIds.length > 0) {
-          await supabase.from('notifications').insert(
-            responsibleStaffIds.map(staffId => ({
-              user_id: staffId,
-              title: `${profile.first_name} ${profile.last_name} llegó`,
-              message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
-              type: 'info',
-              tenant_id: profile.tenant_id,
-            }))
-          );
-        }
+        await apiFetch('/api/pickup/notify-staff', {
+          method: 'POST',
+          body: JSON.stringify({ student_id: student.id }),
+        });
 
         // El padre no tiene permiso para leer la lista de administradores
         // (RLS), así que el aviso al admin de que hoy aplica un pool day pasa

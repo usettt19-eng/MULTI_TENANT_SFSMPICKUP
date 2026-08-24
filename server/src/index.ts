@@ -799,6 +799,132 @@ app.post(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// AVISO DE LLEGADA AL PERSONAL ENCARGADO DE LA SALIDA
+// ════════════════════════════════════════════════════════════════════════════
+//
+// El padre anuncia su llegada desde su navegador (clave anon + RLS), que solo
+// deja insertar en `notifications` filas para uno mismo o si eres staff — un
+// padre no puede crear una notificación dirigida al personal. Por eso este
+// aviso pasa por aquí (service_role), igual que /api/carpool/pickup-notify.
+
+app.post(
+  '/api/pickup/notify-staff',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    const {student_id} = req.body ?? {};
+    if (!tenantId || !student_id) return fail(res, 400, 'Falta el alumno.');
+
+    const todayDow = new Date().getDay();
+
+    const [{data: link}, {data: student}, {data: override}, {data: authorization}, {data: parent}] =
+      await Promise.all([
+        admin
+          .from('parent_students')
+          .select('student_id')
+          .eq('parent_id', req.caller!.id)
+          .eq('student_id', student_id)
+          .maybeSingle(),
+        admin.from('students').select('first_name, last_name, grade, section').eq('id', student_id).eq('tenant_id', tenantId).maybeSingle(),
+        admin
+          .from('carpool_overrides')
+          .select(`driver_parent_id, authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(first_name, last_name)`)
+          .eq('tenant_id', tenantId)
+          .eq('student_id', student_id)
+          .eq('override_date', todayStr())
+          .maybeSingle(),
+        admin
+          .from('carpool_authorizations')
+          .select(`driver_parent_id, authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(first_name, last_name)`)
+          .eq('tenant_id', tenantId)
+          .eq('student_id', student_id)
+          .eq('day_of_week', todayDow)
+          .maybeSingle(),
+        admin.from('profiles').select('first_name, last_name').eq('id', req.caller!.id).maybeSingle(),
+      ]);
+
+    if (!student) return fail(res, 404, 'Alumno no encontrado.');
+
+    // Mismo criterio que /api/carpool/pickup-notify: la excepción del día
+    // manda sobre el recurrente semanal.
+    const carpoolMatch: any =
+      (override as any)?.driver_parent_id === req.caller!.id
+        ? override
+        : (authorization as any)?.driver_parent_id === req.caller!.id
+          ? authorization
+          : null;
+
+    // Solo el padre/tutor real, o quien tiene pool day autorizado hoy, puede
+    // disparar este aviso.
+    if (!link && !carpoolMatch) return fail(res, 403, 'No tienes autorización sobre ese alumno.');
+
+    const {data: grade} = await admin
+      .from('school_grades')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('name', student.grade ?? '')
+      .maybeSingle();
+
+    let staffIds: string[] = [];
+    if (grade) {
+      const dateStr = todayStr();
+      const sectionValue = (student.section || '').trim();
+      const pickExact = (rows: any[]) => rows.find((r) => r.section === sectionValue) || rows[0];
+
+      const {data: assignmentRows} = await admin
+        .from('dismissal_assignments')
+        .select('staff_id, staff_id_2, section')
+        .eq('tenant_id', tenantId)
+        .eq('grade_id', grade.id)
+        .eq('schedule_type', 'regular')
+        .eq('day_of_week', todayDow)
+        .in('section', sectionValue ? [sectionValue, ''] : ['']);
+
+      const assignment = assignmentRows && assignmentRows.length > 0 ? pickExact(assignmentRows) : undefined;
+      let slot1: string | null = assignment?.staff_id ?? null;
+      let slot2: string | null = assignment?.staff_id_2 ?? null;
+
+      const {data: overrideRows} = await admin
+        .from('dismissal_overrides')
+        .select('staff_id, section, slot')
+        .eq('tenant_id', tenantId)
+        .eq('grade_id', grade.id)
+        .eq('schedule_type', 'regular')
+        .eq('override_date', dateStr)
+        .in('section', sectionValue ? [sectionValue, ''] : ['']);
+
+      if (overrideRows && overrideRows.length > 0) {
+        const slot1Overrides = overrideRows.filter((o) => o.slot === 1);
+        const slot2Overrides = overrideRows.filter((o) => o.slot === 2);
+        if (slot1Overrides.length > 0) slot1 = pickExact(slot1Overrides)!.staff_id;
+        if (slot2Overrides.length > 0) slot2 = pickExact(slot2Overrides)!.staff_id;
+      }
+
+      staffIds = Array.from(new Set([slot1, slot2].filter((id): id is string => !!id)));
+    }
+
+    if (staffIds.length > 0) {
+      const parentName = parent ? `${parent.first_name ?? ''} ${parent.last_name ?? ''}`.trim() : 'El padre/tutor';
+      const carpoolNote = carpoolMatch
+        ? ` (Pool day: recoge en lugar de ${carpoolMatch.authorizing?.first_name ?? ''} ${carpoolMatch.authorizing?.last_name ?? ''}.)`
+        : '';
+
+      await admin.from('notifications').insert(
+        staffIds.map((staffId) => ({
+          user_id: staffId,
+          title: `${parentName} llegó`,
+          message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
+          type: 'info',
+          tenant_id: tenantId,
+        })),
+      );
+    }
+
+    return ok(res);
+  }),
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // POOL DAY (CARPOOL)
 // ════════════════════════════════════════════════════════════════════════════
 //
