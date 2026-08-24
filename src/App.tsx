@@ -23,12 +23,10 @@ import { useAuth } from './contexts/AuthContext';
 import { Login } from './views/Login';
 import { SetPassword } from './views/SetPassword';
 import { SharedQRDisplay } from './views/SharedQRDisplay';
-import { LandingPage } from './views/LandingPage';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
-  const [isLandingRoute, setIsLandingRoute] = useState(false);
   const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType, error: authError } = useAuth() as any;
 
   useEffect(() => {
@@ -37,8 +35,6 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     if (path === '/external' && params.has('qr')) {
       setIsSharedQRRoute(true);
-    } else if (path === '/' && !session) {
-      setIsLandingRoute(true);
     }
   }, [session]);
 
@@ -58,14 +54,12 @@ export default function App() {
     );
   }
 
+  // Sin sesión, siempre a login directo — no a una página de marketing. Ahí
+  // llega cualquiera que abrió un enlace mágico desde otro navegador/app (el
+  // intercambio de PKCE falla si no es el mismo navegador que lo pidió) y
+  // también alguien que ya tiene cuenta y solo escribió el dominio; ambos
+  // casos son gente que YA es del colegio, no un visitante nuevo.
   if (!session) {
-    if (isLandingRoute || window.location.pathname === '/') {
-      return (
-        <>
-          <LandingPage />
-        </>
-      );
-    }
     return (
       <>
         <Login />

@@ -11,7 +11,18 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    // PKCE exige que el enlace mágico se abra en el MISMO navegador que lo
+    // pidió (el "code_verifier" vive en su localStorage). Los padres piden
+    // el enlace desde el navegador y lo tocan desde la app de Correo/Gmail,
+    // que casi siempre lo abre en otro contexto — el intercambio fallaba en
+    // silencio y los mandaba sin sesión a la página inicial. Con 'implicit'
+    // el token viaja directo en la URL del enlace, sin depender de nada
+    // guardado localmente, así que funciona sin importar dónde se abra.
+    flowType: 'implicit',
+  },
+});
 
 // Activity logging helper
 export async function logActivity(

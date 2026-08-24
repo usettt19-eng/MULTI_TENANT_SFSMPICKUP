@@ -63,25 +63,27 @@ export function LandingPage() {
 
           <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100">
             <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Mail className="w-8 h-8 text-indigo-600" />
+              <ShieldCheck className="w-8 h-8 text-indigo-600" />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3">¿Tu colegio no está aquí todavía?</h2>
+            <h2 className="text-2xl font-black text-slate-900 mb-3">¿Ya tienes cuenta?</h2>
             <p className="text-slate-500 font-medium mb-8">
-              El alta de nuevas instituciones la gestiona nuestro equipo. Contáctanos
-              para configurar tu colegio y a tu administrador.
+              Si eres padre, tutor o personal de un colegio, inicia sesión con tu
+              correo y contraseña de siempre.
             </p>
 
             <a
               href="/login"
               className="bg-indigo-600 text-white rounded-xl px-8 py-4 font-bold w-full inline-block hover:bg-indigo-700 transition-colors"
             >
-              Ya tengo una cuenta — Iniciar sesión
+              Iniciar sesión
             </a>
 
-            <p className="text-xs text-slate-400 font-medium mt-6">
-              Si eres administrador de un colegio y no puedes acceder, contacta al
-              <strong className="text-indigo-500"> Super Admin</strong> de la plataforma.
-            </p>
+            <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
+              <Mail className="w-4 h-4 shrink-0" />
+              <span>
+                ¿Tu colegio aún no está en la plataforma? Contáctanos para configurarlo.
+              </span>
+            </div>
           </div>
         </div>
       </div>
