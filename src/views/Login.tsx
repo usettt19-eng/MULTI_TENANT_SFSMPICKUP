@@ -166,7 +166,7 @@ export function Login() {
                     disabled={loading}
                     className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR ENLACE DE RESTABLECIMIENTO'}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR ENLACE PARA ESTABLECER CONTRASEÑA'}
                   </button>
                 </div>
                 <div className="text-center pt-2">
@@ -305,7 +305,7 @@ export function Login() {
                 onClick={() => { setShowForgotPassword(true); setError(null); }}
                 className="block w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
               >
-                ¿Olvidaste tu contraseña? Restablécela
+                ¿No tienes contraseña o la olvidaste? Establécela aquí
               </button>
             </div>
           </form>
