@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
+import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
@@ -448,6 +449,8 @@ export function VerificationDisplay() {
               </button>
             </div>
           </div>
+
+          <ParentPerimeterPanel />
 
           {!currentPickup ? (
             <div className="bg-surface-container-lowest rounded-[2rem] p-12 text-center shadow-lg border border-outline-variant/10">
