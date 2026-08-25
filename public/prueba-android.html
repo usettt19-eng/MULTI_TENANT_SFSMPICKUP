@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Prueba Beta Android</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Únete a la prueba beta de Safe Smart Pickup para Android." />
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root {
+    --ink: #101a2c;
+    --ink-soft: #515f74;
+    --ink-faint: #8793a6;
+    --paper: #eef1f6;
+    --surface: #ffffff;
+    --surface-alt: #f4f6fa;
+    --line: #d7dee8;
+    --line-soft: #e5eaf1;
+    --accent: #362f97;
+    --accent-strong: #241f6b;
+    --accent-soft: #e9e7f9;
+    --good: #04785f;
+    --good-soft: #dff3ec;
+    --good-line: #b9e3d3;
+    --warn: #a9560a;
+    --warn-soft: #fbeed9;
+    --warn-line: #eecda0;
+    --chip-bg: #fbfbfd;
+    --shadow: 0 1px 2px rgba(16, 26, 44, 0.04), 0 8px 24px rgba(16, 26, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1f6;
+      --ink-soft: #aab4c8;
+      --ink-faint: #75809a;
+      --paper: #0c1120;
+      --surface: #131a2c;
+      --surface-alt: #171f34;
+      --line: #29324c;
+      --line-soft: #212a42;
+      --accent: #a29cf5;
+      --accent-strong: #c6c1ff;
+      --accent-soft: #211d47;
+      --good: #4fd3ab;
+      --good-soft: #10291f;
+      --good-line: #1c4536;
+      --warn: #eeb26c;
+      --warn-soft: #33230d;
+      --warn-line: #4d3714;
+      --chip-bg: #171f34;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #eef1f6;
+    --ink-soft: #aab4c8;
+    --ink-faint: #75809a;
+    --paper: #0c1120;
+    --surface: #131a2c;
+    --surface-alt: #171f34;
+    --line: #29324c;
+    --line-soft: #212a42;
+    --accent: #a29cf5;
+    --accent-strong: #c6c1ff;
+    --accent-soft: #211d47;
+    --good: #4fd3ab;
+    --good-soft: #10291f;
+    --good-line: #1c4536;
+    --warn: #eeb26c;
+    --warn-soft: #33230d;
+    --warn-line: #4d3714;
+    --chip-bg: #171f34;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  h1, h2, h3 {
+    font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header.masthead {
+    text-align: center;
+    padding-bottom: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .badge-android {
+    width: 4rem;
+    height: 4rem;
+    margin: 0 auto 1.25rem;
+    border-radius: 1.1rem;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+  }
+  .badge-android svg { width: 2.1rem; height: 2.1rem; }
+
+  header.masthead h1 {
+    font-size: clamp(1.7rem, 6vw, 2.1rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin-top: 0.75rem;
+  }
+
+  header.masthead p.lede {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    margin: 0.75rem auto 0;
+    max-width: 30ch;
+  }
+
+  .cta-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+    padding: 1.75rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+  }
+
+  .cta-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    width: 100%;
+    background: var(--accent);
+    color: #ffffff;
+    text-decoration: none;
+    font-family: "Archivo", sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    padding: 1.1rem 1.25rem;
+    border-radius: 1rem;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .cta-button:hover { background: var(--accent-strong); }
+  .cta-button:active { transform: scale(0.98); }
+  .cta-button svg { width: 1.25rem; height: 1.25rem; flex-shrink: 0; }
+
+  .cta-card .cta-caption {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    margin-top: 0.9rem;
+  }
+
+  .requirement {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line-soft);
+  }
+  .requirement svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    color: var(--accent);
+    margin-top: 0.1rem;
+  }
+
+  .steps {
+    list-style: none;
+    margin: 0 0 2rem;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+  }
+  .steps li {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    padding: 1rem 1.15rem;
+  }
+  .steps .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .steps p { margin: 0; font-size: 0.92rem; }
+  .steps strong { color: var(--ink); }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 1.1rem 1.3rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .callout p { margin: 0; font-size: 0.88rem; }
+  .callout .callout-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-soft);
+    border-color: var(--warn-line);
+  }
+  .callout.warn .callout-label { color: var(--warn); }
+  .callout.good {
+    border-left-color: var(--good);
+    background: var(--good-soft);
+    border-color: var(--good-line);
+  }
+  .callout.good .callout-label { color: var(--good); }
+
+  footer.manual-footer {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .page > * { animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    header.masthead { animation-delay: 0.02s; }
+    .cta-card { animation-delay: 0.08s; }
+    .steps { animation-delay: 0.14s; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="badge-android" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 18c0 .55.45 1 1 1h1v3a1.5 1.5 0 003 0v-3h2v3a1.5 1.5 0 003 0v-3h1c.55 0 1-.45 1-1V8H6v10z" fill="#fff"/>
+        <path d="M3.5 8A1.5 1.5 0 002 9.5v6a1.5 1.5 0 003 0v-6A1.5 1.5 0 003.5 8z" fill="#fff"/>
+        <path d="M20.5 8A1.5 1.5 0 0019 9.5v6a1.5 1.5 0 003 0v-6A1.5 1.5 0 0020.5 8z" fill="#fff"/>
+        <path d="M15.53 2.16l.9-1.56a.3.3 0 10-.52-.3l-.92 1.6a5.94 5.94 0 00-4.98 0L9.09.3a.3.3 0 10-.52.3l.9 1.56A5.5 5.5 0 006 7h12a5.5 5.5 0 00-2.47-4.84zM9.5 5a.75.75 0 110-1.5.75.75 0 010 1.5zm5 0a.75.75 0 110-1.5.75.75 0 010 1.5z" fill="#fff"/>
+      </svg>
+    </div>
+    <span class="eyebrow">Safe Smart Pickup · Prueba Beta</span>
+    <h1>Únete a la prueba en Android</h1>
+    <p class="lede">Estamos probando la app antes de publicarla oficialmente. Tu correo fue seleccionado para participar.</p>
+  </header>
+
+  <div class="cta-card">
+    <a class="cta-button" href="https://play.google.com/apps/internaltest/4700714696625213751">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3l10.5 9L3 21V3z" opacity=".55"/><path d="M13.5 12L3 3l14.5 8-4 1z" opacity=".85"/><path d="M13.5 12l4 1L3 21l10.5-9z"/><path d="M17.5 11l3.3-1.9c1 .6 1 2.2 0 2.8L17.5 13l-4-1 4-1z" opacity=".7"/></svg>
+      Unirme a la prueba
+    </a>
+    <p class="cta-caption">Se abre en Google Play — toca desde tu teléfono Android</p>
+    <div class="requirement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      <p>Debes abrir el enlace <strong>con la sesión iniciada en la misma cuenta de Gmail</strong> con la que estás registrado en Safe Smart Pickup. Con otra cuenta, el enlace no te dejará entrar.</p>
+    </div>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <span class="num">1</span>
+      <p>Abre el enlace de arriba <strong>desde tu celular Android</strong>.</p>
+    </li>
+    <li>
+      <span class="num">2</span>
+      <p>Toca <strong>"Convertirme en tester"</strong>.</p>
+    </li>
+    <li>
+      <span class="num">3</span>
+      <p>Toca <strong>"Descargar en Google Play"</strong> e instala la app como cualquier otra.</p>
+    </li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="callout-label">Vale la pena saber</span>
+    <p>Mientras Google termina de revisarla, vas a ver la app con el nombre temporal <strong>"com.safesmartpickup.app (unreviewed)"</strong> en vez de "Safe Smart Pickup". Es normal — puedes instalarla y usarla igual.</p>
+  </div>
+
+  <div class="callout good">
+    <span class="callout-label">Es una prueba</span>
+    <p>Si ves algo raro o tienes dudas mientras la usas, avísanos directamente — nos ayuda a mejorarla antes del lanzamiento.</p>
+  </div>
+
+  <footer class="manual-footer">
+    Safe Smart Pickup — Prueba Beta Android
+  </footer>
+
+</div>
+</body>
+</html>
