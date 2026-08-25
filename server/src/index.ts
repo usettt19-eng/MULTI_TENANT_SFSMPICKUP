@@ -765,7 +765,7 @@ app.post(
   '/api/requests/replacement',
   requireAuth,
   wrap(async (req, res) => {
-    const {replacement_name, replacement_phone} = req.body ?? {};
+    const {replacement_name, replacement_phone, photo_url} = req.body ?? {};
     if (!replacement_name) return fail(res, 400, 'Falta el nombre del reemplazo.');
 
     // El padre sólo puede solicitar por sí mismo; el personal, por cualquiera
@@ -789,6 +789,7 @@ app.post(
         parent_id: requestedFor,
         replacement_name,
         replacement_phone: replacement_phone ?? null,
+        photo_url: photo_url ?? null,
         status: 'pending',
         tenant_id: req.caller!.tenantId,
       })

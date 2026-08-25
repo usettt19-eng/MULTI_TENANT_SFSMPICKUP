@@ -524,9 +524,17 @@ export function VerificationDisplay() {
                         <div className="flex items-center gap-4">
                           <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-slate-200 border border-slate-200">
                             {replacementData ? (
-                              <div className="w-full h-full flex items-center justify-center bg-amber-50">
-                                <User className="w-10 h-10 text-amber-400" />
-                              </div>
+                              replacementData.photo_url ? (
+                                <img
+                                  src={replacementData.photo_url}
+                                  alt={replacementData.replacement_name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-amber-50">
+                                  <User className="w-10 h-10 text-amber-400" />
+                                </div>
+                              )
                             ) : (
                               <img 
                                 src={currentPickup.profiles?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} 

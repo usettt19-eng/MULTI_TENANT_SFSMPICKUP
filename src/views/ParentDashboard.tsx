@@ -13,7 +13,7 @@ import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
-  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search
+  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera
 } from 'lucide-react';
 
 export function ParentDashboard() {
@@ -37,6 +37,8 @@ export function ParentDashboard() {
   const [showReplacementModal, setShowReplacementModal] = useState(false);
   const [replacementName, setReplacementName] = useState('');
   const [replacementPhone, setReplacementPhone] = useState('');
+  const [replacementPhotoFile, setReplacementPhotoFile] = useState<File | null>(null);
+  const [replacementPhotoPreview, setReplacementPhotoPreview] = useState<string | null>(null);
   const [isSubmittingReplacement, setIsSubmittingReplacement] = useState(false);
 
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
@@ -337,12 +339,37 @@ export function ParentDashboard() {
     }
   };
 
+  const handleReplacementPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReplacementPhotoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setReplacementPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleRequestReplacement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replacementName || !replacementPhone) return;
-    
+
     setIsSubmittingReplacement(true);
     try {
+      // Foto de la persona autorizada: para que recepción la vea al lado del
+      // QR al momento de escanearlo, no solo el nombre.
+      let photoUrl: string | null = null;
+      if (replacementPhotoFile && profile?.tenant_id) {
+        const fileExt = replacementPhotoFile.name.split('.').pop() || 'jpg';
+        const filePath = `${profile.tenant_id}/replacement_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, replacementPhotoFile);
+        if (uploadError) {
+          throw new Error('No se pudo subir la foto: ' + uploadError.message);
+        }
+        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+        photoUrl = publicUrlData.publicUrl;
+      }
+
       // 1. Insert via API to bypass RLS limits for parents
       const response = await apiFetch('/api/requests/replacement', {
         method: 'POST',
@@ -351,6 +378,7 @@ export function ParentDashboard() {
           parent_id: profile.id,
           replacement_name: replacementName,
           replacement_phone: replacementPhone,
+          photo_url: photoUrl,
           tenant_id: profile?.tenant_id
         })
       });
@@ -373,6 +401,8 @@ export function ParentDashboard() {
       setShowReplacementModal(false);
       setReplacementName('');
       setReplacementPhone('');
+      setReplacementPhotoFile(null);
+      setReplacementPhotoPreview(null);
     } catch (err: any) {
       console.error(err);
       alert("Error al enviar solicitud: " + (err.message || String(err)));
@@ -438,6 +468,7 @@ export function ParentDashboard() {
       parent_id: profile.id,
       parent_name: `${profile.first_name} ${profile.last_name}`,
       replacement_name: replacement.name,
+      photo_url: replacement.photo_url ?? null,
       token: replacement.token,
       students: students.map(s => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }))
     });
@@ -1269,16 +1300,22 @@ export function ParentDashboard() {
               {authorizedReplacements.map((rep: any, idx: number) => (
                 <div key={idx} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6">
                   <div className="bg-slate-50 p-3 rounded-2xl">
-                    <QRCodeSVG 
+                    <QRCodeSVG
                       value={JSON.stringify({
                         type: 'replacement_pickup',
                         parent_id: profile.id,
                         token: rep.token,
-                        replacement_name: rep.name
-                      })} 
+                        replacement_name: rep.name,
+                        photo_url: rep.photo_url ?? null
+                      })}
                       size={64}
                     />
                   </div>
+                  {rep.photo_url && (
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
+                      <img src={rep.photo_url} alt={rep.name} className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <div className="flex-1">
                     <h4 className="font-black text-slate-800 text-sm">{rep.name}</h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">{rep.phone}</p>
@@ -1438,8 +1475,33 @@ export function ParentDashboard() {
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                     />
                   </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Foto de la persona (opcional)</label>
+                    <label className="w-full flex items-center gap-4 bg-slate-50 border border-dashed border-slate-300 rounded-2xl px-5 py-4 cursor-pointer hover:border-indigo-400 transition-all">
+                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                        {replacementPhotoPreview ? (
+                          <img src={replacementPhotoPreview} alt="Vista previa" className="w-full h-full object-cover" />
+                        ) : (
+                          <Camera className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">
+                        {replacementPhotoPreview ? 'Cambiar foto' : 'Tomar o subir una foto'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleReplacementPhotoChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                      Ayuda a recepción a reconocer a la persona al momento de escanear el QR.
+                    </p>
+                  </div>
                 </div>
-                <button 
+                <button
                   type="submit"
                   disabled={isSubmittingReplacement}
                   className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"

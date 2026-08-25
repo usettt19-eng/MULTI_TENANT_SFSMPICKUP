@@ -155,6 +155,7 @@ export function RequestsCenter() {
           const newReplacement = {
             name: req.replacement_name,
             phone: req.replacement_phone,
+            photo_url: req.photo_url ?? null,
             token: crypto.randomUUID().slice(0, 8),
             created_at: new Date().toISOString()
           };
@@ -291,12 +292,18 @@ export function RequestsCenter() {
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="flex items-start gap-5">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isPending ? 'bg-indigo-50 text-indigo-600' : isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                        {isPending && !req.replacement_name?.startsWith('[MENSAJE]') && <UserPlus className="w-7 h-7" />}
-                        {isPending && req.replacement_name?.startsWith('[MENSAJE]') && <MessageSquare className="w-7 h-7" />}
-                        {isApproved && <UserCheck className="w-7 h-7" />}
-                        {isRejected && <X className="w-7 h-7" />}
-                      </div>
+                      {req.photo_url && !req.replacement_name?.startsWith('[MENSAJE]') ? (
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
+                          <img src={req.photo_url} alt={req.replacement_name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isPending ? 'bg-indigo-50 text-indigo-600' : isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                          {isPending && !req.replacement_name?.startsWith('[MENSAJE]') && <UserPlus className="w-7 h-7" />}
+                          {isPending && req.replacement_name?.startsWith('[MENSAJE]') && <MessageSquare className="w-7 h-7" />}
+                          {isApproved && <UserCheck className="w-7 h-7" />}
+                          {isRejected && <X className="w-7 h-7" />}
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-3 mb-1">
                           <h3 className="font-black text-slate-800 text-lg">{req.parent?.first_name} {req.parent?.last_name}</h3>

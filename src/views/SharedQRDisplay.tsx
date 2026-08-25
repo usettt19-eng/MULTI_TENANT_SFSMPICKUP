@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ShieldCheck, UserCheck, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, UserCheck, AlertTriangle, User } from 'lucide-react';
 
 export function SharedQRDisplay() {
   const [qrData, setQrData] = useState<any>(null);
@@ -66,8 +66,15 @@ export function SharedQRDisplay() {
           <div className="bg-indigo-600 p-8 text-center text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-900/20 rounded-full -ml-12 -mb-12 blur-xl" />
-            
+
             <div className="relative z-10">
+              <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4 border-4 border-white/30 shadow-lg bg-indigo-500 flex items-center justify-center">
+                {qrData.photo_url ? (
+                  <img src={qrData.photo_url} alt={qrData.replacement_name} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-10 h-10 text-white/70" />
+                )}
+              </div>
               <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-1">Autorizado a</p>
               <h2 className="text-2xl font-black">{qrData.replacement_name}</h2>
             </div>
@@ -78,20 +85,21 @@ export function SharedQRDisplay() {
             {/* Cutout effect */}
             <div className="absolute -top-4 left-0 w-8 h-8 bg-slate-50 rounded-full -ml-4 shadow-inner" />
             <div className="absolute -top-4 right-0 w-8 h-8 bg-slate-50 rounded-full -mr-4 shadow-inner" />
-            
+
             <div className="bg-white p-4 rounded-3xl shadow-sm border-2 border-slate-100 mb-6">
-              <QRCodeSVG 
+              <QRCodeSVG
                 value={JSON.stringify({
                   type: qrData.type,
                   parent_id: qrData.parent_id,
                   token: qrData.token,
-                  replacement_name: qrData.replacement_name
-                })} 
+                  replacement_name: qrData.replacement_name,
+                  photo_url: qrData.photo_url ?? null
+                })}
                 size={200}
                 level="H"
               />
             </div>
-            
+
             <p className="text-center text-xs text-slate-400 font-bold uppercase tracking-widest max-w-[200px]">
               Muestra este código en el kiosco de la escuela
             </p>
