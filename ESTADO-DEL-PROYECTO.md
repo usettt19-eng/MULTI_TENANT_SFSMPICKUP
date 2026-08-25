@@ -572,5 +572,13 @@ relevantes de cara a producción:
   terceros sin mantenimiento desde 2020).
 - Registrar el acceso cruzado del `super_admin` (hoy no deja rastro propio
   más allá de lo que cada endpoint ya audita).
-- App iOS: en standby a la espera de credenciales de Apple Developer del
-  cliente.
+- App iOS: build 1.0 enviado a revisión de Apple el 2026-08-20, sigue
+  "Pendiente de revisión" en App Store Connect (verificado el 2026-08-25).
+- App Android: enviada a Google Play, pista de Prueba interna, estado "En
+  revisión" (subida el 2026-08-21).
+- Pruebas con padres reales: se armó una lista de 100 correos Gmail (de los
+  407 padres con Gmail en TCS Albrook + TCS Costa del Este) para la pista de
+  Prueba interna de Android, que tiene tope de 100 testers. **Pendiente:
+  sacar a estos 100 padres de la lista de testers externos cuando la app
+  pase a producción/publicación pública**, para no dejarlos mezclados con
+  usuarios reales.
