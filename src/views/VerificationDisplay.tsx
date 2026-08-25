@@ -235,6 +235,10 @@ export function VerificationDisplay() {
 
   const filteredPickups = pickups.filter(pickup => {
     if (!selectedDoorId) return true;
+    // El padre eligió puerta al anunciar su llegada: eso manda sobre el
+    // mapeo grado→puerta (que no aplica, por ejemplo, a hermanos de
+    // distinto grado que salen juntos por la misma puerta).
+    if (pickup.door_id) return pickup.door_id === selectedDoorId;
     const allowedGrades = doorGradesMapping.current[selectedDoorId];
     if (!allowedGrades) return true;
     return allowedGrades.includes(pickup.students?.grade);
@@ -499,6 +503,11 @@ export function VerificationDisplay() {
                       </div>
                       <h3 className="mt-4 text-xl font-black text-primary leading-tight">{currentPickup.students?.first_name} {currentPickup.students?.last_name}</h3>
                       <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{t('monitor.section')}: {currentPickup.students?.section || 'A'}</p>
+                      {currentPickup.door_id && (
+                        <p className="text-xs font-black uppercase tracking-wider mt-1 text-indigo-600">
+                          Puerta: {doors.find(d => d.id === currentPickup.door_id)?.name || '—'}
+                        </p>
+                      )}
                     </div>
 
                     {/* Verification Interface */}
@@ -601,6 +610,7 @@ export function VerificationDisplay() {
                                 </h5>
                                 <p className="text-[10px] text-slate-500 truncate leading-tight">
                                   {pickup.students?.grade} • {pickup.profiles?.first_name}
+                                  {pickup.door_id && ` • ${doors.find(d => d.id === pickup.door_id)?.name || '—'}`}
                                 </p>
                               </div>
                               <button

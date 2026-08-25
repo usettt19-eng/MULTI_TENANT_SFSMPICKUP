@@ -65,6 +65,13 @@ export function ParentDashboard() {
   
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
+  // Puertas de salida del colegio: si hay más de una, el padre elige por
+  // cuál va a pasar, para que el personal de esa puerta sepa a quién esperar
+  // sin depender solo del mapeo grado→puerta (que no siempre aplica, ej.
+  // hermanos de distinto grado que salen juntos por la misma puerta).
+  const [doors, setDoors] = useState<{ id: string; name: string }[]>([]);
+  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+
   // Geofencing states from Database
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
   const [parentPos, setParentPos] = useState<{lat: number, lng: number} | null>(null);
@@ -164,11 +171,35 @@ export function ParentDashboard() {
     setLoading(true);
     await fetchStudents();
     await fetchSchoolSettings();
+    await fetchDoors();
     await checkActivePickups();
     await fetchPendingForms();
     await fetchNotifications();
     await fetchCarpoolData();
     setLoading(false);
+  };
+
+  const fetchDoors = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('exit_doors')
+      .select('id, name')
+      .eq('tenant_id', profile.tenant_id)
+      .order('name');
+    const list = data || [];
+    setDoors(list);
+
+    const savedDoorId = localStorage.getItem(`preferred_door_${profile.id}`);
+    if (savedDoorId && list.some(d => d.id === savedDoorId)) {
+      setSelectedDoorId(savedDoorId);
+    } else if (list.length > 0) {
+      setSelectedDoorId(list[0].id);
+    }
+  };
+
+  const handleSelectDoor = (doorId: string) => {
+    setSelectedDoorId(doorId);
+    if (profile?.id) localStorage.setItem(`preferred_door_${profile.id}`, doorId);
   };
 
   const fetchCarpoolData = async () => {
@@ -849,7 +880,8 @@ export function ParentDashboard() {
         student_id: student.id,
         status: 'announced',
         announced_at: new Date().toISOString(),
-        tenant_id: profile.tenant_id
+        tenant_id: profile.tenant_id,
+        door_id: selectedDoorId || null,
       });
 
       if (insertError) {
@@ -1005,6 +1037,33 @@ export function ParentDashboard() {
             </div>
             <div className={`w-12 h-6 rounded-full relative border-2 ${isLocationEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-400/20 border-white/10'}`}>
                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isLocationEnabled ? 'left-6' : 'left-0.5'}`} />
+            </div>
+          </div>
+        )}
+
+        {doors.length > 1 && (
+          <div className="p-4 rounded-2xl border bg-white/10 border-white/10 mt-3">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-white/20">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-black">¿Por cuál puerta vas a pasar?</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {doors.map(door => (
+                <button
+                  key={door.id}
+                  type="button"
+                  onClick={() => handleSelectDoor(door.id)}
+                  className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                    selectedDoorId === door.id
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-white/10 text-indigo-100 hover:bg-white/20'
+                  }`}
+                >
+                  {door.name}
+                </button>
+              ))}
             </div>
           </div>
         )}
