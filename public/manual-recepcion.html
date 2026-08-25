@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Recepción TCS Albrook</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Manual de uso para el personal de recepción de Safe Smart Pickup." />
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root {
+    --ink: #101a2c;
+    --ink-soft: #515f74;
+    --ink-faint: #8793a6;
+    --paper: #eef1f6;
+    --surface: #ffffff;
+    --surface-alt: #f4f6fa;
+    --line: #d7dee8;
+    --line-soft: #e5eaf1;
+    --accent: #362f97;
+    --accent-strong: #241f6b;
+    --accent-soft: #e9e7f9;
+    --good: #04785f;
+    --good-soft: #dff3ec;
+    --good-line: #b9e3d3;
+    --warn: #a9560a;
+    --warn-soft: #fbeed9;
+    --warn-line: #eecda0;
+    --chip-bg: #fbfbfd;
+    --shadow: 0 1px 2px rgba(16, 26, 44, 0.04), 0 8px 24px rgba(16, 26, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1f6;
+      --ink-soft: #aab4c8;
+      --ink-faint: #75809a;
+      --paper: #0c1120;
+      --surface: #131a2c;
+      --surface-alt: #171f34;
+      --line: #29324c;
+      --line-soft: #212a42;
+      --accent: #a29cf5;
+      --accent-strong: #c6c1ff;
+      --accent-soft: #211d47;
+      --good: #4fd3ab;
+      --good-soft: #10291f;
+      --good-line: #1c4536;
+      --warn: #eeb26c;
+      --warn-soft: #33230d;
+      --warn-line: #4d3714;
+      --chip-bg: #171f34;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #eef1f6;
+    --ink-soft: #aab4c8;
+    --ink-faint: #75809a;
+    --paper: #0c1120;
+    --surface: #131a2c;
+    --surface-alt: #171f34;
+    --line: #29324c;
+    --line-soft: #212a42;
+    --accent: #a29cf5;
+    --accent-strong: #c6c1ff;
+    --accent-soft: #211d47;
+    --good: #4fd3ab;
+    --good-soft: #10291f;
+    --good-line: #1c4536;
+    --warn: #eeb26c;
+    --warn-soft: #33230d;
+    --warn-line: #4d3714;
+    --chip-bg: #171f34;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  h1, h2, h3 {
+    font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding-bottom: 2.25rem;
+    border-bottom: 3px solid var(--ink);
+    margin-bottom: 2.5rem;
+  }
+
+  header.masthead h1 {
+    font-size: clamp(2rem, 4.5vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  .masthead-meta strong { color: var(--ink); font-weight: 600; }
+
+  nav.toc {
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 3rem;
+  }
+
+  nav.toc .eyebrow { display: block; margin-bottom: 0.9rem; }
+
+  nav.toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  nav.toc li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  nav.toc .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 1.4rem;
+  }
+
+  section.step {
+    padding: 2.75rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  section.step:last-of-type { border-bottom: none; }
+
+  .step-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .step-number {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.15rem 0.65rem;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .step-head h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .step p { margin: 0 0 1rem; max-width: 62ch; color: var(--ink); }
+  .step p.lede { color: var(--ink-soft); font-size: 1.02rem; }
+
+  .step ul, .step ol.sub {
+    margin: 0 0 1rem;
+    padding-left: 1.35rem;
+    max-width: 62ch;
+  }
+  .step ul li, .step ol.sub li { margin-bottom: 0.5rem; }
+  .step ol.sub { list-style: decimal; }
+
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.22rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    color: var(--ink);
+  }
+
+  .ui-chip.action-good {
+    background: var(--good);
+    color: #ffffff;
+    border-color: var(--good);
+  }
+  .ui-chip.action-accent {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 1.1rem 1.35rem;
+    margin: 1.25rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .callout-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-soft);
+    border-color: var(--warn-line);
+  }
+  .callout.warn .callout-label { color: var(--warn); }
+
+  .callout.good {
+    border-left-color: var(--good);
+    background: var(--good-soft);
+    border-color: var(--good-line);
+  }
+  .callout.good .callout-label { color: var(--good); }
+
+  .mock-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.4rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .mock-card .mock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .mock-card .mock-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .mock-card .mock-title {
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-top: 0.15rem;
+  }
+  .mock-card .mock-badges {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 5px;
+  }
+  .badge.ok { background: var(--good-soft); color: var(--good); border: 1px solid var(--good-line); }
+  .badge.tag { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--line); }
+
+  .queue-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .queue-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+  }
+  .queue-row .pos {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+  .queue-row .who { flex: 1; }
+  .queue-row .who strong { display: block; font-size: 0.92rem; }
+  .queue-row .who span { color: var(--ink-faint); font-size: 0.78rem; }
+
+  table.ref {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.92rem;
+  }
+  table.ref th, table.ref td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  table.ref th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  .ref-wrap { overflow-x: auto; }
+
+  footer.manual-footer {
+    margin-top: 3rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section.step, nav.toc, header.masthead {
+      animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+    nav.toc { animation-delay: 0.05s; }
+    section.step:nth-of-type(1) { animation-delay: 0.1s; }
+    section.step:nth-of-type(2) { animation-delay: 0.15s; }
+    section.step:nth-of-type(3) { animation-delay: 0.2s; }
+    section.step:nth-of-type(4) { animation-delay: 0.25s; }
+    section.step:nth-of-type(5) { animation-delay: 0.3s; }
+    section.step:nth-of-type(6) { animation-delay: 0.32s; }
+    section.step:nth-of-type(7) { animation-delay: 0.34s; }
+    section.step:nth-of-type(8) { animation-delay: 0.36s; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+
+  @media print {
+    body { background: #ffffff; color: #101a2c; }
+    .page { max-width: 100%; padding: 0.3in 0.4in; }
+    .callout, .mock-card, .queue-row { box-shadow: none; }
+    section.step { break-inside: avoid; padding: 1.4rem 0; }
+    nav.toc { break-inside: avoid; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <span class="eyebrow">Safe Smart Pickup · TCS Albrook</span>
+    <h1>Manual de Recepción</h1>
+    <div class="masthead-meta">
+      <span><strong>Rol:</strong> Personal de recepción</span>
+      <span><strong>Cobertura:</strong> Avisos de llegada de todos los grados</span>
+      <span><strong>Actualizado:</strong> 25 de agosto de 2026</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contenido">
+    <span class="eyebrow">En este manual</span>
+    <ol>
+      <li><span class="num">1</span> Iniciar sesión</li>
+      <li><span class="num">2</span> Qué mensajes vas a recibir</li>
+      <li><span class="num">3</span> Verificar y autorizar en el Monitor Externo</li>
+      <li><span class="num">4</span> Reemplazos por QR: aprobar y escanear</li>
+      <li><span class="num">5</span> Pool Day: qué significan esos avisos</li>
+      <li><span class="num">6</span> Atender a alguien fuera de orden</li>
+      <li><span class="num">7</span> La puerta que eligió el papá</li>
+      <li><span class="num">8</span> Si algo se ve mal: alerta discreta</li>
+    </ol>
+  </nav>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">01</span>
+      <h2>Iniciar sesión</h2>
+    </div>
+    <p class="lede">Entras con el mismo correo y contraseña siempre — no hay nada que instalar, es una página web.</p>
+    <ol class="sub">
+      <li>Abre <strong>safesmartpickup.com</strong> desde el navegador del teléfono o la computadora de recepción.</li>
+      <li>Escribe tu correo y tu contraseña, y toca <span class="ui-chip action-accent">INGRESAR</span>.</li>
+      <li>¿No tienes contraseña o la olvidaste? Toca <span class="ui-chip">¿No tienes contraseña o la olvidaste? Establécela aquí</span> y sigue el enlace que llega a tu correo.</li>
+    </ol>
+    <div class="callout">
+      <span class="callout-label">Para tener en cuenta</span>
+      <p>Si el enlace que te llega por correo te devuelve a la página principal sin abrir tu cuenta, ábrelo directo en Safari o Chrome — no desde dentro de Gmail o la app de Correo.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">02</span>
+      <h2>Qué mensajes vas a recibir</h2>
+    </div>
+    <p class="lede">Tu cuenta está configurada para recibir <strong>todos</strong> los avisos de llegada de padres, de cualquier grado — no solo las que te tocarían por tu salón. Además verás avisos de Pool Day y de solicitudes de reemplazo.</p>
+    <p>Todos llegan por la campana de notificaciones, arriba a la derecha, en cualquier pantalla del sistema. Se distinguen por el título:</p>
+    <div class="ref-wrap">
+      <table class="ref">
+        <thead>
+          <tr><th>Título del aviso</th><th>Qué significa</th><th>Qué haces tú</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>"[Padre] llegó"</td><td>Un padre anunció su llegada a la zona de recogida.</td><td>Ve al Monitor Externo cuando le toque el turno — sección 3.</td></tr>
+          <tr><td>"Recogida por Pool Day"</td><td>Otro padre ya autorizado está recogiendo hoy en lugar del padre habitual.</td><td>Solo verifica identidad del conductor, sin trámite extra — sección 5.</td></tr>
+          <tr><td>"Pool Day de un día configurado" / "Nuevo Pool Day configurado"</td><td>Un padre autorizó a otro padre a recoger, ese día o de forma recurrente.</td><td>Informativo — nada que hacer todavía.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Las <strong>solicitudes de reemplazo</strong> (cuando alguien que no es padre/tutor va a recoger) no llegan como notificación de campana: aparecen directo en <span class="ui-chip">Solicitudes de Reemplazo</span> del menú lateral, pendientes de tu revisión — ver sección 4.</p>
+    <ul>
+      <li>Recibir todos los avisos de llegada se suma a los encargados de salida que ya tiene asignado cada grado en Ajustes — no los reemplaza.</li>
+      <li>Si algún día no debieras recibir todos los avisos, pídele al administrador del colegio que lo desactive desde Personal → tu perfil.</li>
+    </ul>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">03</span>
+      <h2>Verificar y autorizar en el Monitor Externo</h2>
+    </div>
+    <p class="lede">Esta es la pantalla donde confirmas la identidad del adulto y autorizas la salida del alumno.</p>
+    <ol class="sub">
+      <li>En el menú lateral, entra a <span class="ui-chip">Monitor Externo</span>.</li>
+      <li>Si tu colegio monitorea más de una puerta, elige la tuya en <span class="ui-chip">Puerta a Monitorear</span> — la lista solo mostrará a quien corresponda a esa puerta.</li>
+      <li>El alumno al frente de la fila aparece en la tarjeta principal, con el adulto que lo recoge.</li>
+    </ol>
+    <div class="mock-card">
+      <div class="mock-row">
+        <div>
+          <span class="mock-label">Titular / Padre-Tutor</span>
+          <div class="mock-title">Ruben Dario Suarez Sanchez</div>
+        </div>
+        <span class="badge tag">TITULAR</span>
+      </div>
+      <div class="mock-badges">
+        <span class="badge ok">PIN OK</span>
+        <span class="badge ok">BIOMETRÍA OK</span>
+      </div>
+    </div>
+    <p>Verifica visualmente que la persona frente a ti coincide con la foto y el nombre en pantalla. Si todo está en orden, toca <span class="ui-chip action-good">AUTORIZAR</span>.</p>
+    <div class="callout warn">
+      <span class="callout-label">Antes de autorizar</span>
+      <p>Compara siempre la cara de la persona con la foto en pantalla, aunque el PIN y la biometría digan "OK". Esas marcas confirman el dato del sistema, no reemplazan tu verificación visual.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">04</span>
+      <h2>Reemplazos por QR: aprobar y escanear</h2>
+    </div>
+    <p class="lede">Cuando quien recoge no es un padre/tutor registrado — un tío, una niñera, un chofer — el padre pide autorización desde su panel y tú la apruebas antes de que exista un QR válido.</p>
+    <ol class="sub">
+      <li>Entra a <span class="ui-chip">Solicitudes de Reemplazo</span> en el menú lateral. Ahí aparece el nombre y teléfono de la persona que el padre quiere autorizar.</li>
+      <li>Revisa el dato y toca <strong>Aprobar</strong> o <strong>Rechazar</strong>. Si apruebas, el sistema le genera un código QR al padre en su propio panel — tú no lo generas ni lo envías.</li>
+      <li>El padre le comparte ese QR a la persona autorizada por su cuenta (WhatsApp, foto, etc.).</li>
+    </ol>
+    <p>Cuando esa persona llega a la puerta:</p>
+    <ol class="sub">
+      <li>En el Monitor Externo, toca <span class="ui-chip">Escanear Reemplazo</span>.</li>
+      <li>Apunta la cámara al código QR que te muestra en su teléfono.</li>
+    </ol>
+    <div class="mock-card">
+      <div class="mock-row">
+        <div>
+          <span class="mock-label">Solicitado por</span>
+          <div class="mock-title">Ana Gómez (madre)</div>
+        </div>
+        <span class="badge tag">REEMPLAZO</span>
+      </div>
+      <div class="mock-badges">
+        <span class="badge ok">QR VÁLIDO</span>
+      </div>
+    </div>
+    <p>La tarjeta se marca <span class="ui-chip">REEMPLAZO</span> y muestra quién lo solicitó, para que sepas que no es el padre habitual. Verifica identidad como cualquier otro caso y toca <span class="ui-chip action-good">AUTORIZAR</span>.</p>
+    <div class="callout warn">
+      <span class="callout-label">Si el QR no sirve</span>
+      <p>Un código vencido, de otro alumno, o de una solicitud que nunca aprobaste marca "Código QR no válido para reemplazo." No autorices la salida sin un QR válido — pide identificación y llama al padre para confirmar.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">05</span>
+      <h2>Pool Day: qué significan esos avisos</h2>
+    </div>
+    <p class="lede">Pool Day es cuando dos familias ya se pusieron de acuerdo entre ellas para que un padre recoja al hijo del otro. No pasa por tu aprobación — el sistema solo te avisa.</p>
+    <ul>
+      <li><strong>"Nuevo Pool Day configurado" / "Pool Day de un día configurado":</strong> un padre autorizó a otro a recoger a su hijo, de forma recurrente o solo por un día. Es solo informativo, todavía no hay nadie en camino.</li>
+      <li><strong>"Recogida por Pool Day":</strong> el padre autorizado está recogiendo ahora mismo, en lugar del padre habitual. Cuando esa persona llegue a tu fila, verifica su identidad igual que a cualquier padre — el sistema ya sabe que está autorizada.</li>
+    </ul>
+    <div class="callout">
+      <span class="callout-label">Diferencia con Reemplazo</span>
+      <p>Pool Day es entre dos familias ya registradas (padre recoge al hijo de otro padre) y no requiere tu aprobación. Reemplazo es para alguien que no es padre/tutor de ningún alumno — ese sí necesita que tú lo apruebes primero (sección 4).</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">06</span>
+      <h2>Atender a alguien fuera de orden</h2>
+    </div>
+    <p class="lede">Si el papá de un alumno más atrás en la fila ya está presente, no tienes que esperar a que le toque el turno al que anunció primero.</p>
+    <p>En el panel derecho, la fila muestra a todos los que siguen, en el orden en que anunciaron su llegada. Cada uno trae su número real de turno y un botón:</p>
+    <div class="queue-list">
+      <div class="queue-row">
+        <span class="pos">3</span>
+        <div class="who"><strong>Mia Fernanda Morales Castillo</strong><span>10 · Teresa Castillo</span></div>
+        <span class="ui-chip action-good">Atender ahora</span>
+      </div>
+      <div class="queue-row">
+        <span class="pos">4</span>
+        <div class="who"><strong>Graham Bean Mackay</strong><span>10 · Diane Mackay</span></div>
+        <span class="ui-chip action-good">Atender ahora</span>
+      </div>
+    </div>
+    <p>Toca <span class="ui-chip action-good">Atender ahora</span> junto a quien tienes presente, y esa verificación pasa al frente sin mover a nadie más de su lugar real en la fila. Un aviso arriba de la tarjeta te recuerda que estás atendiendo fuera de orden, con un enlace para volver al orden normal cuando quieras.</p>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">07</span>
+      <h2>La puerta que eligió el padre</h2>
+    </div>
+    <p class="lede">Si el colegio tiene más de una puerta, el padre elige por cuál va a pasar antes de anunciar su llegada.</p>
+    <p>Esa elección aparece como una etiqueta debajo del nombre del alumno, tanto en la tarjeta principal como en cada fila de la cola — así sabes a cuál puerta enviar al alumno sin tener que preguntar.</p>
+    <div class="mock-card" style="max-width: 20rem;">
+      <span class="mock-label">Sección: C</span>
+      <p style="margin: 0.35rem 0 0; font-weight: 700; color: var(--accent);">Puerta: Puerta Principal</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">08</span>
+      <h2>Si algo se ve mal: alerta discreta</h2>
+    </div>
+    <p class="lede">Si la persona frente a ti no coincide con la foto, o algo te da mala espina, no se lo hagas notar.</p>
+    <ol class="sub">
+      <li>Mantén la calma. No confrontes ni le digas a la persona que algo está mal.</li>
+      <li>Toca <span class="ui-chip">Alerta Discreta</span> arriba de la tarjeta de verificación.</li>
+      <li>Contacta a seguridad del colegio por tu canal habitual mientras el sistema queda registrado.</li>
+    </ol>
+    <div class="callout warn">
+      <span class="callout-label">Protocolo</span>
+      <p>El objetivo es proteger al alumno sin generar una escena. Deja que seguridad se acerque; tu parte es dar la alerta y mantener la calma frente al adulto.</p>
+    </div>
+  </section>
+
+  <footer class="manual-footer">
+    <span>Safe Smart Pickup — TCS Albrook</span>
+    <span>Dudas del sistema: contacta al administrador del colegio.</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Novedades para Padres</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Guía de novedades para padres de Safe Smart Pickup." />
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root {
+    --ink: #101a2c;
+    --ink-soft: #515f74;
+    --ink-faint: #8793a6;
+    --paper: #eef1f6;
+    --surface: #ffffff;
+    --surface-alt: #f4f6fa;
+    --line: #d7dee8;
+    --line-soft: #e5eaf1;
+    --accent: #362f97;
+    --accent-strong: #241f6b;
+    --accent-soft: #e9e7f9;
+    --good: #04785f;
+    --good-soft: #dff3ec;
+    --good-line: #b9e3d3;
+    --warn: #a9560a;
+    --warn-soft: #fbeed9;
+    --warn-line: #eecda0;
+    --chip-bg: #fbfbfd;
+    --shadow: 0 1px 2px rgba(16, 26, 44, 0.04), 0 8px 24px rgba(16, 26, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1f6;
+      --ink-soft: #aab4c8;
+      --ink-faint: #75809a;
+      --paper: #0c1120;
+      --surface: #131a2c;
+      --surface-alt: #171f34;
+      --line: #29324c;
+      --line-soft: #212a42;
+      --accent: #a29cf5;
+      --accent-strong: #c6c1ff;
+      --accent-soft: #211d47;
+      --good: #4fd3ab;
+      --good-soft: #10291f;
+      --good-line: #1c4536;
+      --warn: #eeb26c;
+      --warn-soft: #33230d;
+      --warn-line: #4d3714;
+      --chip-bg: #171f34;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #eef1f6;
+    --ink-soft: #aab4c8;
+    --ink-faint: #75809a;
+    --paper: #0c1120;
+    --surface: #131a2c;
+    --surface-alt: #171f34;
+    --line: #29324c;
+    --line-soft: #212a42;
+    --accent: #a29cf5;
+    --accent-strong: #c6c1ff;
+    --accent-soft: #211d47;
+    --good: #4fd3ab;
+    --good-soft: #10291f;
+    --good-line: #1c4536;
+    --warn: #eeb26c;
+    --warn-soft: #33230d;
+    --warn-line: #4d3714;
+    --chip-bg: #171f34;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  h1, h2, h3 {
+    font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding-bottom: 2.25rem;
+    border-bottom: 3px solid var(--ink);
+    margin-bottom: 2.5rem;
+  }
+
+  header.masthead h1 {
+    font-size: clamp(2rem, 4.5vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  .masthead-meta strong { color: var(--ink); font-weight: 600; }
+
+  nav.toc {
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 3rem;
+  }
+
+  nav.toc .eyebrow { display: block; margin-bottom: 0.9rem; }
+
+  nav.toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  nav.toc li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  nav.toc .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 1.4rem;
+  }
+
+  section.step {
+    padding: 2.75rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  section.step:last-of-type { border-bottom: none; }
+
+  .step-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .step-number {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.15rem 0.65rem;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .step-head h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .step p { margin: 0 0 1rem; max-width: 62ch; color: var(--ink); }
+  .step p.lede { color: var(--ink-soft); font-size: 1.02rem; }
+
+  .step ul, .step ol.sub {
+    margin: 0 0 1rem;
+    padding-left: 1.35rem;
+    max-width: 62ch;
+  }
+  .step ul li, .step ol.sub li { margin-bottom: 0.5rem; }
+  .step ol.sub { list-style: decimal; }
+
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.22rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    color: var(--ink);
+  }
+
+  .ui-chip.action-good {
+    background: var(--good);
+    color: #ffffff;
+    border-color: var(--good);
+  }
+  .ui-chip.action-accent {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 1.1rem 1.35rem;
+    margin: 1.25rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .callout-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-soft);
+    border-color: var(--warn-line);
+  }
+  .callout.warn .callout-label { color: var(--warn); }
+
+  .callout.good {
+    border-left-color: var(--good);
+    background: var(--good-soft);
+    border-color: var(--good-line);
+  }
+  .callout.good .callout-label { color: var(--good); }
+
+  .mock-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.4rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .mock-card .mock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .mock-card .mock-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .mock-card .mock-title {
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-top: 0.15rem;
+  }
+  .mock-card .mock-badges {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 5px;
+  }
+  .badge.ok { background: var(--good-soft); color: var(--good); border: 1px solid var(--good-line); }
+  .badge.tag { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--line); }
+
+  .queue-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .queue-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+  }
+  .queue-row .pos {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+  .queue-row .who { flex: 1; }
+  .queue-row .who strong { display: block; font-size: 0.92rem; }
+  .queue-row .who span { color: var(--ink-faint); font-size: 0.78rem; }
+
+  table.ref {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.92rem;
+  }
+  table.ref th, table.ref td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  table.ref th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  .ref-wrap { overflow-x: auto; }
+
+  footer.manual-footer {
+    margin-top: 3rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section.step, nav.toc, header.masthead {
+      animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+    nav.toc { animation-delay: 0.05s; }
+    section.step:nth-of-type(1) { animation-delay: 0.1s; }
+    section.step:nth-of-type(2) { animation-delay: 0.15s; }
+    section.step:nth-of-type(3) { animation-delay: 0.2s; }
+    section.step:nth-of-type(4) { animation-delay: 0.25s; }
+    section.step:nth-of-type(5) { animation-delay: 0.3s; }
+    section.step:nth-of-type(6) { animation-delay: 0.32s; }
+    section.step:nth-of-type(7) { animation-delay: 0.34s; }
+    section.step:nth-of-type(8) { animation-delay: 0.36s; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+
+  @media print {
+    body { background: #ffffff; color: #101a2c; }
+    .page { max-width: 100%; padding: 0.3in 0.4in; }
+    .callout, .mock-card, .queue-row { box-shadow: none; }
+    section.step { break-inside: avoid; padding: 1.4rem 0; }
+    nav.toc { break-inside: avoid; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <span class="eyebrow">Safe Smart Pickup · App de Padres</span>
+    <h1>Novedades para Padres</h1>
+    <div class="masthead-meta">
+      <span><strong>Para:</strong> Padres y tutores</span>
+      <span><strong>Cubre:</strong> Cambios recientes en tu panel</span>
+      <span><strong>Actualizado:</strong> 25 de agosto de 2026</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contenido">
+    <span class="eyebrow">En esta guía</span>
+    <ol>
+      <li><span class="num">1</span> Elige tu puerta al llegar</li>
+      <li><span class="num">2</span> Solicitar un reemplazo, ahora con foto</li>
+      <li><span class="num">3</span> El pase de recogida trae foto y QR juntos</li>
+      <li><span class="num">4</span> Entrar a tu cuenta: contraseña o enlace de acceso</li>
+      <li><span class="num">5</span> Si el enlace de acceso no te dejaba entrar</li>
+    </ol>
+  </nav>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">01</span>
+      <h2>Elige tu puerta al llegar</h2>
+    </div>
+    <p class="lede">Si tu colegio vigila más de una puerta de salida, ahora puedes indicar por cuál vas a pasar antes de anunciar tu llegada.</p>
+    <ol class="sub">
+      <li>En tu panel, busca <span class="ui-chip">¿Por cuál puerta vas a pasar?</span> — aparece solo si tu colegio tiene más de una puerta.</li>
+      <li>Toca la puerta que corresponda.</li>
+      <li>Se queda guardada para la próxima vez; puedes cambiarla cuando quieras.</li>
+    </ol>
+    <div class="mock-card" style="max-width: 20rem;">
+      <span class="mock-label">Sección: C</span>
+      <p style="margin: 0.35rem 0 0; font-weight: 700; color: var(--accent);">Puerta: Puerta Principal</p>
+    </div>
+    <div class="callout good">
+      <span class="callout-label">Por qué importa</span>
+      <p>Así el personal de esa puerta sabe exactamente a quién esperar y a dónde enviar a tu hijo, sin que tengas que avisar por separado.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">02</span>
+      <h2>Solicitar un reemplazo, ahora con foto</h2>
+    </div>
+    <p class="lede">Si alguien más va a recoger a tus hijos hoy — no tú — puedes autorizarlo desde tu panel, y ahora también adjuntar su foto.</p>
+    <ol class="sub">
+      <li>Toca <span class="ui-chip">Solicitar Reemplazo de Recogida</span>.</li>
+      <li>Escribe su nombre completo y su WhatsApp o teléfono.</li>
+      <li><strong>Nuevo:</strong> toca <span class="ui-chip">Tomar o subir una foto</span> y agrega una foto clara de su rostro.</li>
+      <li>Toca <span class="ui-chip action-accent">Enviar Solicitud</span>.</li>
+    </ol>
+    <div class="callout">
+      <span class="callout-label">La foto es opcional</span>
+      <p>Pero ayuda mucho a que el personal de la puerta reconozca a la persona de un vistazo, sin tener que preguntar quién es.</p>
+    </div>
+    <p>El administrador del colegio revisa tu solicitud y la aprueba o rechaza. Te llega una notificación en cuanto quede lista.</p>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">03</span>
+      <h2>El pase de recogida trae foto y QR juntos</h2>
+    </div>
+    <p class="lede">Una vez aprobada tu solicitud, el reemplazo aparece en <span class="ui-chip">Reemplazos Autorizados</span> con un botón para compartir.</p>
+    <ol class="sub">
+      <li>Toca el ícono de compartir junto al nombre de la persona.</li>
+      <li>Se abre tu app de mensajería (WhatsApp, Mensajes, etc.) con el enlace ya listo para enviar.</li>
+      <li>Esa persona abre el enlace y ve su <strong>Pase de Recogida</strong>: su foto arriba y el código QR justo debajo, en una sola pantalla lista para mostrar en la puerta.</li>
+    </ol>
+    <div class="mock-card" style="max-width: 16rem; text-align: center;">
+      <span class="mock-label">Pase de Recogida</span>
+      <div style="display:flex; align-items:center; justify-content:center; gap:0.75rem; margin-top:0.75rem;">
+        <span class="badge tag">FOTO</span>
+        <span class="badge tag">QR</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">04</span>
+      <h2>Entrar a tu cuenta: contraseña o enlace de acceso</h2>
+    </div>
+    <p class="lede">Siempre con el mismo correo. Dos formas de entrar, según tengas o no una contraseña a la mano.</p>
+    <ul>
+      <li><strong>Con contraseña:</strong> escribe tu correo y contraseña, toca <span class="ui-chip action-accent">INGRESAR</span>.</li>
+      <li><strong>Sin contraseña:</strong> toca <span class="ui-chip">¿No tienes contraseña? Pide un enlace de acceso</span> y te llega un enlace por correo para entrar directo.</li>
+      <li><strong>¿No tienes o la olvidaste?</strong> toca <span class="ui-chip">¿No tienes contraseña o la olvidaste? Establécela aquí</span> — el mismo enlace sirve para crear una nueva o cambiar la que ya tenías.</li>
+    </ul>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">05</span>
+      <h2>Si el enlace de acceso no te dejaba entrar</h2>
+    </div>
+    <p class="lede">Ya está resuelto: antes, pedir el enlace de acceso desde el navegador y abrirlo desde Gmail o Correo podía fallar. Ahora funciona sin importar desde dónde lo abras.</p>
+    <div class="callout warn">
+      <span class="callout-label">Si aún así ves un error</span>
+      <p>Abre el enlace directo en Safari o Chrome (no dentro de otra app), o simplemente entra con tu correo y contraseña normales.</p>
+    </div>
+  </section>
+
+  <footer class="manual-footer">
+    <span>Safe Smart Pickup — App de Padres</span>
+    <span>Dudas del sistema: contacta al administrador de tu colegio.</span>
+  </footer>
+
+</div>
+</body>
+</html>
