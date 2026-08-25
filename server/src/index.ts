@@ -485,6 +485,7 @@ app.post(
         additional_tutor_name: JSON.stringify({
           is_staff: true,
           permissions: body.permissions ?? [],
+          notify_all_arrivals: body.notify_all_arrivals === true,
         }),
       })
       .eq('id', created.user.id)
@@ -624,6 +625,7 @@ app.put(
           ...current,
           is_staff: true,
           permissions: req.body?.permissions ?? [],
+          notify_all_arrivals: req.body?.notify_all_arrivals === true,
         }),
       })
       .eq('id', id)
@@ -902,6 +904,24 @@ app.post(
 
       staffIds = Array.from(new Set([slot1, slot2].filter((id): id is string => !!id)));
     }
+
+    // Staff marcado como "recibir todos los avisos de llegada" (ej. recepción)
+    // se suma SIEMPRE, tenga o no un encargado asignado a ese grado+sección.
+    const {data: alwaysNotifyStaff} = await admin
+      .from('profiles')
+      .select('id, additional_tutor_name')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'admin');
+    for (const s of alwaysNotifyStaff ?? []) {
+      try {
+        if (JSON.parse(s.additional_tutor_name || '{}')?.notify_all_arrivals === true) {
+          staffIds.push(s.id);
+        }
+      } catch {
+        // ignorar JSON inválido
+      }
+    }
+    staffIds = Array.from(new Set(staffIds));
 
     if (staffIds.length > 0) {
       const parentName = parent ? `${parent.first_name ?? ''} ${parent.last_name ?? ''}`.trim() : 'El padre/tutor';

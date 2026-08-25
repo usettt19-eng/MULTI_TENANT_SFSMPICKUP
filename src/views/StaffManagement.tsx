@@ -40,7 +40,8 @@ export function StaffManagement() {
     email: '',
     first_name: '',
     last_name: '',
-    permissions: [] as string[]
+    permissions: [] as string[],
+    notify_all_arrivals: false,
   });
 
   // Personal que ya tenía cuenta en OTRO colegio y al que se le dio acceso a
@@ -124,7 +125,7 @@ export function StaffManagement() {
         const res = await apiFetch(`/api/staff/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ permissions: formData.permissions })
+          body: JSON.stringify({ permissions: formData.permissions, notify_all_arrivals: formData.notify_all_arrivals })
         });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'API Error');
@@ -138,6 +139,7 @@ export function StaffManagement() {
             first_name: formData.first_name,
             last_name: formData.last_name,
             permissions: formData.permissions,
+            notify_all_arrivals: formData.notify_all_arrivals,
             tenant_id: profile?.tenant_id
           })
         });
@@ -153,7 +155,7 @@ export function StaffManagement() {
 
       setIsModalOpen(false);
       fetchStaff();
-      setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
+      setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
       setEditingId(null);
     } catch (error: any) {
       alert("Error: " + error.message);
@@ -298,16 +300,19 @@ export function StaffManagement() {
 
   const openEditModal = (user: any) => {
     let perms = [];
+    let notifyAllArrivals = false;
     try {
       const parsed = JSON.parse(user.additional_tutor_name || '{}');
       perms = parsed.permissions || [];
+      notifyAllArrivals = parsed.notify_all_arrivals === true;
     } catch (e) {}
-    
+
     setFormData({
       email: user.email || '',
       first_name: user.first_name || '',
       last_name: user.last_name || '',
-      permissions: perms
+      permissions: perms,
+      notify_all_arrivals: notifyAllArrivals,
     });
     setEditingId(user.id);
     setIsModalOpen(true);
@@ -359,7 +364,7 @@ export function StaffManagement() {
             <button
               onClick={() => {
                 setEditingId(null);
-                setFormData({ email: '', first_name: '', last_name: '', permissions: [] });
+                setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
                 setIsModalOpen(true);
               }}
               className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
@@ -572,6 +577,23 @@ export function StaffManagement() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setFormData(prev => ({ ...prev, notify_all_arrivals: !prev.notify_all_arrivals }))}
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${formData.notify_all_arrivals ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-100 hover:border-emerald-200'}`}
+                >
+                  <div>
+                    <span className={`block text-xs font-black uppercase tracking-widest ${formData.notify_all_arrivals ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      Recibir todos los avisos de llegada de padres
+                    </span>
+                    <span className="block text-[11px] text-slate-400 font-medium mt-1">
+                      Además de los encargados asignados por grado/sección en Ajustes de Salida (ej. recepción).
+                    </span>
+                  </div>
+                  <div className={`w-5 h-5 shrink-0 rounded-md flex items-center justify-center ml-3 ${formData.notify_all_arrivals ? 'bg-emerald-500 text-white' : 'bg-slate-100'}`}>
+                    {formData.notify_all_arrivals && <Check className="w-3 h-3" />}
                   </div>
                 </div>
               </form>
