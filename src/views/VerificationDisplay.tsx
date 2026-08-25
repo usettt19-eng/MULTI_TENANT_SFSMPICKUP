@@ -559,6 +559,11 @@ export function VerificationDisplay() {
                                   <CheckCircle2 className="w-3 h-3" /> {t('monitor.biometryOk')}
                                 </span>
                               )}
+                              {currentPickup.location_verified === false && (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black uppercase">
+                                  <AlertTriangle className="w-3 h-3" /> Sin GPS
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -613,8 +618,11 @@ export function VerificationDisplay() {
                                 />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h5 className="font-bold text-xs text-slate-800 truncate">
+                                <h5 className="font-bold text-xs text-slate-800 truncate flex items-center gap-1">
                                   {pickup.students?.first_name} {pickup.students?.last_name}
+                                  {pickup.location_verified === false && (
+                                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                  )}
                                 </h5>
                                 <p className="text-[10px] text-slate-500 truncate leading-tight">
                                   {pickup.students?.grade} • {pickup.profiles?.first_name}

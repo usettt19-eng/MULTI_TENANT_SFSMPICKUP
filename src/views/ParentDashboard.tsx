@@ -78,6 +78,7 @@ export function ParentDashboard() {
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
   const [parentPos, setParentPos] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
+  const [showManualArrival, setShowManualArrival] = useState(false);
   const watchId = useRef<number | null>(null);
 
   // El watcher nativo en segundo plano se registra una sola vez al montar la
@@ -902,8 +903,8 @@ export function ParentDashboard() {
     return [...students, ...extra];
   }, [students, carpoolData.todaysCarpoolStudents]);
 
-  const handleAnnounceArrival = async () => {
-    if (!isInside) return;
+  const handleAnnounceArrival = async (manual: boolean = false) => {
+    if (!isInside && !manual) return;
     setLoading(true);
     for (const student of pickupStudents) {
       const { error: insertError } = await supabase.from('pickup_events').insert({
@@ -913,6 +914,7 @@ export function ParentDashboard() {
         announced_at: new Date().toISOString(),
         tenant_id: profile.tenant_id,
         door_id: selectedDoorId || null,
+        location_verified: !manual,
       });
 
       if (insertError) {
@@ -956,13 +958,16 @@ export function ParentDashboard() {
     }
 
     await logActivity(
-      'PICKUP', 
-      `ANUNCIO DE LLEGADA: ${profile.first_name} llegó a la escuela mediante GPS.`,
+      'PICKUP',
+      manual
+        ? `ANUNCIO DE LLEGADA: ${profile.first_name} confirmó su llegada manualmente (sin GPS).`
+        : `ANUNCIO DE LLEGADA: ${profile.first_name} llegó a la escuela mediante GPS.`,
       profile.first_name,
       { coords: [parentPos?.lat, parentPos?.lng] },
       profile?.tenant_id
     );
 
+    setShowManualArrival(false);
     setStatus('pickup_active');
     setLoading(false);
   };
@@ -1160,7 +1165,9 @@ export function ParentDashboard() {
               <h2 className={`font-black uppercase text-[10px] tracking-widest ${isInside ? 'text-emerald-600' : 'text-slate-400'}`}>
                 Sede: {profile?.tenant?.name || 'Colegio'}
               </h2>
-              <p className="text-xl font-black">{isInside ? '¡Llegaste!' : `${Math.round(distance || 0)}m de distancia`}</p>
+              <p className="text-xl font-black">
+                {isInside ? '¡Llegaste!' : isLocationEnabled ? `${Math.round(distance || 0)}m de distancia` : 'Ubicación no disponible'}
+              </p>
             </div>
           </div>
         </div>
@@ -1205,16 +1212,64 @@ export function ParentDashboard() {
           </div>
         ) : (
           <div className="space-y-4">
+            {isLocationEnabled ? (
+              <button
+                onClick={() => handleAnnounceArrival()}
+                disabled={!isInside || loading}
+                className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
+              >
+                 <ShieldCheck className="w-10 h-10" />
+                 <span className="text-2xl font-black">ANUNCIAR LLEGADA</span>
+              </button>
+            ) : (
+              <div className="bg-white border-2 border-dashed border-slate-200 rounded-[3rem] p-6 space-y-3">
+                <p className="text-xs font-bold text-slate-500 text-center">
+                  No pudimos confirmar tu ubicación automáticamente. Puedes intentar activarla, o avisar que ya llegaste sin ella.
+                </p>
+                {!showManualArrival ? (
+                  <>
+                    <button
+                      onClick={() => setShowManualArrival(true)}
+                      disabled={loading}
+                      className="w-full p-6 bg-indigo-600 text-white rounded-[2.5rem] shadow-xl flex flex-col items-center gap-2"
+                    >
+                      <ShieldCheck className="w-8 h-8" />
+                      <span className="text-lg font-black">YA ESTOY EN EL COLEGIO</span>
+                    </button>
+                    <button
+                      onClick={toggleLocation}
+                      className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-500 underline"
+                    >
+                      Intentar activar ubicación
+                    </button>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-slate-600 text-center">
+                      Confirma que estás físicamente en la zona de recogida. El colegio verificará tu identidad como siempre al llegar.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowManualArrival(false)}
+                        disabled={loading}
+                        className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleAnnounceArrival(true)}
+                        disabled={loading}
+                        className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar llegada'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
-              onClick={handleAnnounceArrival}
-              disabled={!isInside || !isLocationEnabled || loading}
-              className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && isLocationEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
-            >
-               <ShieldCheck className="w-10 h-10" />
-               <span className="text-2xl font-black">ANUNCIAR LLEGADA</span>
-            </button>
-            
-            <button 
               onClick={() => setShowReplacementModal(true)}
               className="w-full p-6 bg-white border-2 border-dashed border-indigo-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-indigo-600 font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all"
             >
