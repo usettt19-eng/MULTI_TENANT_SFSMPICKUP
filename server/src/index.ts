@@ -870,8 +870,15 @@ app.post(
     let staffIds: string[] = [];
     if (grade) {
       const dateStr = todayStr();
-      const sectionValue = (student.section || '').trim();
-      const pickExact = (rows: any[]) => rows.find((r) => r.section === sectionValue) || rows[0];
+      // Comparación sin distinguir mayúsculas/minúsculas: la sección del
+      // alumno ("Year 10") y la de la asignación en Ajustes ("YEAR 10") no
+      // siempre coinciden con .eq() exacto — eso dejaba sin avisar al
+      // encargado real en cualquier colegio que no escribiera la sección
+      // idéntica letra por letra en ambos lados.
+      const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+      const sectionValue = norm(student.section);
+      const pickExact = (rows: any[]) =>
+        rows.find((r) => norm(r.section) === sectionValue) || rows.find((r) => norm(r.section) === '');
 
       const {data: assignmentRows} = await admin
         .from('dismissal_assignments')
@@ -879,8 +886,7 @@ app.post(
         .eq('tenant_id', tenantId)
         .eq('grade_id', grade.id)
         .eq('schedule_type', 'regular')
-        .eq('day_of_week', todayDow)
-        .in('section', sectionValue ? [sectionValue, ''] : ['']);
+        .eq('day_of_week', todayDow);
 
       const assignment = assignmentRows && assignmentRows.length > 0 ? pickExact(assignmentRows) : undefined;
       let slot1: string | null = assignment?.staff_id ?? null;
@@ -892,14 +898,15 @@ app.post(
         .eq('tenant_id', tenantId)
         .eq('grade_id', grade.id)
         .eq('schedule_type', 'regular')
-        .eq('override_date', dateStr)
-        .in('section', sectionValue ? [sectionValue, ''] : ['']);
+        .eq('override_date', dateStr);
 
       if (overrideRows && overrideRows.length > 0) {
         const slot1Overrides = overrideRows.filter((o) => o.slot === 1);
         const slot2Overrides = overrideRows.filter((o) => o.slot === 2);
-        if (slot1Overrides.length > 0) slot1 = pickExact(slot1Overrides)!.staff_id;
-        if (slot2Overrides.length > 0) slot2 = pickExact(slot2Overrides)!.staff_id;
+        const slot1Pick = slot1Overrides.length > 0 ? pickExact(slot1Overrides) : undefined;
+        const slot2Pick = slot2Overrides.length > 0 ? pickExact(slot2Overrides) : undefined;
+        if (slot1Pick) slot1 = slot1Pick.staff_id;
+        if (slot2Pick) slot2 = slot2Pick.staff_id;
       }
 
       staffIds = Array.from(new Set([slot1, slot2].filter((id): id is string => !!id)));

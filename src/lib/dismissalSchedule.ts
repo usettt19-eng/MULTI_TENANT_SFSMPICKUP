@@ -33,12 +33,16 @@ export async function resolveResponsibleStaffIds(
 
   const dateStr = date.toISOString().slice(0, 10);
   const dayOfWeek = date.getDay();
-  const sectionValue = (section || '').trim();
+  // Sin distinguir mayúsculas/minúsculas: la sección del alumno ("Year 10")
+  // y la de la asignación en Ajustes ("YEAR 10") no siempre coinciden letra
+  // por letra.
+  const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+  const sectionValue = norm(section);
 
   // Entre varias filas candidatas (una con sección exacta, otra "para todo
   // el grado"), la sección exacta gana siempre.
   const pickExact = <T extends { section: string }>(rows: T[]): T | undefined =>
-    rows.find(r => r.section === sectionValue) || rows[0];
+    rows.find(r => norm(r.section) === sectionValue) || rows.find(r => norm(r.section) === '');
 
   const { data: assignmentRows } = await supabase
     .from('dismissal_assignments')
@@ -46,8 +50,7 @@ export async function resolveResponsibleStaffIds(
     .eq('tenant_id', tenantId)
     .eq('grade_id', grade.id)
     .eq('schedule_type', scheduleType)
-    .eq('day_of_week', dayOfWeek)
-    .in('section', sectionValue ? [sectionValue, ''] : ['']);
+    .eq('day_of_week', dayOfWeek);
 
   const assignment = assignmentRows && assignmentRows.length > 0 ? pickExact(assignmentRows) : undefined;
   let slot1: string | null = assignment?.staff_id ?? null;
@@ -59,14 +62,15 @@ export async function resolveResponsibleStaffIds(
     .eq('tenant_id', tenantId)
     .eq('grade_id', grade.id)
     .eq('schedule_type', scheduleType)
-    .eq('override_date', dateStr)
-    .in('section', sectionValue ? [sectionValue, ''] : ['']);
+    .eq('override_date', dateStr);
 
   if (overrideRows && overrideRows.length > 0) {
     const slot1Overrides = overrideRows.filter(o => o.slot === 1);
     const slot2Overrides = overrideRows.filter(o => o.slot === 2);
-    if (slot1Overrides.length > 0) slot1 = pickExact(slot1Overrides)!.staff_id;
-    if (slot2Overrides.length > 0) slot2 = pickExact(slot2Overrides)!.staff_id;
+    const slot1Pick = slot1Overrides.length > 0 ? pickExact(slot1Overrides) : undefined;
+    const slot2Pick = slot2Overrides.length > 0 ? pickExact(slot2Overrides) : undefined;
+    if (slot1Pick) slot1 = slot1Pick.staff_id;
+    if (slot2Pick) slot2 = slot2Pick.staff_id;
   }
 
   return Array.from(new Set([slot1, slot2].filter((id): id is string => !!id)));
