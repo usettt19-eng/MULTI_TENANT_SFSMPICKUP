@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
@@ -15,6 +15,10 @@ export function VerificationDisplay() {
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // Deja atender a alguien de más atrás en la fila (ej. su papá ya está en la
+  // puerta aunque haya anunciado después que otros) sin perder el orden real
+  // de llegada de los demás — solo cambia a quién se muestra para verificar.
+  const [selectedPickupId, setSelectedPickupId] = useState<string | null>(null);
   const doorGradesMapping = useRef<Record<string, string[]>>({});
   const isFirstFetch = useRef(true);
   const hasInitializedFrontQueue = useRef(false);
@@ -236,8 +240,9 @@ export function VerificationDisplay() {
     return allowedGrades.includes(pickup.students?.grade);
   });
 
-  const currentPickup = filteredPickups[0];
-  const queue = pickups.slice(1);
+  const currentPickup =
+    (selectedPickupId && pickups.find(p => p.id === selectedPickupId)) || filteredPickups[0];
+  const queue = pickups.filter(p => p.id !== currentPickup?.id);
 
   // Announce when a pickup reaches the front of the queue
   useEffect(() => {
@@ -285,6 +290,7 @@ export function VerificationDisplay() {
       // Optimistic update for instant UI feedback
       const pickupIdToRelease = currentPickup.id;
       setPickups(prev => prev.filter(p => p.id !== pickupIdToRelease));
+      setSelectedPickupId(null);
 
       try {
         const studentName = currentPickup.students?.first_name;
@@ -461,6 +467,20 @@ export function VerificationDisplay() {
               
               {/* Primary Verification Card */}
               <div className="lg:col-span-8 flex flex-col gap-6">
+                {selectedPickupId && filteredPickups[0]?.id !== currentPickup?.id && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 flex items-center justify-between gap-3 text-xs font-bold">
+                    <span className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 shrink-0" />
+                      Atendiendo fuera de orden — elegido manualmente de la fila.
+                    </span>
+                    <button
+                      onClick={() => setSelectedPickupId(null)}
+                      className="underline hover:text-emerald-900 shrink-0"
+                    >
+                      Volver al orden normal
+                    </button>
+                  </div>
+                )}
                 <div className="bg-surface-container-lowest rounded-[2rem] p-4 md:p-6 shadow-sm border border-slate-100">
                   <div className="flex flex-col md:flex-row gap-6">
                     {/* Child Info */}
@@ -564,28 +584,39 @@ export function VerificationDisplay() {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-2">
-                        {queue.map((pickup, idx) => (
-                          <div key={pickup.id} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3 hover:border-indigo-200 transition-all">
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
-                              <img 
-                                src={pickup.students?.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=100"} 
-                                alt="Child" 
-                                className="w-full h-full object-cover"
-                              />
+                        {queue.map((pickup) => {
+                          const position = pickups.findIndex(p => p.id === pickup.id) + 1;
+                          return (
+                            <div key={pickup.id} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3 hover:border-indigo-200 transition-all">
+                              <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
+                                <img
+                                  src={pickup.students?.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=100"}
+                                  alt="Child"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-bold text-xs text-slate-800 truncate">
+                                  {pickup.students?.first_name} {pickup.students?.last_name}
+                                </h5>
+                                <p className="text-[10px] text-slate-500 truncate leading-tight">
+                                  {pickup.students?.grade} • {pickup.profiles?.first_name}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setSelectedPickupId(pickup.id)}
+                                title={t('monitor.attendNow')}
+                                className="shrink-0 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1.5 rounded-lg transition-colors"
+                              >
+                                <Zap className="w-3 h-3" />
+                                <span className="text-[9px] font-black uppercase tracking-wide">{t('monitor.attendNow')}</span>
+                              </button>
+                              <div className="text-[10px] font-black text-indigo-400 bg-indigo-50 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
+                                {position}
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <h5 className="font-bold text-xs text-slate-800 truncate">
-                                {pickup.students?.first_name} {pickup.students?.last_name}
-                              </h5>
-                              <p className="text-[10px] text-slate-500 truncate leading-tight">
-                                {pickup.students?.grade} • {pickup.profiles?.first_name}
-                              </p>
-                            </div>
-                            <div className="text-[10px] font-black text-indigo-400 bg-indigo-50 w-6 h-6 rounded-lg flex items-center justify-center">
-                              {idx + 2}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
