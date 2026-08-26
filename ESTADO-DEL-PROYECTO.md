@@ -2,7 +2,9 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-20 (2 encargados de salida por sección).
+2026-08-26 (formularios tipo Aviso, confirmación de llegada sin GPS, visitantes
+con identificación/empresa, quién fue avisado de cada llegada, pruebas beta de
+Android/iOS con padres reales).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -45,11 +47,25 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - **Pool Day**: autorizar a otro padre a recoger a tu hijo un día fijo de la
   semana o como excepción de un solo día; búsqueda de padres por nombre
   (ignora tildes/mayúsculas), con sugerencia de compañeros del mismo salón.
-- Solicitud de reemplazo (persona distinta autorizada a recoger).
-- Centro de mensajes / notificaciones.
+- Solicitud de reemplazo (persona distinta autorizada a recoger), con foto
+  opcional de la persona autorizada, visible junto al QR tanto para el padre
+  (Pase de Recogida) como para recepción al escanear.
+- Elección de puerta de salida antes de anunciar llegada, cuando el colegio
+  tiene más de una.
+- **Confirmación de llegada sin ubicación**: si el celular no puede compartir
+  GPS (permiso denegado, navegador dentro de otra app, etc.), el padre puede
+  confirmar manualmente que ya está en el colegio en vez de quedar bloqueado;
+  el pickup queda marcado `location_verified = false` y el personal lo ve
+  resaltado en el Monitor Externo para verificar identidad con más cuidado.
+- Centro de mensajes / notificaciones, incluye **avisos del colegio** (ver
+  "Formularios/Avisos" más abajo) con sonido en tiempo real si tiene la app
+  abierta.
 - Registro de vehículo (placa + descripción) en el alta.
 - App Android nativa (Capacitor) distribuida por link de descarga en el correo
-  de invitación, servida desde un bucket público de Supabase Storage.
+  de invitación, servida desde un bucket público de Supabase Storage; además
+  en pista de Prueba interna/cerrada de Google Play y TestFlight (iOS) para
+  pruebas beta con padres reales antes del lanzamiento público (ver §3 Apps
+  móviles).
 
 ### Para personal / administración del colegio
 - Dashboard operativo (cola en vivo, sincronización en tiempo real).
@@ -65,10 +81,22 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   un solo día.
 - Bienestar: incidentes y medicación de alumnos, con alertas críticas
   automáticas (trigger `create_critical_alert_for_med_schedule`).
-- Registro de visitantes, formularios/encuestas dirigidos por grado.
+- Registro de visitantes: nombre, **identificación/cédula, empresa de
+  origen**, a quién visita y motivo — visible en la bitácora y en el PDF
+  exportado.
+- Formularios dirigidos por grado y sección, en dos modalidades:
+  **Autorización** (pide respuesta SÍ/NO por alumno, como antes) o **Aviso /
+  Mensaje** (solo informa, sin pedir respuesta). El segmentado usa los
+  grados/secciones reales que cada colegio configuró en Ajustes (no una lista
+  fija), y al publicarse se manda una notificación real (campana + sonido) a
+  los padres que correspondan, en vez de que dependan de abrir la app para
+  enterarse.
 - Bitácora de auditoría de todo evento sensible.
 - Verificación de tutores / monitor externo (pantalla de puerta con cola y
-  escaneo QR).
+  escaneo QR); la tarjeta de cada llegada muestra quién del personal fue
+  avisado (nombre de cada profesor/recepción notificado), y "Atender ahora"
+  para verificar a alguien fuera del orden de llegada sin perder la cola real
+  de los demás.
 - **Modo super_admin → "Entrar como Admin"**: el super_admin puede impersonar a
   un colegio específico para configurarlo de punta a punta (uso pensado para
   onboarding de colegios nuevos), con aislamiento de datos verificado entre
@@ -233,6 +261,44 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   - Publicación: manual (no automática al aprobarse), para controlar el
     momento exacto del lanzamiento público.
   **Estado: en cola de revisión de Apple, hasta 48 horas.**
+- **2026-08-21 — App Android enviada a Google Play, pista de Prueba
+  interna**. Workflow nuevo `android-deploy.yml` (`workflow_dispatch` manual,
+  nunca automático en cada push): compila el AAB firmado con
+  `android/keystore.properties` generado desde secrets de GitHub
+  (`ANDROID_KEYSTORE_BASE64` y contraseñas), verifica el keystore apenas se
+  decodifica (falla en segundos con mensaje claro si el secret se pegó
+  incompleto, en vez de esperar minutos de build para enterarse), y lo sube
+  al track elegido (`internal`/`alpha`/`beta`/`production`) vía la API de
+  Google Play con `r0adkll/upload-google-play`, usando una cuenta de
+  servicio (`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`).
+- **2026-08-25/26 — Prueba beta con padres reales, Android + iOS**, antes del
+  lanzamiento público:
+  - Se identificaron en la base de datos los padres con correo Gmail (único
+    requisito real de Google Play — TestFlight no exige ningún proveedor de
+    correo en particular, solo un iPhone) de TCS Albrook, TCS Costa del Este
+    y The Casco School: 410 en total.
+  - **Android**: 100 en la lista de correo `Test_01` de la pista de Prueba
+    interna (tope real de Google Play: 100 testers por lista); el resto
+    (310) repartidos en varias listas de la pista de **Prueba cerrada**
+    ("test externo"), que no tiene ese tope — luego se sumaron también los
+    100 de Interna a Prueba cerrada, así que ahora los 410 comparten el
+    mismo link universal de unirse
+    (`play.google.com/store/apps/details?id=com.safesmartpickup.app`, no el
+    link especial `/apps/internaltest/...` de Interna). **Bug real
+    encontrado y corregido en el camino**: Prueba cerrada no dejaba guardar
+    ninguna lista de testers porque el canal no tenía ninguna versión
+    publicada todavía — se resolvió disparando el workflow
+    `android-deploy.yml` (track `alpha`) para publicar un build ahí antes de
+    poder asignar testers.
+  - **iOS**: Public Link activado en el grupo externo de TestFlight ("Test
+    Casco"), que no tiene tope de 100 como Interna.
+  - Páginas `public/prueba-android.html` / `public/prueba-ios.html` con el
+    paso a paso para cada plataforma, y scripts (`scripts/send-*-beta-invite*.mjs`)
+    para mandar la invitación por correo vía SES SMTP a las listas ya
+    filtradas.
+  - **Pendiente antes de publicación pública**: sacar a estos padres de las
+    listas de testers cuando la app pase a producción, para no dejarlos
+    mezclados con usuarios reales (ver §7).
 - **2026-08-20 — Animación de progreso en import CSV + fix de bug de tenant
   en import masivo de padres en Modo Super Admin**:
   - El import de padres/personal por CSV ahora sube en lotes de 25 filas
@@ -382,6 +448,53 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   asignado. Se agregó la columna real `school_grades.sections text[]`, con
   botón para agregar y quitar sección, persistido de inmediato.
 
+### Formularios / Avisos y notificaciones a padres (2026-08-26)
+- **Nuevo tipo de formulario "Aviso / Mensaje"** (`forms.form_type`), junto al
+  ya existente "Autorización": un aviso no pide preguntas ni respuesta
+  SÍ/NO, solo informa. En el panel del padre se ven juntos bajo "Avisos y
+  Autorizaciones", con etiqueta de color por tipo; el modal de un aviso solo
+  muestra el mensaje y un botón "Entendido".
+- **Fix de fondo: el segmentado por grado usaba una lista fija en español**
+  (K3, K4, K5, 1ro, 2do... 12mo) que no coincidía con los grados reales de
+  ningún colegio — cada uno usa su propia convención (TCS Albrook/Costa del
+  Este: códigos "01".."13"+"NR"/"PN"/"RC"; The Casco School: "1er ", "2do",
+  "6to"). Esto afectaba **todos** los formularios, autorizaciones incluidas,
+  desde siempre — el selector ahora sale de `school_grades` (la tabla real de
+  Ajustes → Grados Escolares).
+- **Segmentado también por sección** (`forms.target_sections text[]`),
+  opcional: aparece un segundo selector con las secciones reales del grado
+  elegido (las mismas de Ajustes → Salidas). Sin elegir ninguna, aplica a
+  todo el grado, como antes.
+- **Notificación real al publicar un formulario o aviso**: nuevo endpoint
+  `POST /api/forms/notify` (server, con `service_role` porque un padre/staff
+  no puede insertar notificaciones para otros por RLS) — calcula qué padres
+  tienen hijos en el grado/sección segmentados e inserta una fila en
+  `notifications` para cada uno. El panel del padre ya escuchaba esa tabla en
+  tiempo real y reproducía un sonido (`playBeep()`, reusado de los avisos de
+  llegada) — así que ahora el aviso suena de inmediato si el padre tiene la
+  app abierta, sin tocar nada nuevo del lado del padre. Limitación conocida:
+  solo suena con la app abierta — no hay push nativo (aún) para cuando está
+  cerrada.
+- **Quién fue avisado, visible en el Monitor Externo**: se agregó
+  `notifications.pickup_event_id` (referencia al pickup puntual) — al
+  anunciar llegada, el padre manda ese id junto con el aviso al personal
+  encargado. La tarjeta de verificación del Monitor Externo ahora muestra
+  "🔔 Avisado: Nombre1, Nombre2..." con el personal real que recibió esa
+  llegada específica, sin tener que consultar la base de datos a mano.
+
+### Confirmación de llegada sin ubicación (2026-08-25/26)
+- Si el padre no puede compartir GPS (permiso denegado, o abrió el enlace
+  dentro de otra app), ya no queda bloqueado sin poder anunciar llegada:
+  puede confirmar manualmente que está en el colegio. Se guarda
+  `pickup_events.location_verified = false`, y el Monitor Externo muestra un
+  aviso "Sin GPS" en la tarjeta y en la cola para que el personal verifique
+  identidad con más cuidado en ese caso.
+
+### Visitantes: identificación y empresa (2026-08-26)
+- El registro de visitantes ahora también pide cédula/identificación y
+  empresa de origen (`daily_visitors.id_number`, `daily_visitors.company`),
+  visibles en la bitácora y en el PDF exportado.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
@@ -398,7 +511,20 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - Manual de llenado para onboarding de colegios nuevos (a rellenar por el
   administrador del colegio).
 - Manual de uso de la app de padres (flujo básico, reemplazo/entrega, Pool
-  Day, notificaciones), en español e inglés.
+  Day, notificaciones, elección de puerta, confirmación de llegada sin
+  ubicación), en español e inglés.
+- Manual de recepción (login, Monitor Externo, reemplazos por QR, Pool Day,
+  atender fuera de orden), en español e inglés.
+- Manual de enfermería / Centro de Bienestar (alertas de salud, horario de
+  medicamentos, medicamentos críticos, incidentes, expedientes).
+- Todos los manuales viven como páginas reales en `safesmartpickup.com`
+  (`public/manual-*.html`, `public/guia-padres.html`, `public/parent-guide.html`,
+  `public/reception-guide.html`), no solo como Artifacts de Claude —
+  marcadas `noindex, nofollow`.
+- Páginas de invitación a la prueba beta (`public/prueba-android.html`,
+  `public/prueba-ios.html`) con los enlaces de unirse a TestFlight / Google
+  Play, para compartir con los padres seleccionados (ver "Apps móviles" más
+  abajo).
 
 ### Infraestructura de despliegue (self-hosted)
 - Se pasó de Vercel a **Docker Compose auto-alojado** en servidor propio
@@ -574,11 +700,18 @@ relevantes de cara a producción:
   más allá de lo que cada endpoint ya audita).
 - App iOS: build 1.0 enviado a revisión de Apple el 2026-08-20, sigue
   "Pendiente de revisión" en App Store Connect (verificado el 2026-08-25).
-- App Android: enviada a Google Play, pista de Prueba interna, estado "En
-  revisión" (subida el 2026-08-21).
-- Pruebas con padres reales: se armó una lista de 100 correos Gmail (de los
-  407 padres con Gmail en TCS Albrook + TCS Costa del Este) para la pista de
-  Prueba interna de Android, que tiene tope de 100 testers. **Pendiente:
-  sacar a estos 100 padres de la lista de testers externos cuando la app
-  pase a producción/publicación pública**, para no dejarlos mezclados con
-  usuarios reales.
+- App Android: build publicado en las pistas de Prueba interna y Prueba
+  cerrada de Google Play (no en producción todavía).
+- **Pendiente antes de publicar cualquiera de las dos apps al público**:
+  sacar a los 410 padres de prueba (Android: listas de Prueba interna/cerrada
+  en Google Play; iOS: grupo externo "Test Casco" de TestFlight) para no
+  dejarlos mezclados con usuarios reales — ver el detalle en "Apps móviles"
+  §3.
+- Notificación push nativa (aunque la app esté cerrada) para avisos/formularios
+  y llegadas — hoy solo suena si el padre tiene la app abierta (Realtime +
+  `notifications`). Requiere certificados APNs/FCM y backend que dispare el
+  envío.
+- 12 alumnos de TCS Albrook sin vincular a su padre tras el import masivo del
+  2026-08-20 (nombre de hijo con orden invertido en el CSV, no encontró match
+  exacto en el roster) — pendiente de vincular a mano desde el Directorio de
+  Padres.
