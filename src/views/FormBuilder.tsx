@@ -27,13 +27,30 @@ export function FormBuilder() {
     { question_text: '¿Autoriza que su hijo participe en esta actividad?', question_type: 'boolean' }
   ]);
 
-  const gradesList = ['K3', 'K4', 'K5', '1ro', '2do', '3ro', '4to', '5to', '6to', '7mo', '8vo', '9no', '10mo', '11mo', '12mo'];
+  // Cada colegio usa su propia convención de nombres de grado (códigos
+  // numéricos, abreviaturas en español, etc.) — la lista tiene que salir de
+  // los grados reales que el colegio ya configuró (school_grades, la misma
+  // tabla que usa el horario de despacho), no de una lista fija en español,
+  // o el segmentado nunca coincide con el grado real de los alumnos.
+  const [gradesList, setGradesList] = useState<string[]>([]);
 
   useEffect(() => {
     if (profile?.tenant_id) {
       fetchForms();
+      fetchGrades();
     }
   }, [profile?.tenant_id]);
+
+  const fetchGrades = async () => {
+    const { data, error } = await supabase
+      .from('school_grades')
+      .select('name')
+      .eq('tenant_id', profile?.tenant_id)
+      .order('name');
+
+    if (error) console.error(error);
+    else setGradesList((data || []).map(g => g.name));
+  };
 
   const fetchForms = async () => {
     setLoading(true);
@@ -414,11 +431,15 @@ export function FormBuilder() {
                />
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Segmentar Grados</label>
-                  <div className="flex flex-wrap gap-2">
-                    {gradesList.map(g => (
-                      <button key={g} type="button" onClick={() => toggleGrade(g)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black border-2 transition-all ${targetGrades.includes(g) ? 'bg-primary border-primary text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-400'}`}>{g}</button>
-                    ))}
-                  </div>
+                  {gradesList.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">Este colegio no tiene grados configurados todavía (Ajustes → Grados).</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {gradesList.map(g => (
+                        <button key={g} type="button" onClick={() => toggleGrade(g)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black border-2 transition-all ${targetGrades.includes(g) ? 'bg-primary border-primary text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-400'}`}>{g}</button>
+                      ))}
+                    </div>
+                  )}
                </div>
                {formType === 'authorization' && (
                  <div className="bg-slate-50 rounded-3xl p-6 space-y-3">
