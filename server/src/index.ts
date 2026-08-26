@@ -815,7 +815,7 @@ app.post(
   requireAuth,
   wrap(async (req, res) => {
     const tenantId = req.caller!.tenantId;
-    const {student_id} = req.body ?? {};
+    const {student_id, pickup_event_id} = req.body ?? {};
     if (!tenantId || !student_id) return fail(res, 400, 'Falta el alumno.');
 
     const todayDow = new Date().getDay();
@@ -944,6 +944,7 @@ app.post(
           message: `El padre/tutor de ${student.first_name} ${student.last_name} llegó a la zona de recogida.${carpoolNote}`,
           type: 'info',
           tenant_id: tenantId,
+          pickup_event_id: pickup_event_id ?? null,
         })),
       );
     }

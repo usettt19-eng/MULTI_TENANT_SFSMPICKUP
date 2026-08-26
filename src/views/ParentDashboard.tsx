@@ -922,7 +922,7 @@ export function ParentDashboard() {
     if (!isInside && !manual) return;
     setLoading(true);
     for (const student of pickupStudents) {
-      const { error: insertError } = await supabase.from('pickup_events').insert({
+      const { data: newEvent, error: insertError } = await supabase.from('pickup_events').insert({
         parent_id: profile.id,
         student_id: student.id,
         status: 'announced',
@@ -930,7 +930,7 @@ export function ParentDashboard() {
         tenant_id: profile.tenant_id,
         door_id: selectedDoorId || null,
         location_verified: !manual,
-      });
+      }).select('id').single();
 
       if (insertError) {
         console.error('Error inserting pickup event:', insertError);
@@ -954,7 +954,7 @@ export function ParentDashboard() {
 
         await apiFetch('/api/pickup/notify-staff', {
           method: 'POST',
-          body: JSON.stringify({ student_id: student.id }),
+          body: JSON.stringify({ student_id: student.id, pickup_event_id: newEvent?.id ?? null }),
         });
 
         // El padre no tiene permiso para leer la lista de administradores

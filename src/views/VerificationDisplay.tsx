@@ -29,6 +29,7 @@ export function VerificationDisplay() {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [manualQRData, setManualQRData] = useState('');
   const [showArrivalToast, setShowArrivalToast] = useState<string | null>(null);
+  const [notifiedStaff, setNotifiedStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [latestDetections, setLatestDetections] = useState<any[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const channelRef = React.useRef<any>(null);
@@ -247,6 +248,33 @@ export function VerificationDisplay() {
   const currentPickup =
     (selectedPickupId && pickups.find(p => p.id === selectedPickupId)) || filteredPickups[0];
   const queue = pickups.filter(p => p.id !== currentPickup?.id);
+
+  // Quién recibió el aviso de "llegó" para este pickup puntual (profesores
+  // encargados de esa sección + quien tenga activado "recibir todos los
+  // avisos"), para que recepción/admin lo vea directo en la tarjeta sin
+  // tener que preguntar.
+  useEffect(() => {
+    if (!currentPickup?.id) {
+      setNotifiedStaff([]);
+      return;
+    }
+    (async () => {
+      const { data: rows } = await supabase
+        .from('notifications')
+        .select('user_id')
+        .eq('pickup_event_id', currentPickup.id);
+      const userIds = Array.from(new Set((rows || []).map(r => r.user_id).filter(Boolean)));
+      if (userIds.length === 0) {
+        setNotifiedStaff([]);
+        return;
+      }
+      const { data: staff } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+      setNotifiedStaff(staff || []);
+    })();
+  }, [currentPickup?.id]);
 
   // Announce when a pickup reaches the front of the queue
   useEffect(() => {
@@ -565,6 +593,12 @@ export function VerificationDisplay() {
                                 </span>
                               )}
                             </div>
+                            {notifiedStaff.length > 0 && (
+                              <p className="text-[10px] text-slate-400 font-bold mt-2">
+                                <Bell className="w-3 h-3 inline -mt-0.5 mr-1" />
+                                Avisado: {notifiedStaff.map(s => `${s.first_name} ${s.last_name}`).join(', ')}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
