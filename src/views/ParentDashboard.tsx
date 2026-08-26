@@ -2,6 +2,7 @@ import {apiFetch, apiJson} from '../lib/apiFetch';
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { Share } from '@capacitor/share';
 import {
@@ -18,6 +19,30 @@ import {
 
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut } = useAuth();
+  const { t, setLanguage } = useLanguage();
+
+  // Los padres no tienen selector de idioma manual — la app se fuerza al
+  // idioma que el admin del colegio configuró en Settings (default_language
+  // de tenants). Si `profile.tenant` ya trae la columna (join en
+  // AuthContext), se usa directo; si no, se consulta aparte para no
+  // depender de que ese join la incluya.
+  useEffect(() => {
+    if (!profile?.tenant_id) return;
+    const tenantLang = (profile as any)?.tenant?.default_language;
+    if (tenantLang === 'en' || tenantLang === 'es') {
+      setLanguage(tenantLang);
+      return;
+    }
+    supabase
+      .from('tenants')
+      .select('default_language')
+      .eq('id', profile.tenant_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setLanguage(data?.default_language === 'en' ? 'en' : 'es');
+      });
+  }, [profile?.tenant_id]);
+
   const [students, setStudents] = useState<any[]>([]);
   const [pendingForms, setPendingForms] = useState<any[]>([]);
   const [activeForm, setActiveForm] = useState<any | null>(null);
@@ -269,11 +294,11 @@ export function ParentDashboard() {
     e.preventDefault();
     if (!carpoolStudentId || !selectedDriver) return;
     if (carpoolMode === 'weekly' && carpoolDays.length === 0) {
-      alert('Selecciona al menos un día de la semana.');
+      alert(t('parent.carpool.selectDayAlert'));
       return;
     }
     if (carpoolMode === 'oneday' && !carpoolDate) {
-      alert('Selecciona la fecha.');
+      alert(t('parent.carpool.selectDateAlert'));
       return;
     }
 
@@ -308,35 +333,35 @@ export function ParentDashboard() {
         );
       }
 
-      alert('¡Pool day configurado! El encargado y el administrador serán notificados.');
+      alert(t('parent.carpool.configuredAlert'));
       setShowCarpoolModal(false);
       resetCarpoolForm();
       await fetchCarpoolData();
     } catch (err: any) {
       console.error(err);
-      alert('Error al configurar el pool day: ' + (err.message || String(err)));
+      alert(t('parent.carpool.configureErrorPrefix') + (err.message || String(err)));
     } finally {
       setIsSubmittingCarpool(false);
     }
   };
 
   const handleDeleteCarpoolAuthorization = async (id: string) => {
-    if (!confirm('¿Quitar esta autorización recurrente?')) return;
+    if (!confirm(t('parent.carpool.removeAuthConfirm'))) return;
     try {
       await apiJson(`/api/carpool/authorizations/${id}`, { method: 'DELETE' });
       await fetchCarpoolData();
     } catch (err: any) {
-      alert('Error al quitar la autorización: ' + (err.message || String(err)));
+      alert(t('parent.carpool.removeAuthErrorPrefix') + (err.message || String(err)));
     }
   };
 
   const handleDeleteCarpoolOverride = async (id: string) => {
-    if (!confirm('¿Quitar esta excepción de un día?')) return;
+    if (!confirm(t('parent.carpool.removeOverrideConfirm'))) return;
     try {
       await apiJson(`/api/carpool/overrides/${id}`, { method: 'DELETE' });
       await fetchCarpoolData();
     } catch (err: any) {
-      alert('Error al quitar la excepción: ' + (err.message || String(err)));
+      alert(t('parent.carpool.removeOverrideErrorPrefix') + (err.message || String(err)));
     }
   };
 
@@ -365,7 +390,7 @@ export function ParentDashboard() {
           .from('avatars')
           .upload(filePath, replacementPhotoFile);
         if (uploadError) {
-          throw new Error('No se pudo subir la foto: ' + uploadError.message);
+          throw new Error(t('parent.replacement.photoUploadErrorPrefix') + uploadError.message);
         }
         const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
         photoUrl = publicUrlData.publicUrl;
@@ -386,7 +411,7 @@ export function ParentDashboard() {
 
       if (!response.ok) {
          const errorData = await response.json();
-         throw new Error(errorData.error || 'Error al enviar la solicitud');
+         throw new Error(errorData.error || t('parent.replacement.genericErrorFallback'));
       }
 
       // 2. Also log it for history
@@ -398,7 +423,7 @@ export function ParentDashboard() {
         profile?.tenant_id
       );
 
-      alert("Solicitud enviada. La recepción revisará y autorizará el reemplazo en breve.");
+      alert(t('parent.replacement.submittedAlert'));
       setShowReplacementModal(false);
       setReplacementName('');
       setReplacementPhone('');
@@ -406,7 +431,7 @@ export function ParentDashboard() {
       setReplacementPhotoPreview(null);
     } catch (err: any) {
       console.error(err);
-      alert("Error al enviar solicitud: " + (err.message || String(err)));
+      alert(t('parent.replacement.submitErrorPrefix') + (err.message || String(err)));
     } finally {
       setIsSubmittingReplacement(false);
     }
@@ -431,7 +456,7 @@ export function ParentDashboard() {
 
       if (!response.ok) {
          const errorData = await response.json();
-         throw new Error(errorData.error || 'Error al enviar la solicitud');
+         throw new Error(errorData.error || t('parent.replacement.genericErrorFallback'));
       }
 
       await logActivity(
@@ -442,13 +467,13 @@ export function ParentDashboard() {
         profile?.tenant_id
       );
 
-      alert("Aviso enviado correctamente a recepción.");
+      alert(t('parent.delivery.sentAlert'));
       setShowDeliveryModal(false);
       setDeliveryMessage('');
       setDeliveryLink('');
     } catch (err: any) {
       console.error(err);
-      alert("Error al enviar aviso: " + (err.message || String(err)));
+      alert(t('parent.delivery.sendErrorPrefix') + (err.message || String(err)));
     } finally {
       setIsSubmittingReplacement(false);
     }
@@ -480,20 +505,21 @@ export function ParentDashboard() {
     // y no pasaba nada al tocar "Enviar". El plugin de Capacitor sí abre la
     // hoja de compartir nativa (WhatsApp, SMS, etc.) en ambas plataformas.
     try {
+      const shareText = t('parent.replacement.shareTextTemplate').replace('{name}', replacement.name);
       if (isNativeApp()) {
         await Share.share({
-          title: 'Pase de Recogida - Safe SmartPickUP',
-          text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
+          title: t('parent.replacement.shareTitle'),
+          text: shareText,
           url,
         });
       } else if (navigator.share) {
         await navigator.share({
-          title: 'Pase de Recogida - Safe SmartPickUP',
-          text: `Hola ${replacement.name}, aquí tienes tu código QR para recoger a los niños hoy.`,
+          title: t('parent.replacement.shareTitle'),
+          text: shareText,
           url,
         });
       } else {
-        alert("QR listo para ser escaneado desde tu pantalla.");
+        alert(t('parent.replacement.shareFallbackAlert'));
       }
     } catch (err) {
       console.error(err);
@@ -655,10 +681,10 @@ export function ParentDashboard() {
       setStatus('idle');
       setJustCompletedToday(true);
       if (auto) {
-        setSuccessMessage('Detectamos que saliste del colegio — dimos por confirmada la recogida automáticamente.');
+        setSuccessMessage(t('parent.pickup.autoCompletedMessage'));
         setTimeout(() => setSuccessMessage(null), 10000);
       } else {
-        alert("¡Ciclo de recogida terminado! Buen viaje.");
+        alert(t('parent.pickup.completedAlert'));
       }
     }
     setLoading(false);
@@ -675,9 +701,9 @@ export function ParentDashboard() {
 
   const getFarewellMessage = () => {
     const day = new Date().getDay(); // 0=domingo … 5=viernes, 6=sábado
-    if (day === 5) return { title: '¡Buen fin de semana!', subtitle: 'Nos vemos el lunes.' };
-    if (day === 0 || day === 6) return { title: '¡Nos vemos pronto!', subtitle: 'Que descanses.' };
-    return { title: '¡Nos vemos mañana!', subtitle: 'Buen viaje a casa.' };
+    if (day === 5) return { title: t('parent.farewell.fridayTitle'), subtitle: t('parent.farewell.fridaySubtitle') };
+    if (day === 0 || day === 6) return { title: t('parent.farewell.weekendTitle'), subtitle: t('parent.farewell.weekendSubtitle') };
+    return { title: t('parent.farewell.weekdayTitle'), subtitle: t('parent.farewell.weekdaySubtitle') };
   };
 
   const handleSubmitForm = async () => {
@@ -712,10 +738,10 @@ export function ParentDashboard() {
       setActiveForm(null);
       setAnswers({});
       await fetchPendingForms();
-      alert("¡Respuesta enviada con éxito!");
+      alert(t('parent.forms.submittedAlert'));
     } catch (err: any) {
       console.error(err);
-      alert("Error al enviar: " + err.message);
+      alert(t('parent.forms.submitErrorPrefix') + err.message);
     } finally {
       setLoading(false);
     }
@@ -729,7 +755,7 @@ export function ParentDashboard() {
 
   const startLocationWatch = () => {
     if (!("geolocation" in navigator)) {
-      setErrorMessage("Este navegador no permite compartir ubicación.");
+      setErrorMessage(t('parent.location.notSupported'));
       setIsLocationEnabled(false);
       return;
     }
@@ -752,13 +778,13 @@ export function ParentDashboard() {
         if (error.code === error.PERMISSION_DENIED) {
           setErrorMessage(
             isInAppBrowser
-              ? 'No se pudo activar la ubicación porque abriste el enlace dentro de Gmail/Correo, y ese navegador interno no puede pedir permiso de ubicación aunque tu iPhone lo tenga activado. Toca el botón de menú (⋯) o compartir arriba de la pantalla y elige "Abrir en Safari", y ahí sí funcionará.'
-              : 'Tu iPhone está bloqueando la ubicación para esta página. Ve a Ajustes → Privacidad y seguridad → Localización y actívala si está apagada (interruptor arriba); luego, dentro de esa misma pantalla, busca Safari (páginas web) y ponlo en "Preguntar" o "Mientras se usa la app".'
+              ? t('parent.location.deniedInAppBrowser')
+              : t('parent.location.deniedIOS')
           );
         } else if (error.code === error.TIMEOUT) {
-          setErrorMessage("No se pudo obtener tu ubicación a tiempo. Verifica tu señal e intenta de nuevo.");
+          setErrorMessage(t('parent.location.timeoutError'));
         } else {
-          setErrorMessage("No se pudo obtener tu ubicación en este momento. Intenta de nuevo.");
+          setErrorMessage(t('parent.location.genericError'));
         }
         setIsLocationEnabled(false);
       },
@@ -791,7 +817,7 @@ export function ParentDashboard() {
       );
       setIsBackgroundTrackingActive(true);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'No se pudo activar el rastreo de ubicación en segundo plano.');
+      setErrorMessage(err?.message || t('parent.location.backgroundTrackingErrorFallback'));
     }
   };
 
@@ -934,7 +960,7 @@ export function ParentDashboard() {
 
       if (insertError) {
         console.error('Error inserting pickup event:', insertError);
-        setErrorMessage(`Error al anunciar: ${insertError.message}`);
+        setErrorMessage(`${t('parent.pickup.announceErrorPrefix')}${insertError.message}`);
         setLoading(false);
         return;
       }
@@ -1001,13 +1027,13 @@ export function ParentDashboard() {
                   className="flex items-center gap-1 group"
                 >
                   <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest opacity-80 group-hover:opacity-100">
-                    {profile?.tenant?.name || 'Cambiar Colegio'}
+                    {profile?.tenant?.name || t('parent.header.switchSchoolFallback')}
                   </p>
                   <ChevronRight className={`w-3 h-3 text-indigo-100 transition-transform ${showSchoolSelector ? 'rotate-90' : ''}`} />
                 </button>
               ) : (
                 <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest opacity-80">
-                  {profile?.tenant?.name || 'Safe SmartPickUP'}
+                  {profile?.tenant?.name || t('parent.header.brandFallback')}
                 </p>
               )}
               <h1 className="text-2xl font-black">{profile?.first_name} {profile?.last_name}</h1>
@@ -1034,7 +1060,7 @@ export function ParentDashboard() {
         {/* School Selector Dropdown */}
         {showSchoolSelector && (
           <div className="absolute top-24 left-6 right-6 z-50 bg-white rounded-3xl shadow-2xl border border-indigo-100 p-2 animate-in slide-in-from-top-4 duration-300">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] p-3">Selecciona tu colegio</p>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] p-3">{t('parent.schoolSelector.title')}</p>
             {profiles.map((p: any) => (
               <button
                 key={p.tenant_id}
@@ -1048,7 +1074,7 @@ export function ParentDashboard() {
                   <div className={`p-2 rounded-xl ${p.tenant_id === profile?.tenant_id ? 'bg-white/20' : 'bg-slate-100'}`}>
                     <ShieldCheck className="w-4 h-4" />
                   </div>
-                  <span className="text-sm">{p.tenant?.name || 'Sede Alterna'}</span>
+                  <span className="text-sm">{p.tenant?.name || t('parent.schoolSelector.altBranch')}</span>
                 </div>
                 {p.tenant_id === profile?.tenant_id && <CheckCircle2 className="w-4 h-4" />}
               </button>
@@ -1063,9 +1089,9 @@ export function ParentDashboard() {
                 <Navigation className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-xs font-black block">Ubicación en Segundo Plano</span>
+                <span className="text-xs font-black block">{t('parent.location.bgTitle')}</span>
                 <span className="text-[10px] text-indigo-100 opacity-80">
-                  {isLocationEnabled ? 'Activa automáticamente' : 'Esperando permiso del sistema'}
+                  {isLocationEnabled ? t('parent.location.bgActive') : t('parent.location.bgWaiting')}
                 </span>
               </div>
             </div>
@@ -1074,7 +1100,7 @@ export function ParentDashboard() {
                 onClick={openLocationSettings}
                 className="text-[10px] font-black uppercase tracking-widest text-indigo-100 underline"
               >
-                Ajustes
+                {t('parent.location.settingsBtn')}
               </button>
             )}
           </div>
@@ -1084,7 +1110,7 @@ export function ParentDashboard() {
               <div className={`p-2 rounded-lg ${isLocationEnabled ? 'bg-emerald-500 text-white' : 'bg-white/20'}`}>
                 <Navigation className="w-4 h-4" />
               </div>
-              <span className="text-xs font-black">Compartir Ubicación GPS</span>
+              <span className="text-xs font-black">{t('parent.location.shareGps')}</span>
             </div>
             <div className={`w-12 h-6 rounded-full relative border-2 ${isLocationEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-400/20 border-white/10'}`}>
                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isLocationEnabled ? 'left-6' : 'left-0.5'}`} />
@@ -1098,7 +1124,7 @@ export function ParentDashboard() {
               <div className="p-2 rounded-lg bg-white/20">
                 <MapPin className="w-4 h-4" />
               </div>
-              <span className="text-xs font-black">¿Por cuál puerta vas a pasar?</span>
+              <span className="text-xs font-black">{t('parent.doors.question')}</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {doors.map(door => (
@@ -1125,7 +1151,7 @@ export function ParentDashboard() {
         {isInAppBrowser && !isLocationEnabled && !errorMessage && (
           <div className="bg-amber-50 text-amber-700 p-4 rounded-2xl text-xs font-bold flex items-center gap-3 border border-amber-100 animate-in slide-in-from-top-2">
             <AlertTriangle className="w-5 h-5 shrink-0" />
-            Parece que abriste este enlace dentro de Gmail o Correo. Para poder compartir tu ubicación con el colegio, toca el menú (⋯) o el ícono de compartir arriba y elige "Abrir en Safari".
+            {t('parent.location.inAppBrowserWarning')}
           </div>
         )}
 
@@ -1151,7 +1177,7 @@ export function ParentDashboard() {
                <div className="p-2 bg-indigo-600 rounded-xl">
                   <Bell className="w-4 h-4 text-white animate-ring" />
                </div>
-               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Avisos y Autorizaciones</h3>
+               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{t('parent.forms.sectionTitle')}</h3>
             </div>
             <div className="space-y-3">
               {pendingForms.map(form => (
@@ -1164,10 +1190,10 @@ export function ParentDashboard() {
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-slate-700 text-xs">{form.title}</h4>
                       <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${form.form_type === 'announcement' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-700'}`}>
-                        {form.form_type === 'announcement' ? 'Aviso' : 'Autorización'}
+                        {form.form_type === 'announcement' ? t('parent.forms.badgeAnnouncement') : t('parent.forms.badgeAuthorization')}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Grados: {form.target_grades?.join(', ')}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{t('parent.forms.gradesPrefix')}{form.target_grades?.join(', ')}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-indigo-400" />
                 </button>
@@ -1183,10 +1209,10 @@ export function ParentDashboard() {
             </div>
             <div>
               <h2 className={`font-black uppercase text-[10px] tracking-widest ${isInside ? 'text-emerald-600' : 'text-slate-400'}`}>
-                Sede: {profile?.tenant?.name || 'Colegio'}
+                {t('parent.location.sitePrefix')}{profile?.tenant?.name || t('parent.location.schoolFallback')}
               </h2>
               <p className="text-xl font-black">
-                {isInside ? '¡Llegaste!' : isLocationEnabled ? `${Math.round(distance || 0)}m de distancia` : 'Ubicación no disponible'}
+                {isInside ? t('parent.location.arrived') : isLocationEnabled ? `${Math.round(distance || 0)}${t('parent.location.distanceMeters')}` : t('parent.location.unavailable')}
               </p>
             </div>
           </div>
@@ -1199,16 +1225,16 @@ export function ParentDashboard() {
                  <UserCheck className="w-7 h-7 text-white" />
                </div>
                <div>
-                  <h3 className="text-xl font-black">¡Alumno en camino!</h3>
-                  <p className="text-[10px] font-bold text-amber-100 uppercase">El maestro ha autorizado la salida</p>
+                  <h3 className="text-xl font-black">{t('parent.pickup.enRouteTitle')}</h3>
+                  <p className="text-[10px] font-bold text-amber-100 uppercase">{t('parent.pickup.teacherAuthorized')}</p>
                </div>
              </div>
-             <button 
+             <button
                onClick={handleFinalConfirm}
                disabled={loading}
                className="w-full bg-white text-amber-600 font-black py-5 rounded-[2rem] shadow-xl active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'CONFIRMAR REUNIÓN / FINALIZAR'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parent.pickup.confirmMeetingBtn')}
              </button>
           </div>
         ) : status === 'pickup_active' ? (
@@ -1217,10 +1243,10 @@ export function ParentDashboard() {
                <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-white/10">
                  <Bell className="w-7 h-7 text-emerald-400 animate-bounce" />
                </div>
-               <h3 className="text-xl font-black">Maestro Notificado</h3>
+               <h3 className="text-xl font-black">{t('parent.pickup.teacherNotifiedTitle')}</h3>
              </div>
              <div className="bg-white/10 p-6 rounded-3xl flex flex-col items-center">
-               <span className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-2">Tu PIN</span>
+               <span className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-2">{t('parent.pickup.yourPin')}</span>
                <span className="text-4xl font-black tracking-[0.3em]">{profile?.pin_code}</span>
              </div>
           </div>
@@ -1239,12 +1265,12 @@ export function ParentDashboard() {
                 className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
               >
                  <ShieldCheck className="w-10 h-10" />
-                 <span className="text-2xl font-black">ANUNCIAR LLEGADA</span>
+                 <span className="text-2xl font-black">{t('parent.pickup.announceBtn')}</span>
               </button>
             ) : (
               <div className="bg-white border-2 border-dashed border-slate-200 rounded-[3rem] p-6 space-y-3">
                 <p className="text-xs font-bold text-slate-500 text-center">
-                  No pudimos confirmar tu ubicación automáticamente. Puedes intentar activarla, o avisar que ya llegaste sin ella.
+                  {t('parent.pickup.noLocationMsg')}
                 </p>
                 {!showManualArrival ? (
                   <>
@@ -1254,19 +1280,19 @@ export function ParentDashboard() {
                       className="w-full p-6 bg-indigo-600 text-white rounded-[2.5rem] shadow-xl flex flex-col items-center gap-2"
                     >
                       <ShieldCheck className="w-8 h-8" />
-                      <span className="text-lg font-black">YA ESTOY EN EL COLEGIO</span>
+                      <span className="text-lg font-black">{t('parent.pickup.manualArrivalBtn')}</span>
                     </button>
                     <button
                       onClick={toggleLocation}
                       className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-500 underline"
                     >
-                      Intentar activar ubicación
+                      {t('parent.location.tryEnableBtn')}
                     </button>
                   </>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs font-bold text-slate-600 text-center">
-                      Confirma que estás físicamente en la zona de recogida. El colegio verificará tu identidad como siempre al llegar.
+                      {t('parent.pickup.confirmManualMsg')}
                     </p>
                     <div className="flex gap-3">
                       <button
@@ -1274,14 +1300,14 @@ export function ParentDashboard() {
                         disabled={loading}
                         className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest"
                       >
-                        Cancelar
+                        {t('parent.common.cancel')}
                       </button>
                       <button
                         onClick={() => handleAnnounceArrival(true)}
                         disabled={loading}
                         className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
                       >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar llegada'}
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.pickup.confirmArrivalBtn')}
                       </button>
                     </div>
                   </div>
@@ -1294,14 +1320,14 @@ export function ParentDashboard() {
               className="w-full p-6 bg-white border-2 border-dashed border-indigo-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-indigo-600 font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all"
             >
               <UserPlus className="w-5 h-5" />
-              Solicitar Reemplazo de Recogida
+              {t('parent.replacement.requestBtn')}
             </button>
             <button
               onClick={() => setShowDeliveryModal(true)}
               className="w-full p-6 bg-white border-2 border-dashed border-amber-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-amber-600 font-black text-xs uppercase tracking-widest hover:bg-amber-50 transition-all"
             >
               <MessageSquare className="w-5 h-5" />
-              Enviar Mensaje / Delivery
+              {t('parent.delivery.sendBtn')}
             </button>
             {students.length > 0 && (
               <button
@@ -1309,7 +1335,7 @@ export function ParentDashboard() {
                 className="w-full p-6 bg-white border-2 border-dashed border-emerald-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-all"
               >
                 <Car className="w-5 h-5" />
-                Configurar Pool Day
+                {t('parent.carpool.configureBtn')}
               </button>
             )}
           </div>
@@ -1318,7 +1344,7 @@ export function ParentDashboard() {
         {/* Pool Day: lo que configuré para mis hijos + lo que conduzco para otros */}
         {(carpoolData.authorizations.length > 0 || carpoolData.overrides.length > 0 || carpoolData.drivingFor.length > 0 || carpoolData.drivingForOverrides.length > 0) && (
           <section className="space-y-4">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Pool Day</h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('parent.carpool.sectionTitle')}</h3>
             <div className="grid grid-cols-1 gap-3">
               {carpoolData.authorizations.map((a: any) => (
                 <div key={a.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
@@ -1326,7 +1352,7 @@ export function ParentDashboard() {
                   <div className="flex-1">
                     <h4 className="font-black text-slate-800 text-sm">{a.student?.first_name} {a.student?.last_name}</h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">
-                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][a.day_of_week]} · Conduce {a.driver?.first_name} {a.driver?.last_name}
+                      {[t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')][a.day_of_week]} · {t('parent.carpool.drivesLabel')} {a.driver?.first_name} {a.driver?.last_name}
                     </p>
                   </div>
                   <button onClick={() => handleDeleteCarpoolAuthorization(a.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
@@ -1339,7 +1365,7 @@ export function ParentDashboard() {
                   <div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><CalendarDays className="w-5 h-5" /></div>
                   <div className="flex-1">
                     <h4 className="font-black text-slate-800 text-sm">{o.student?.first_name} {o.student?.last_name}</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">{o.override_date} (solo ese día) · Conduce {o.driver?.first_name} {o.driver?.last_name}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">{o.override_date} {t('parent.carpool.singleDayNote')} · {t('parent.carpool.drivesLabel')} {o.driver?.first_name} {o.driver?.last_name}</p>
                   </div>
                   <button onClick={() => handleDeleteCarpoolOverride(o.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
                     <Trash2 className="w-4 h-4" />
@@ -1348,16 +1374,16 @@ export function ParentDashboard() {
               ))}
               {(carpoolData.drivingFor.length > 0 || carpoolData.drivingForOverrides.length > 0) && (
                 <div className="bg-indigo-50 p-5 rounded-[2rem] border border-indigo-100">
-                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-3">Tú conduces para</p>
+                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-3">{t('parent.carpool.drivingForLabel')}</p>
                   <div className="space-y-2">
                     {carpoolData.drivingFor.map((a: any) => (
                       <p key={a.id} className="text-xs font-bold text-indigo-700">
-                        {a.student?.first_name} {a.student?.last_name} — {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][a.day_of_week]} (por {a.authorizing?.first_name} {a.authorizing?.last_name})
+                        {a.student?.first_name} {a.student?.last_name} — {[t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')][a.day_of_week]} ({t('parent.carpool.byLabel')} {a.authorizing?.first_name} {a.authorizing?.last_name})
                       </p>
                     ))}
                     {carpoolData.drivingForOverrides.map((o: any) => (
                       <p key={o.id} className="text-xs font-bold text-indigo-700">
-                        {o.student?.first_name} {o.student?.last_name} — {o.override_date} (por {o.authorizing?.first_name} {o.authorizing?.last_name})
+                        {o.student?.first_name} {o.student?.last_name} — {o.override_date} ({t('parent.carpool.byLabel')} {o.authorizing?.first_name} {o.authorizing?.last_name})
                       </p>
                     ))}
                   </div>
@@ -1370,7 +1396,7 @@ export function ParentDashboard() {
         {/* Authorized Replacements Section */}
         {authorizedReplacements.length > 0 && (
           <section className="space-y-4">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Reemplazos Autorizados</h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('parent.replacement.sectionTitle')}</h3>
             <div className="grid grid-cols-1 gap-4">
               {authorizedReplacements.map((rep: any, idx: number) => (
                 <div key={idx} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6">
@@ -1395,7 +1421,7 @@ export function ParentDashboard() {
                     <h4 className="font-black text-slate-800 text-sm">{rep.name}</h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">{rep.phone}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-emerald-100">Activo</span>
+                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-emerald-100">{t('parent.replacement.activeBadge')}</span>
                     </div>
                   </div>
                   <button 
@@ -1416,11 +1442,11 @@ export function ParentDashboard() {
                 <img src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"} className="w-16 h-16 rounded-2xl object-cover" />
                 <div className="flex-1">
                    <h5 className="font-bold text-slate-800">{s.first_name} {s.last_name}</h5>
-                   <p className="text-[11px] text-slate-500 font-black uppercase">{s.grade || 'Grado no asignado'}</p>
+                   <p className="text-[11px] text-slate-500 font-black uppercase">{s.grade || t('parent.students.gradeUnassigned')}</p>
                 </div>
                 {(s as any)._isCarpool && (
                   <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border border-emerald-100 flex items-center gap-1">
-                    <Car className="w-3 h-3" /> Pool day hoy
+                    <Car className="w-3 h-3" /> {t('parent.carpool.todayBadge')}
                   </span>
                 )}
              </div>
@@ -1453,15 +1479,15 @@ export function ParentDashboard() {
                                <button
                                  onClick={() => setAnswers({...answers, [q.id]: 'SI'})}
                                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'SI' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                               >SÍ, AUTORIZO</button>
+                               >{t('parent.forms.yesAuthorize')}</button>
                                <button
                                  onClick={() => setAnswers({...answers, [q.id]: 'NO'})}
                                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'NO' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                               >NO AUTORIZO</button>
+                               >{t('parent.forms.noAuthorize')}</button>
                              </div>
                            ) : (
                              <input
-                               placeholder="Escribe tu respuesta..."
+                               placeholder={t('parent.forms.answerPlaceholder')}
                                onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
                                className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium outline-none focus:ring-2 ring-indigo-500/20"
                              />
@@ -1473,7 +1499,7 @@ export function ParentDashboard() {
               </div>
               <div className="p-8 border-t border-slate-50 flex gap-4">
                  <button onClick={handleSubmitForm} disabled={loading} className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest">
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : activeForm.form_type === 'announcement' ? <><CheckCircle2 className="w-4 h-4" /> ENTENDIDO</> : <><Send className="w-4 h-4" /> ENVIAR FIRMA DIGITAL</>}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : activeForm.form_type === 'announcement' ? <><CheckCircle2 className="w-4 h-4" /> {t('parent.forms.understoodBtn')}</> : <><Send className="w-4 h-4" /> {t('parent.forms.sendSignatureBtn')}</>}
                  </button>
               </div>
            </div>
@@ -1487,28 +1513,26 @@ export function ParentDashboard() {
               <div className="p-2 bg-indigo-600 rounded-xl text-white">
                 <MapPin className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Ubicación en Segundo Plano</h3>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.location.bgTitle')}</h3>
             </div>
             <div className="p-8 space-y-6">
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Safe Smart Pickup usa tu ubicación para avisarle al colegio automáticamente cuando llegas a la
-                zona de recogida y cuando te retiras con tu hijo o hija — sin que tengas que abrir la app.
+                {t('parent.location.rationaleParagraph1')}
               </p>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Para eso, Android te va a pedir el permiso <b>“Permitir todo el tiempo”</b>. Solo se usa para
-                esta función; nunca se comparte ni se usa con otro fin.
+                {t('parent.location.rationaleParagraph2Pre')} <b>{t('parent.location.rationaleParagraph2Bold')}</b>{t('parent.location.rationaleParagraph2Post')}
               </p>
               <button
                 onClick={handleAcceptLocationRationale}
                 className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
               >
-                Activar Ubicación
+                {t('parent.location.activateBtn')}
               </button>
               <button
                 onClick={() => { markLocationRationaleSeen(); setShowLocationRationale(false); }}
                 className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest"
               >
-                Ahora no
+                {t('parent.common.notNow')}
               </button>
             </div>
           </div>
@@ -1523,47 +1547,47 @@ export function ParentDashboard() {
                  <div className="p-2 bg-indigo-600 rounded-xl text-white">
                    <UserPlus className="w-5 h-5" />
                  </div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Solicitar Reemplazo</h3>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.replacement.modalTitle')}</h3>
                </div>
                <button onClick={() => setShowReplacementModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
              <form onSubmit={handleRequestReplacement} className="p-8 space-y-6">
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Ingresa los datos de la persona que recogerá a los niños hoy. El administrador recibirá tu solicitud y generará un código QR seguro.
+                  {t('parent.replacement.modalDescription')}
                 </p>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre Completo</label>
-                    <input 
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.replacement.fullNameLabel')}</label>
+                    <input
                       required
                       value={replacementName}
                       onChange={e => setReplacementName(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
+                      placeholder={t('parent.replacement.fullNamePlaceholder')}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">WhatsApp / Teléfono</label>
-                    <input 
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.replacement.phoneLabel')}</label>
+                    <input
                       required
                       value={replacementPhone}
                       onChange={e => setReplacementPhone(e.target.value)}
-                      placeholder="+507 ..."
+                      placeholder={t('parent.replacement.phonePlaceholder')}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Foto de la persona (opcional)</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.replacement.photoLabel')}</label>
                     <label className="w-full flex items-center gap-4 bg-slate-50 border border-dashed border-slate-300 rounded-2xl px-5 py-4 cursor-pointer hover:border-indigo-400 transition-all">
                       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white border border-slate-200 flex items-center justify-center shrink-0">
                         {replacementPhotoPreview ? (
-                          <img src={replacementPhotoPreview} alt="Vista previa" className="w-full h-full object-cover" />
+                          <img src={replacementPhotoPreview} alt={t('parent.replacement.photoPreviewAlt')} className="w-full h-full object-cover" />
                         ) : (
                           <Camera className="w-5 h-5 text-slate-400" />
                         )}
                       </div>
                       <span className="text-xs font-bold text-slate-500">
-                        {replacementPhotoPreview ? 'Cambiar foto' : 'Tomar o subir una foto'}
+                        {replacementPhotoPreview ? t('parent.replacement.changePhoto') : t('parent.replacement.takePhoto')}
                       </span>
                       <input
                         type="file"
@@ -1574,7 +1598,7 @@ export function ParentDashboard() {
                       />
                     </label>
                     <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
-                      Ayuda a recepción a reconocer a la persona al momento de escanear el QR.
+                      {t('parent.replacement.photoHelp')}
                     </p>
                   </div>
                 </div>
@@ -1583,7 +1607,7 @@ export function ParentDashboard() {
                   disabled={isSubmittingReplacement}
                   className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
                 >
-                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR SOLICITUD'}
+                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parent.replacement.submitBtn')}
                 </button>
              </form>
           </div>
@@ -1599,41 +1623,41 @@ export function ParentDashboard() {
                  <div className="p-2 bg-amber-600 rounded-xl text-white">
                    <MessageSquare className="w-5 h-5" />
                  </div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Aviso / Delivery</h3>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.delivery.modalTitle')}</h3>
                </div>
                <button onClick={() => setShowDeliveryModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
              <form onSubmit={handleRequestDelivery} className="p-8 space-y-6">
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Envía un mensaje a recepción. Ejemplo: "Enviaré un pedido por Uber Eats" o "Pasaré dejando una encomienda". Puedes incluir un enlace si lo tienes.
+                  {t('parent.delivery.modalDescription')}
                 </p>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Mensaje / Detalle</label>
-                    <textarea 
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.delivery.messageLabel')}</label>
+                    <textarea
                       required
                       value={deliveryMessage}
                       onChange={e => setDeliveryMessage(e.target.value)}
-                      placeholder="Ej. Mi hijo olvidó su termo, enviaré un Uber Flash a dejarlo."
+                      placeholder={t('parent.delivery.messagePlaceholder')}
                       className="w-full min-h-[100px] bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all resize-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Enlace / Link (Opcional)</label>
-                    <input 
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.delivery.linkLabel')}</label>
+                    <input
                       value={deliveryLink}
                       onChange={e => setDeliveryLink(e.target.value)}
-                      placeholder="Ej. https://ubereats.com/..."
+                      placeholder={t('parent.delivery.linkPlaceholder')}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                   </div>
                 </div>
-                <button 
+                <button
                   type="submit"
                   disabled={isSubmittingReplacement}
                   className="w-full bg-amber-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-amber-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
                 >
-                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR AVISO'}
+                  {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parent.delivery.submitBtn')}
                 </button>
              </form>
           </div>
@@ -1649,24 +1673,24 @@ export function ParentDashboard() {
                  <div className="p-2 bg-emerald-600 rounded-xl text-white">
                    <Car className="w-5 h-5" />
                  </div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Configurar Pool Day</h3>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.carpool.modalTitle')}</h3>
                </div>
                <button onClick={() => { setShowCarpoolModal(false); resetCarpoolForm(); }} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
              <form onSubmit={handleSubmitCarpool} className="p-8 space-y-6 overflow-y-auto">
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Autoriza a otro padre o madre ya registrado a recoger a tu hijo/a. Se activa al instante — el encargado de la salida y el administrador serán notificados, sin necesidad de aprobación.
+                  {t('parent.carpool.modalDescription')}
                 </p>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Hijo/a</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.childLabel')}</label>
                   <select
                     required
                     value={carpoolStudentId}
                     onChange={e => setCarpoolStudentId(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
                   >
-                    <option value="">Selecciona...</option>
+                    <option value="">{t('parent.carpool.selectOption')}</option>
                     {students.map(s => (
                       <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
                     ))}
@@ -1674,26 +1698,26 @@ export function ParentDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Frecuencia</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.frequencyLabel')}</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setCarpoolMode('weekly')}
                       className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${carpoolMode === 'weekly' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                    >Cada Semana</button>
+                    >{t('parent.carpool.weeklyOption')}</button>
                     <button
                       type="button"
                       onClick={() => setCarpoolMode('oneday')}
                       className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${carpoolMode === 'oneday' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                    >Solo Un Día</button>
+                    >{t('parent.carpool.oneDayOption')}</button>
                   </div>
                 </div>
 
                 {carpoolMode === 'weekly' ? (
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Días de la semana</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.daysOfWeekLabel')}</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((label, day) => (
+                      {[t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')].map((label, day) => (
                         <button
                           key={day}
                           type="button"
@@ -1705,7 +1729,7 @@ export function ParentDashboard() {
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Fecha</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.dateLabel')}</label>
                     <input
                       type="date"
                       required
@@ -1718,7 +1742,7 @@ export function ParentDashboard() {
                 )}
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">¿Quién conduce?</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.whoDrivesLabel')}</label>
                   {selectedDriver ? (
                     <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-4">
                       <img src={selectedDriver.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-9 h-9 rounded-xl object-cover" />
@@ -1731,11 +1755,11 @@ export function ParentDashboard() {
                     <div className="space-y-3">
                       {isLoadingClassmates ? (
                         <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-2">
-                          <Loader2 className="w-4 h-4 animate-spin" /> Cargando padres del salón...
+                          <Loader2 className="w-4 h-4 animate-spin" /> {t('parent.carpool.loadingClassmates')}
                         </div>
                       ) : classmateParents.length > 0 ? (
                         <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Padres del mismo salón</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('parent.carpool.classmateParentsLabel')}</p>
                           <div className="flex flex-wrap gap-2">
                             {classmateParents.map(p => (
                               <button
@@ -1756,7 +1780,7 @@ export function ParentDashboard() {
                       <input
                         value={driverQuery}
                         onChange={e => setDriverQuery(e.target.value)}
-                        placeholder="O busca por nombre o correo..."
+                        placeholder={t('parent.carpool.searchPlaceholder')}
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition-all"
                       />
                       {isSearchingDrivers && <Loader2 className="w-4 h-4 text-slate-300 animate-spin absolute right-5 top-1/2 -translate-y-1/2" />}
@@ -1788,7 +1812,7 @@ export function ParentDashboard() {
                   disabled={isSubmittingCarpool || !carpoolStudentId || !selectedDriver}
                   className="w-full bg-emerald-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-emerald-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
                 >
-                  {isSubmittingCarpool ? <Loader2 className="w-5 h-5 animate-spin" /> : 'AUTORIZAR'}
+                  {isSubmittingCarpool ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parent.carpool.authorizeBtn')}
                 </button>
              </form>
           </div>
@@ -1801,13 +1825,13 @@ export function ParentDashboard() {
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
              <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                <div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Centro de Mensajes</h3>
+                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.notifications.modalTitle')}</h3>
                  {notifications.length > 0 && (
-                   <button 
+                   <button
                     onClick={clearAllNotifications}
                     className="text-[10px] font-black text-rose-500 uppercase mt-1 hover:text-rose-600 transition-colors"
                    >
-                     Limpiar todo
+                     {t('parent.notifications.clearAll')}
                    </button>
                  )}
                </div>
@@ -1817,7 +1841,7 @@ export function ParentDashboard() {
                {notifications.length === 0 ? (
                  <div className="py-12 text-center">
                    <Bell className="w-10 h-10 text-slate-100 mx-auto mb-2" />
-                   <p className="text-slate-300 font-bold italic text-xs">Buzón vacío</p>
+                   <p className="text-slate-300 font-bold italic text-xs">{t('parent.notifications.emptyInbox')}</p>
                  </div>
                ) : (
                  notifications.map(n => (

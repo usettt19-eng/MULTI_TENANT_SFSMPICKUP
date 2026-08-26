@@ -25,6 +25,7 @@ export function Settings() {
     logo_url: '',
     primary_dismissal_mode: 'teacher' as 'teacher' | 'staff',
   });
+  const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -34,18 +35,24 @@ export function Settings() {
   const fetchSettings = async () => {
     if (!profile?.tenant_id) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('school_settings')
-      .select('*')
-      .eq('tenant_id', profile.tenant_id)
-      // Un colegio recién creado (como en la implementación inicial vía
-      // "Entrar como Admin") todavía no tiene fila en school_settings —
-      // .single() lanzaría error en ese caso, así que se usa maybeSingle()
-      // y se dejan los valores por defecto del estado inicial.
-      .maybeSingle();
+    const [{ data, error }, { data: tenantData }] = await Promise.all([
+      supabase
+        .from('school_settings')
+        .select('*')
+        .eq('tenant_id', profile.tenant_id)
+        // Un colegio recién creado (como en la implementación inicial vía
+        // "Entrar como Admin") todavía no tiene fila en school_settings —
+        // .single() lanzaría error en ese caso, así que se usa maybeSingle()
+        // y se dejan los valores por defecto del estado inicial.
+        .maybeSingle(),
+      supabase.from('tenants').select('default_language').eq('id', profile.tenant_id).maybeSingle(),
+    ]);
 
     if (data) {
       setSettings(data);
+    }
+    if (tenantData?.default_language === 'en' || tenantData?.default_language === 'es') {
+      setDefaultLanguage(tenantData.default_language);
     }
     setLoading(false);
   };
@@ -91,11 +98,14 @@ export function Settings() {
       }
     }
 
-    const { error } = await supabase
-      .from('school_settings')
-      .upsert(currentSettings);
+    const [{ error }, { error: langError }] = await Promise.all([
+      supabase.from('school_settings').upsert(currentSettings),
+      profile?.tenant_id
+        ? supabase.from('tenants').update({ default_language: defaultLanguage }).eq('id', profile.tenant_id)
+        : Promise.resolve({ error: null }),
+    ]);
 
-    if (error) alert("Error al guardar: " + error.message);
+    if (error || langError) alert("Error al guardar: " + (error?.message || langError?.message));
     else {
       alert("Ajustes guardados correctamente.");
       setLogoFile(null); // Clear the selected file
@@ -218,12 +228,42 @@ export function Settings() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Dirección Física</label>
-                      <input 
+                      <input
                         required
                         value={settings.address}
                         onChange={e => setSettings({...settings, address: e.target.value})}
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium text-slate-600 outline-none focus:border-primary focus:bg-white transition-all"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Idioma de la app para padres</label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setDefaultLanguage('es')}
+                          className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                            defaultLanguage === 'es'
+                              ? 'bg-primary text-white shadow-lg'
+                              : 'bg-slate-50 text-slate-400 border border-slate-200'
+                          }`}
+                        >
+                          Español
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDefaultLanguage('en')}
+                          className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                            defaultLanguage === 'en'
+                              ? 'bg-primary text-white shadow-lg'
+                              : 'bg-slate-50 text-slate-400 border border-slate-200'
+                          }`}
+                        >
+                          English
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium italic mt-2">
+                        Todos los padres de este colegio verán su app en este idioma.
+                      </p>
                     </div>
                   </div>
                 </section>
