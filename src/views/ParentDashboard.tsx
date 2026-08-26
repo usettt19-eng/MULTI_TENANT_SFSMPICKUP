@@ -1136,17 +1136,22 @@ export function ParentDashboard() {
                <div className="p-2 bg-indigo-600 rounded-xl">
                   <Bell className="w-4 h-4 text-white animate-ring" />
                </div>
-               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Autorización Pendiente</h3>
+               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Avisos y Autorizaciones</h3>
             </div>
             <div className="space-y-3">
               {pendingForms.map(form => (
-                <button 
-                  key={form.id} 
+                <button
+                  key={form.id}
                   onClick={() => setActiveForm(form)}
                   className="w-full bg-slate-50 p-4 rounded-2xl flex items-center justify-between border border-transparent hover:border-indigo-200 transition-all text-left"
                 >
                   <div>
-                    <h4 className="font-bold text-slate-700 text-xs">{form.title}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-slate-700 text-xs">{form.title}</h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${form.form_type === 'announcement' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-700'}`}>
+                        {form.form_type === 'announcement' ? 'Aviso' : 'Autorización'}
+                      </span>
+                    </div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Grados: {form.target_grades?.join(', ')}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-indigo-400" />
@@ -1422,36 +1427,38 @@ export function ParentDashboard() {
                  <button onClick={() => setActiveForm(null)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
               </div>
               <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto">
-                 <p className="text-slate-500 text-sm font-medium">{activeForm.description}</p>
-                 <div className="space-y-6">
-                    {activeForm.form_questions.map((q: any) => (
-                      <div key={q.id} className="space-y-4">
-                         <label className="text-sm font-black text-slate-800 leading-tight block">{q.question_text}</label>
-                         {q.question_type === 'boolean' ? (
-                           <div className="grid grid-cols-2 gap-4">
-                             <button
-                               onClick={() => setAnswers({...answers, [q.id]: 'SI'})}
-                               className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'SI' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                             >SÍ, AUTORIZO</button>
-                             <button
-                               onClick={() => setAnswers({...answers, [q.id]: 'NO'})}
-                               className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'NO' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
-                             >NO AUTORIZO</button>
-                           </div>
-                         ) : (
-                           <input 
-                             placeholder="Escribe tu respuesta..."
-                             onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
-                             className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium outline-none focus:ring-2 ring-indigo-500/20"
-                           />
-                         )}
-                      </div>
-                    ))}
-                 </div>
+                 <p className="text-slate-500 text-sm font-medium whitespace-pre-wrap">{activeForm.description}</p>
+                 {activeForm.form_type !== 'announcement' && (
+                   <div className="space-y-6">
+                      {activeForm.form_questions.map((q: any) => (
+                        <div key={q.id} className="space-y-4">
+                           <label className="text-sm font-black text-slate-800 leading-tight block">{q.question_text}</label>
+                           {q.question_type === 'boolean' ? (
+                             <div className="grid grid-cols-2 gap-4">
+                               <button
+                                 onClick={() => setAnswers({...answers, [q.id]: 'SI'})}
+                                 className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'SI' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                               >SÍ, AUTORIZO</button>
+                               <button
+                                 onClick={() => setAnswers({...answers, [q.id]: 'NO'})}
+                                 className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${answers[q.id] === 'NO' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                               >NO AUTORIZO</button>
+                             </div>
+                           ) : (
+                             <input
+                               placeholder="Escribe tu respuesta..."
+                               onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
+                               className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium outline-none focus:ring-2 ring-indigo-500/20"
+                             />
+                           )}
+                        </div>
+                      ))}
+                   </div>
+                 )}
               </div>
               <div className="p-8 border-t border-slate-50 flex gap-4">
                  <button onClick={handleSubmitForm} disabled={loading} className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest">
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4" /> ENVIAR FIRMA DIGITAL</>}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : activeForm.form_type === 'announcement' ? <><CheckCircle2 className="w-4 h-4" /> ENTENDIDO</> : <><Send className="w-4 h-4" /> ENVIAR FIRMA DIGITAL</>}
                  </button>
               </div>
            </div>

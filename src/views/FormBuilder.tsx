@@ -19,6 +19,7 @@ export function FormBuilder() {
   const [processing, setProcessing] = useState(false);
 
   // New Form State
+  const [formType, setFormType] = useState<'authorization' | 'announcement'>('authorization');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [targetGrades, setTargetGrades] = useState<string[]>([]);
@@ -95,7 +96,7 @@ export function FormBuilder() {
         </head>
         <body>
           <div class="header">
-            <h1>REPORTE OFICIAL DE AUTORIZACIONES</h1>
+            <h1>${selectedForm.form_type === 'announcement' ? 'REPORTE DE LECTURA DE AVISO' : 'REPORTE OFICIAL DE AUTORIZACIONES'}</h1>
             <p style="margin: 5px 0; font-weight: bold;">Evento: ${selectedForm.title}</p>
             <p style="margin: 0; font-size: 12px; color: #666;">Generado el: ${new Date().toLocaleString()}</p>
           </div>
@@ -105,8 +106,8 @@ export function FormBuilder() {
               <span class="stat-value">${responses.length}</span>
             </div>
             <div class="stat-box">
-              <span class="stat-label">Autorizados (SÍ)</span>
-              <span class="stat-value">${responses.filter(r => Object.values(r.answers).includes('SI')).length}</span>
+              <span class="stat-label">${selectedForm.form_type === 'announcement' ? 'Leyeron el Aviso' : 'Autorizados (SÍ)'}</span>
+              <span class="stat-value">${selectedForm.form_type === 'announcement' ? responses.length : responses.filter(r => Object.values(r.answers).includes('SI')).length}</span>
             </div>
             <div class="stat-box">
                <span class="stat-label">Grados</span>
@@ -119,7 +120,7 @@ export function FormBuilder() {
                 <th>ALUMNO</th>
                 <th>GRADO</th>
                 <th>PADRE / TUTOR</th>
-                <th>AUTORIZACIÓN</th>
+                <th>${selectedForm.form_type === 'announcement' ? 'ESTADO' : 'AUTORIZACIÓN'}</th>
                 <th>FECHA FIRMA</th>
               </tr>
             </thead>
@@ -129,8 +130,8 @@ export function FormBuilder() {
                   <td>${r.student?.first_name} ${r.student?.last_name}</td>
                   <td>${r.student?.grade}</td>
                   <td>${r.parent?.first_name} ${r.parent?.last_name}</td>
-                  <td class="${Object.values(r.answers).includes('SI') ? 'authorized' : 'not-authorized'}">
-                    ${Object.values(r.answers).includes('SI') ? 'SÍ, AUTORIZA' : 'NO AUTORIZA'}
+                  <td class="${selectedForm.form_type === 'announcement' || Object.values(r.answers).includes('SI') ? 'authorized' : 'not-authorized'}">
+                    ${selectedForm.form_type === 'announcement' ? 'LEÍDO' : (Object.values(r.answers).includes('SI') ? 'SÍ, AUTORIZA' : 'NO AUTORIZA')}
                   </td>
                   <td>${new Date(r.created_at).toLocaleDateString()}</td>
                 </tr>
@@ -150,29 +151,33 @@ export function FormBuilder() {
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (targetGrades.length === 0) return alert("Selecciona al menos un grado.");
+    if (formType === 'announcement' && !description.trim()) return alert("Escribe el mensaje del aviso.");
     setProcessing(true);
 
     try {
       const { data: formData, error: formError } = await supabase
         .from('forms')
-        .insert({ 
-          title, 
-          description, 
+        .insert({
+          title,
+          description,
           target_grades: targetGrades,
-          tenant_id: profile?.tenant_id 
+          form_type: formType,
+          tenant_id: profile?.tenant_id
         })
         .select().single();
 
       if (formError) throw formError;
 
-      const questionsToInsert = questions.map((q, idx) => ({
-        form_id: formData.id,
-        question_text: q.question_text,
-        question_type: q.question_type,
-        order: idx
-      }));
+      if (formType === 'authorization') {
+        const questionsToInsert = questions.map((q, idx) => ({
+          form_id: formData.id,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          order: idx
+        }));
 
-      await supabase.from('form_questions').insert(questionsToInsert);
+        await supabase.from('form_questions').insert(questionsToInsert);
+      }
       setIsModalOpen(false);
       resetForm();
       fetchForms();
@@ -196,6 +201,7 @@ export function FormBuilder() {
   };
 
   const resetForm = () => {
+    setFormType('authorization');
     setTitle(''); setDescription(''); setTargetGrades([]);
     setQuestions([{ question_text: '¿Autoriza?', question_type: 'boolean' }]);
   };
@@ -203,7 +209,9 @@ export function FormBuilder() {
   // Helper for stats
   const getStats = () => {
     const total = responses.length;
-    const authorized = responses.filter(r => Object.values(r.answers).includes('SI')).length;
+    const authorized = selectedForm?.form_type === 'announcement'
+      ? total
+      : responses.filter(r => Object.values(r.answers).includes('SI')).length;
     return { total, authorized, pending: total - authorized };
   };
 
@@ -217,7 +225,7 @@ export function FormBuilder() {
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
               Constructor de Formularios <FileEdit className="w-8 h-8 text-primary" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium font-body">Crea y audita permisos digitales por grado.</p>
+            <p className="text-sm text-slate-500 font-medium font-body">Crea autorizaciones digitales o avisos informativos, segmentados por grado.</p>
           </div>
           <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-primary text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:shadow-primary/20 transition-all shadow-xl active:scale-95 group">
             <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> NUEVO FORMULARIO
@@ -231,9 +239,14 @@ export function FormBuilder() {
                 <div className={`p-3 rounded-2xl ${form.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                   <MessageSquare className="w-6 h-6" />
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${form.is_active ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400'}`}>
-                  {form.is_active ? 'Activo' : 'Cerrado'}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${form.is_active ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400'}`}>
+                    {form.is_active ? 'Activo' : 'Cerrado'}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${form.form_type === 'announcement' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                    {form.form_type === 'announcement' ? 'Aviso' : 'Autorización'}
+                  </span>
+                </div>
               </div>
               <h3 className="text-lg font-black text-slate-900 leading-tight mb-2 truncate">{form.title}</h3>
               <div className="flex flex-wrap gap-1 mb-4">
@@ -261,7 +274,7 @@ export function FormBuilder() {
               <div>
                 <h2 className="text-2xl font-black">{selectedForm.title}</h2>
                 <div className="flex items-center gap-4 mt-1">
-                  <p className="text-xs text-white/60 font-bold uppercase tracking-widest italic">Monitor de Autorizaciones</p>
+                  <p className="text-xs text-white/60 font-bold uppercase tracking-widest italic">{selectedForm.form_type === 'announcement' ? 'Monitor de Lectura' : 'Monitor de Autorizaciones'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -281,7 +294,7 @@ export function FormBuilder() {
               {/* Stats Overview */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100">
-                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-2">Total Alumnos Autorizados</span>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-2">{selectedForm.form_type === 'announcement' ? 'Confirmaron Lectura' : 'Total Alumnos Autorizados'}</span>
                   <div className="flex items-end gap-2">
                     <span className="text-4xl font-black text-emerald-700">{getStats().authorized}</span>
                     <span className="text-emerald-500 font-bold mb-1">familias</span>
@@ -315,7 +328,7 @@ export function FormBuilder() {
                     <tr className="bg-slate-50">
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Alumno / Grado</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Padre / Tutor</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 italic">Respuesta Principal</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 italic">{selectedForm.form_type === 'announcement' ? 'Estado' : 'Respuesta Principal'}</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Fecha</th>
                     </tr>
                   </thead>
@@ -333,7 +346,11 @@ export function FormBuilder() {
                           <p className="text-[10px] text-slate-400">{resp.parent?.email}</p>
                         </td>
                         <td className="px-6 py-4 border-b border-slate-50">
-                           {Object.values(resp.answers).includes('SI') ? (
+                           {selectedForm.form_type === 'announcement' ? (
+                             <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
+                                <CheckCircle2 className="w-3 h-3" /> LEÍDO
+                             </span>
+                           ) : Object.values(resp.answers).includes('SI') ? (
                              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
                                 <CheckCircle2 className="w-3 h-3" /> SI, AUTORIZA
                              </span>
@@ -366,12 +383,35 @@ export function FormBuilder() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col">
             <div className="flex justify-between items-center p-8 bg-slate-50 border-b border-slate-100 shrink-0">
-               <h2 className="text-xl font-black text-slate-900">Nueva Autorización</h2>
+               <h2 className="text-xl font-black text-slate-900">{formType === 'announcement' ? 'Nuevo Aviso' : 'Nueva Autorización'}</h2>
                <button onClick={() => setIsModalOpen(false)} className="p-2 bg-white rounded-xl shadow-sm"><XCircle className="w-6 h-6" /></button>
             </div>
             <form onSubmit={handleSaveForm} className="p-8 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+               <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormType('authorization')}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all ${formType === 'authorization' ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent'}`}
+                  >
+                    <span className="text-xs font-black text-slate-800 block">Autorización</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Pide una respuesta (SÍ/NO) por alumno.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('announcement')}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all ${formType === 'announcement' ? 'bg-indigo-50 border-indigo-400' : 'bg-slate-50 border-transparent'}`}
+                  >
+                    <span className="text-xs font-black text-slate-800 block">Aviso / Mensaje</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Solo informa, sin pedir respuesta.</span>
+                  </button>
+               </div>
                <input required placeholder="Título..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold shadow-inner" />
-               <textarea placeholder="Descripción..." value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium h-24" />
+               <textarea
+                 placeholder={formType === 'announcement' ? 'Escribe el mensaje que verán los padres...' : 'Descripción...'}
+                 value={description}
+                 onChange={e => setDescription(e.target.value)}
+                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium h-24"
+               />
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Segmentar Grados</label>
                   <div className="flex flex-wrap gap-2">
@@ -380,16 +420,20 @@ export function FormBuilder() {
                     ))}
                   </div>
                </div>
-               <div className="bg-slate-50 rounded-3xl p-6 space-y-3">
-                  <div className="flex justify-between items-center mb-2"><h4 className="text-[10px] font-black text-slate-400 uppercase">Preguntas del Formulario</h4><button type="button" onClick={addQuestion} className="bg-white text-primary px-3 py-1.5 rounded-xl text-[9px] font-black border border-slate-100 shadow-sm">+ PREGUNTA</button></div>
-                  {questions.map((q, idx) => (
-                    <div key={idx} className="flex gap-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                      <input required className="flex-1 text-sm font-bold outline-none" value={q.question_text} onChange={e => updateQuestion(idx, e.target.value)} placeholder="Ej: ¿Autoriza el viaje?" />
-                      {questions.length > 1 && <button type="button" onClick={() => removeQuestion(idx)} className="text-rose-500"><Trash2 className="w-4 h-4" /></button>}
-                    </div>
-                  ))}
-               </div>
-               <button type="submit" disabled={processing} className="w-full bg-primary text-white font-black py-5 rounded-[2rem] shadow-xl text-xs uppercase tracking-widest disabled:opacity-50">LANZAR FORMULARIO</button>
+               {formType === 'authorization' && (
+                 <div className="bg-slate-50 rounded-3xl p-6 space-y-3">
+                    <div className="flex justify-between items-center mb-2"><h4 className="text-[10px] font-black text-slate-400 uppercase">Preguntas del Formulario</h4><button type="button" onClick={addQuestion} className="bg-white text-primary px-3 py-1.5 rounded-xl text-[9px] font-black border border-slate-100 shadow-sm">+ PREGUNTA</button></div>
+                    {questions.map((q, idx) => (
+                      <div key={idx} className="flex gap-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                        <input required className="flex-1 text-sm font-bold outline-none" value={q.question_text} onChange={e => updateQuestion(idx, e.target.value)} placeholder="Ej: ¿Autoriza el viaje?" />
+                        {questions.length > 1 && <button type="button" onClick={() => removeQuestion(idx)} className="text-rose-500"><Trash2 className="w-4 h-4" /></button>}
+                      </div>
+                    ))}
+                 </div>
+               )}
+               <button type="submit" disabled={processing} className="w-full bg-primary text-white font-black py-5 rounded-[2rem] shadow-xl text-xs uppercase tracking-widest disabled:opacity-50">
+                 {formType === 'announcement' ? 'ENVIAR AVISO' : 'LANZAR FORMULARIO'}
+               </button>
             </form>
           </div>
         </div>
