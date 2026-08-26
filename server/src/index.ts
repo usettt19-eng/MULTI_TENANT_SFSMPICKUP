@@ -1213,7 +1213,7 @@ app.post(
 
     const {data: form} = await admin
       .from('forms')
-      .select('id, title, description, target_grades, tenant_id')
+      .select('id, title, description, target_grades, target_sections, tenant_id')
       .eq('id', form_id)
       .maybeSingle();
     if (!form) return fail(res, 404, 'Formulario no encontrado.');
@@ -1221,6 +1221,9 @@ app.post(
 
     const grades: string[] = form.target_grades ?? [];
     if (grades.length === 0) return ok(res, {notified: 0});
+    const sections: string[] = form.target_sections ?? [];
+    const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+    const normSections = sections.map(norm);
 
     // Los padres no ven este aviso hasta que abren la app (fetchPendingForms
     // en el panel), así que además se les manda una notificación real
@@ -1228,12 +1231,18 @@ app.post(
     // revisar. El insert pasa por el backend con service_role porque un
     // padre solo puede insertarse notificaciones a sí mismo (RLS), pero
     // aquí es el colegio notificando a muchos padres a la vez.
-    const {data: students} = await admin
+    const {data: studentsRaw} = await admin
       .from('students')
-      .select('id, grade')
+      .select('id, grade, section')
       .eq('tenant_id', form.tenant_id)
       .in('grade', grades);
-    const studentIds = (students ?? []).map((s) => s.id);
+    // Si se segmentó por sección, filtra en el servidor comparando sin
+    // mayúsculas/espacios — igual que el resto del sistema, para no
+    // repetir el bug de secciones que nunca hacían match por casing.
+    const students = normSections.length === 0
+      ? (studentsRaw ?? [])
+      : (studentsRaw ?? []).filter((s) => normSections.includes(norm(s.section)));
+    const studentIds = students.map((s) => s.id);
     if (studentIds.length === 0) return ok(res, {notified: 0});
 
     const {data: links} = await admin

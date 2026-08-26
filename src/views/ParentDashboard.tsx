@@ -568,17 +568,19 @@ export function ParentDashboard() {
 
   const fetchPendingForms = async () => {
     if (!profile?.tenant_id) return;
-    // 1. Get student grades for THIS tenant
+    // 1. Get student grade+section for THIS tenant
     const { data: stdData } = await supabase
       .from('parent_students')
-      .select('students(grade, tenant_id)')
+      .select('students(grade, section, tenant_id)')
       .eq('parent_id', profile.id)
       .eq('students.tenant_id', profile.tenant_id);
-    
-    const grades = stdData?.map(d => (d.students as any)?.grade).filter(Boolean) || [];
+
+    const myStudents = (stdData?.map(d => d.students as any).filter(Boolean) || []) as { grade: string; section: string | null }[];
+    const grades = myStudents.map(s => s.grade).filter(Boolean);
     if (grades.length === 0) return;
 
-    // 2. Fetch active forms targeted to these grades in this tenant
+    // 2. Fetch active forms targeted to these grades in this tenant (filtro
+    // grueso por grado a nivel de base de datos; la sección se afina abajo)
     const { data: formsData } = await supabase
       .from('forms')
       .select('*, form_questions(*)')
@@ -586,15 +588,28 @@ export function ParentDashboard() {
       .eq('tenant_id', profile.tenant_id)
       .overlaps('target_grades', grades);
 
+    // Un formulario aplica si alguno de mis hijos está en un grado
+    // segmentado, y si además se segmentó por sección, en una de esas
+    // secciones (comparación sin mayúsculas/espacios, como el resto del
+    // sistema, porque cada colegio escribe sus secciones distinto).
+    const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+    const matchesForm = (form: any) => myStudents.some(s => {
+      if (!form.target_grades?.includes(s.grade)) return false;
+      const sections: string[] = form.target_sections || [];
+      if (sections.length === 0) return true;
+      return sections.map(norm).includes(norm(s.section));
+    });
+    const matchingForms = (formsData || []).filter(matchesForm);
+
     // 3. Filter forms NOT answered yet
     const { data: responses } = await supabase
       .from('form_responses')
       .select('form_id')
       .eq('parent_id', profile.id)
       .eq('tenant_id', profile.tenant_id);
-    
+
     const answeredIds = responses?.map(r => r.form_id) || [];
-    setPendingForms(formsData?.filter(f => !answeredIds.includes(f.id)) || []);
+    setPendingForms(matchingForms.filter(f => !answeredIds.includes(f.id)));
   };
 
   const checkActivePickups = async () => {

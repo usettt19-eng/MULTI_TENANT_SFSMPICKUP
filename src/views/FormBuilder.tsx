@@ -24,16 +24,29 @@ export function FormBuilder() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [targetGrades, setTargetGrades] = useState<string[]>([]);
+  const [targetSections, setTargetSections] = useState<string[]>([]);
   const [questions, setQuestions] = useState<any[]>([
     { question_text: '¿Autoriza que su hijo participe en esta actividad?', question_type: 'boolean' }
   ]);
 
   // Cada colegio usa su propia convención de nombres de grado (códigos
-  // numéricos, abreviaturas en español, etc.) — la lista tiene que salir de
-  // los grados reales que el colegio ya configuró (school_grades, la misma
-  // tabla que usa el horario de despacho), no de una lista fija en español,
-  // o el segmentado nunca coincide con el grado real de los alumnos.
-  const [gradesList, setGradesList] = useState<string[]>([]);
+  // numéricos, abreviaturas en español, etc.) y de secciones — ambos tienen
+  // que salir de lo que el colegio ya configuró en Ajustes (school_grades,
+  // la misma tabla que usa "Grados Escolares" y el horario de despacho de
+  // Salidas), no de una lista fija en español, o el segmentado nunca
+  // coincide con el grado/sección real de los alumnos.
+  const [schoolGrades, setSchoolGrades] = useState<{ name: string; sections: string[] }[]>([]);
+  const gradesList = schoolGrades.map(g => g.name);
+  const availableSections: string[] = Array.from(new Set<string>(
+    schoolGrades.filter(g => targetGrades.includes(g.name)).flatMap(g => g.sections || [])
+  ));
+
+  // Si el admin quita un grado, las secciones que ya no aplican a ningún
+  // grado seleccionado se sueltan solas — evita mandar un formulario
+  // "segmentado" por una sección que ya no pertenece a nada elegido.
+  useEffect(() => {
+    setTargetSections(prev => prev.filter(s => availableSections.includes(s)));
+  }, [targetGrades.join('|')]);
 
   useEffect(() => {
     if (profile?.tenant_id) {
@@ -45,12 +58,12 @@ export function FormBuilder() {
   const fetchGrades = async () => {
     const { data, error } = await supabase
       .from('school_grades')
-      .select('name')
+      .select('name, sections, level_order')
       .eq('tenant_id', profile?.tenant_id)
-      .order('name');
+      .order('level_order');
 
     if (error) console.error(error);
-    else setGradesList((data || []).map(g => g.name));
+    else setSchoolGrades((data || []).map(g => ({ name: g.name, sections: g.sections || [] })));
   };
 
   const fetchForms = async () => {
@@ -179,6 +192,7 @@ export function FormBuilder() {
           title,
           description,
           target_grades: targetGrades,
+          target_sections: targetSections,
           form_type: formType,
           tenant_id: profile?.tenant_id
         })
@@ -231,9 +245,13 @@ export function FormBuilder() {
     setTargetGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);
   };
 
+  const toggleSection = (section: string) => {
+    setTargetSections(prev => prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]);
+  };
+
   const resetForm = () => {
     setFormType('authorization');
-    setTitle(''); setDescription(''); setTargetGrades([]);
+    setTitle(''); setDescription(''); setTargetGrades([]); setTargetSections([]);
     setQuestions([{ question_text: '¿Autoriza?', question_type: 'boolean' }]);
   };
 
@@ -282,6 +300,7 @@ export function FormBuilder() {
               <h3 className="text-lg font-black text-slate-900 leading-tight mb-2 truncate">{form.title}</h3>
               <div className="flex flex-wrap gap-1 mb-4">
                 {form.target_grades?.map((g: string) => <span key={g} className="bg-slate-50 text-slate-400 text-[8px] font-black px-2 py-0.5 rounded border border-slate-100">{g}</span>)}
+                {form.target_sections?.map((s: string) => <span key={s} className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded border border-emerald-100">Sección {s}</span>)}
               </div>
               <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div>
@@ -455,6 +474,17 @@ export function FormBuilder() {
                     </div>
                   )}
                </div>
+               {availableSections.length > 0 && (
+                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Segmentar Secciones (opcional)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableSections.map(s => (
+                        <button key={s} type="button" onClick={() => toggleSection(s)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black border-2 transition-all ${targetSections.includes(s) ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-400'}`}>Sección {s}</button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2">Sin elegir ninguna, llega a todo el grado seleccionado.</p>
+                 </div>
+               )}
                {formType === 'authorization' && (
                  <div className="bg-slate-50 rounded-3xl p-6 space-y-3">
                     <div className="flex justify-between items-center mb-2"><h4 className="text-[10px] font-black text-slate-400 uppercase">Preguntas del Formulario</h4><button type="button" onClick={addQuestion} className="bg-white text-primary px-3 py-1.5 rounded-xl text-[9px] font-black border border-slate-100 shadow-sm">+ PREGUNTA</button></div>
