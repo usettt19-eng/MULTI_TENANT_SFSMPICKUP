@@ -36,13 +36,15 @@ export function VisitorsLog() {
     
     const tableData = filteredVisitors.map(v => [
       v.visitor_name,
+      v.id_number || '—',
+      v.company || '—',
       v.visiting_whom,
       v.reason,
       new Date(v.check_in_time).toLocaleString()
     ]);
 
     autoTable(doc, {
-      head: [['Visitante', 'Visita a', 'Motivo', 'Hora de Entrada']],
+      head: [['Visitante', 'Identificación', 'Empresa', 'Visita a', 'Motivo', 'Hora de Entrada']],
       body: tableData,
       startY: 20,
     });
@@ -89,6 +91,8 @@ export function VisitorsLog() {
               <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                 <tr>
                   <th className="p-4">Visitante</th>
+                  <th className="p-4">Identificación</th>
+                  <th className="p-4">Empresa</th>
                   <th className="p-4">Visita a</th>
                   <th className="p-4">Motivo</th>
                   <th className="p-4">Hora de Entrada</th>
@@ -98,6 +102,8 @@ export function VisitorsLog() {
                 {filteredVisitors.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50/50">
                     <td className="p-4 font-bold text-slate-900 flex items-center gap-2"><User className="w-4 h-4 text-slate-400" /> {v.visitor_name}</td>
+                    <td className="p-4 text-slate-500 font-mono">{v.id_number || '—'}</td>
+                    <td className="p-4 text-slate-600">{v.company || '—'}</td>
                     <td className="p-4 text-slate-600">{v.visiting_whom}</td>
                     <td className="p-4 text-slate-500">{v.reason}</td>
                     <td className="p-4 text-slate-500 font-mono">{new Date(v.check_in_time).toLocaleString()}</td>

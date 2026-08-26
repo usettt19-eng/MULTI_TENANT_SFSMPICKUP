@@ -13,6 +13,8 @@ export function GuestSignModal({ onClose, onSuccess }: GuestSignModalProps) {
   const { profile } = useAuth();
   const { t } = useLanguage();
   const [visitorName, setVisitorName] = useState('');
+  const [idNumber, setIdNumber] = useState('');
+  const [company, setCompany] = useState('');
   const [visitingWhom, setVisitingWhom] = useState('');
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -24,6 +26,8 @@ export function GuestSignModal({ onClose, onSuccess }: GuestSignModalProps) {
     try {
       const { error } = await supabase.from('daily_visitors').insert({
         visitor_name: visitorName,
+        id_number: idNumber,
+        company: company,
         visiting_whom: visitingWhom,
         reason: reason,
         check_in_time: new Date().toISOString(),
@@ -51,6 +55,14 @@ export function GuestSignModal({ onClose, onSuccess }: GuestSignModalProps) {
           <div>
             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">{t('guestSign.visitorName')}</label>
             <input required value={visitorName} onChange={e => setVisitorName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">{t('guestSign.idNumber')}</label>
+            <input required value={idNumber} onChange={e => setIdNumber(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">{t('guestSign.company')}</label>
+            <input required value={company} onChange={e => setCompany(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">{t('guestSign.visiting')}</label>

@@ -185,6 +185,8 @@ export const translations = {
     // Guest Sign
     'guestSign.title': 'Visitor Registration',
     'guestSign.visitorName': 'Visitor Name',
+    'guestSign.idNumber': 'ID Number',
+    'guestSign.company': 'Company / Origin',
     'guestSign.visiting': 'Who are they visiting?',
     'guestSign.reason': 'Reason',
     'guestSign.submit': 'Register Entry',
@@ -479,6 +481,8 @@ export const translations = {
     // Guest Sign
     'guestSign.title': 'Registro de Visitante',
     'guestSign.visitorName': 'Nombre del Visitante',
+    'guestSign.idNumber': 'Cédula / Identificación',
+    'guestSign.company': 'Empresa de Origen',
     'guestSign.visiting': '¿A quién visita?',
     'guestSign.reason': 'Motivo',
     'guestSign.submit': 'Registrar Entrada',
