@@ -1205,6 +1205,55 @@ async function notifyTenantAdmins(tenantId: string, title: string, message: stri
 }
 
 app.post(
+  '/api/forms/notify',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {form_id} = req.body ?? {};
+    if (!form_id) return fail(res, 400, 'Falta el formulario.');
+
+    const {data: form} = await admin
+      .from('forms')
+      .select('id, title, description, target_grades, tenant_id')
+      .eq('id', form_id)
+      .maybeSingle();
+    if (!form) return fail(res, 404, 'Formulario no encontrado.');
+    if (!isStaffOf(req.caller, form.tenant_id)) return fail(res, 403, 'Sin permisos en ese colegio.');
+
+    const grades: string[] = form.target_grades ?? [];
+    if (grades.length === 0) return ok(res, {notified: 0});
+
+    // Los padres no ven este aviso hasta que abren la app (fetchPendingForms
+    // en el panel), así que además se les manda una notificación real
+    // (campana + sonido) para que se enteren sin tener que entrar a
+    // revisar. El insert pasa por el backend con service_role porque un
+    // padre solo puede insertarse notificaciones a sí mismo (RLS), pero
+    // aquí es el colegio notificando a muchos padres a la vez.
+    const {data: students} = await admin
+      .from('students')
+      .select('id, grade')
+      .eq('tenant_id', form.tenant_id)
+      .in('grade', grades);
+    const studentIds = (students ?? []).map((s) => s.id);
+    if (studentIds.length === 0) return ok(res, {notified: 0});
+
+    const {data: links} = await admin
+      .from('parent_students')
+      .select('parent_id')
+      .in('student_id', studentIds);
+    const parentIds = Array.from(new Set((links ?? []).map((l) => l.parent_id)));
+    if (parentIds.length === 0) return ok(res, {notified: 0});
+
+    const title = form.title || 'Nuevo aviso del colegio';
+    const message = form.description || 'Tienes un nuevo aviso pendiente de revisar.';
+    await admin.from('notifications').insert(
+      parentIds.map((parent_id) => ({user_id: parent_id, title, message, type: 'info', tenant_id: form.tenant_id})),
+    );
+
+    return ok(res, {notified: parentIds.length});
+  }),
+);
+
+app.post(
   '/api/carpool/authorizations',
   requireAuth,
   wrap(async (req, res) => {

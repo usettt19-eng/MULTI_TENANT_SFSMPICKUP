@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/apiFetch';
 import { TopNav } from '../components/TopNav';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -195,6 +196,19 @@ export function FormBuilder() {
 
         await supabase.from('form_questions').insert(questionsToInsert);
       }
+
+      // No bloquea el guardado si falla — el formulario ya quedó creado y
+      // los padres lo van a ver igual la próxima vez que abran la app; esto
+      // solo es el aviso inmediato (campana + sonido).
+      try {
+        await apiFetch('/api/forms/notify', {
+          method: 'POST',
+          body: JSON.stringify({ form_id: formData.id }),
+        });
+      } catch (notifyErr) {
+        console.error('Error al notificar a los padres:', notifyErr);
+      }
+
       setIsModalOpen(false);
       resetForm();
       fetchForms();
