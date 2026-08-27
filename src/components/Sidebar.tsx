@@ -15,7 +15,8 @@ import {
   Users,
   History,
   UserCog,
-  MessageSquare
+  MessageSquare,
+  BarChart3
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -133,6 +134,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
     { id: 'external', label: t('nav.external'), icon: Monitor },
     { id: 'staff', label: t('nav.staff'), icon: UserCog, adminOnly: true },
+    { id: 'statistics', label: t('nav.statistics'), icon: BarChart3, adminOnly: true },
   ];
 
   let isStaff = false;

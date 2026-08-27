@@ -17,6 +17,7 @@ import { GuardiansRegistry } from './views/GuardiansRegistry';
 import { AuditLogs } from './views/AuditLogs';
 import { StaffManagement } from './views/StaffManagement';
 import { RequestsCenter } from './views/RequestsCenter';
+import { Statistics } from './views/Statistics';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LayoutProvider } from './contexts/LayoutContext';
 import { useAuth } from './contexts/AuthContext';
@@ -199,6 +200,8 @@ export default function App() {
         return <RequestsCenter />;
       case 'staff':
         return <StaffManagement />;
+      case 'statistics':
+        return <Statistics />;
       default:
         return <OperationsDashboard setCurrentView={setCurrentView} />;
       }

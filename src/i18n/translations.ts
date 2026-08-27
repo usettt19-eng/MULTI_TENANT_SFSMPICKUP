@@ -16,6 +16,7 @@ export const translations = {
     'nav.logs': 'Logs',
     'nav.external': 'External Monitor',
     'nav.staff': 'Staff Management',
+    'nav.statistics': 'Statistics',
 
     // TopNav
     'topnav.search': 'Search...',
@@ -446,6 +447,7 @@ export const translations = {
     'nav.logs': 'Bitácora / Logs',
     'nav.external': 'Monitor Externo',
     'nav.staff': 'Gestión de Staff',
+    'nav.statistics': 'Estadísticas',
 
     // TopNav
     'topnav.search': 'Buscar...',
