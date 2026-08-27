@@ -15,6 +15,7 @@ export function Students() {
   const [students, setStudents] = useState<any[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentStudentId, setCurrentStudentId] = useState<string | null>(null);
@@ -53,13 +54,33 @@ export function Students() {
   }, [profile?.tenant_id]);
 
   useEffect(() => {
-    const filtered = students.filter(s => 
-      `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.grade?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.section?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const term = searchTerm.toLowerCase();
+    const filtered = students.filter(s => {
+      const matchesSearch =
+        `${s.first_name} ${s.last_name}`.toLowerCase().includes(term) ||
+        s.grade?.toLowerCase().includes(term) ||
+        s.section?.toLowerCase().includes(term);
+      const matchesGrade = gradeFilter === 'all' || s.grade === gradeFilter;
+      return matchesSearch && matchesGrade;
+    });
     setFilteredStudents(filtered);
-  }, [searchTerm, students]);
+  }, [searchTerm, gradeFilter, students]);
+
+  // Orden de grados: el de school_grades (level_order) primero; cualquier
+  // valor de `students.grade` que no tenga fila en school_grades (datos
+  // viejos/sueltos) se agrega al final, ordenado alfabéticamente, para que
+  // nunca desaparezca un alumno de la vista agrupada.
+  const gradeOrder = schoolGrades.map(g => g.name);
+  const knownGrades = new Set(gradeOrder);
+  const extraGrades = Array.from(new Set(students.map(s => s.grade).filter(g => g && !knownGrades.has(g)))).sort();
+  const orderedGrades = [...gradeOrder, ...extraGrades];
+
+  const groupedStudents = orderedGrades
+    .map(g => ({ grade: g, list: filteredStudents.filter(s => s.grade === g) }))
+    .filter(group => group.list.length > 0);
+  // Alumnos sin grado asignado, si los hay dentro del filtro actual.
+  const noGradeList = filteredStudents.filter(s => !s.grade);
+  if (noGradeList.length > 0) groupedStudents.push({ grade: '', list: noGradeList });
 
   const fetchStudents = async () => {
     if (!profile?.tenant_id) return;
@@ -386,6 +407,35 @@ export function Students() {
           </div>
         </div>
 
+        {/* Filtro rápido por grado */}
+        {orderedGrades.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <button
+              onClick={() => setGradeFilter('all')}
+              className={`shrink-0 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                gradeFilter === 'all' ? 'bg-primary text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:text-primary'
+              }`}
+            >
+              Todos ({students.length})
+            </button>
+            {orderedGrades.map(g => {
+              const count = students.filter(s => s.grade === g).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={g}
+                  onClick={() => setGradeFilter(g)}
+                  className={`shrink-0 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                    gradeFilter === g ? 'bg-primary text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:text-primary'
+                  }`}
+                >
+                  {g} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Students List */}
         <div className="bg-surface-container-lowest rounded-[2rem] shadow-sm border border-outline-variant/10 overflow-hidden">
           <div className="overflow-x-auto">
@@ -407,54 +457,63 @@ export function Students() {
                     </td>
                   </tr>
                 ) : (
-                  filteredStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          {student.photo_url ? (
-                            <img 
-                              src={student.photo_url} 
-                              alt={student.first_name} 
-                              className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs uppercase border border-primary/5">
-                              {student.first_name[0]}
+                  groupedStudents.map(group => (
+                    <React.Fragment key={group.grade || '__sin_grado__'}>
+                      <tr className="bg-slate-100/70">
+                        <td colSpan={5} className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          {group.grade || 'Sin grado asignado'} · {group.list.length} alumno{group.list.length !== 1 ? 's' : ''}
+                        </td>
+                      </tr>
+                      {group.list.map((student) => (
+                        <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {student.photo_url ? (
+                                <img
+                                  src={student.photo_url}
+                                  alt={student.first_name}
+                                  className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs uppercase border border-primary/5">
+                                  {student.first_name[0]}
+                                </div>
+                              )}
+                              <span className="font-bold text-primary">{student.first_name}</span>
                             </div>
-                          )}
-                          <span className="font-bold text-primary">{student.first_name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-medium text-slate-600">{student.last_name}</td>
-                      <td className="px-6 py-4">
-                        <span className="bg-secondary-container/30 text-secondary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                          {student.grade || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="bg-tertiary-container/30 text-tertiary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                          {student.section || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => handleEdit(student)}
-                            className="p-2 hover:bg-primary/10 rounded-lg text-primary transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(student)}
-                            className="p-2 hover:bg-error/10 rounded-lg text-error transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                          </td>
+                          <td className="px-6 py-4 font-medium text-slate-600">{student.last_name}</td>
+                          <td className="px-6 py-4">
+                            <span className="bg-secondary-container/30 text-secondary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                              {student.grade || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="bg-tertiary-container/30 text-tertiary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                              {student.section || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleEdit(student)}
+                                className="p-2 hover:bg-primary/10 rounded-lg text-primary transition-colors"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(student)}
+                                className="p-2 hover:bg-error/10 rounded-lg text-error transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
