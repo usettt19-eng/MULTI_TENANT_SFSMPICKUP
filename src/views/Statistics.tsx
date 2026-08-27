@@ -7,10 +7,12 @@ import {
 } from 'lucide-react';
 
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const PERIOD_OPTIONS = [
-  { days: 7, label: '7 días' },
-  { days: 30, label: '30 días' },
-  { days: 90, label: '90 días' },
+type Period = 'today' | 7 | 30 | 90;
+const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: 'today', label: 'Hoy' },
+  { value: 7, label: '7 días' },
+  { value: 30, label: '30 días' },
+  { value: 90, label: '90 días' },
 ];
 
 function minutesBetween(a?: string | null, b?: string | null): number | null {
@@ -59,7 +61,7 @@ function StatCard({ icon: Icon, label, value, sublabel }: { icon: any; label: st
 
 export function Statistics() {
   const { profile } = useAuth() as any;
-  const [periodDays, setPeriodDays] = useState(30);
+  const [period, setPeriod] = useState<Period>(30);
   const [loading, setLoading] = useState(true);
 
   const [pickupEvents, setPickupEvents] = useState<any[]>([]);
@@ -73,14 +75,18 @@ export function Statistics() {
 
   useEffect(() => {
     fetchAll();
-  }, [profile?.tenant_id, periodDays]);
+  }, [profile?.tenant_id, period]);
 
   const fetchAll = async () => {
     if (!profile?.tenant_id) return;
     setLoading(true);
 
     const since = new Date();
-    since.setDate(since.getDate() - periodDays);
+    if (period === 'today') {
+      since.setHours(0, 0, 0, 0);
+    } else {
+      since.setDate(since.getDate() - period);
+    }
     const sinceISO = since.toISOString();
 
     const [
@@ -271,10 +277,10 @@ export function Statistics() {
         <div className="flex gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start">
           {PERIOD_OPTIONS.map(opt => (
             <button
-              key={opt.days}
-              onClick={() => setPeriodDays(opt.days)}
+              key={opt.value}
+              onClick={() => setPeriod(opt.value)}
               className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                periodDays === opt.days ? 'bg-[#0f172a] text-white' : 'text-slate-400 hover:text-slate-600'
+                period === opt.value ? 'bg-[#0f172a] text-white' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
               {opt.label}
