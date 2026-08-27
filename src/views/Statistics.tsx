@@ -69,6 +69,7 @@ export function Statistics() {
   const [formResponses, setFormResponses] = useState<any[]>([]);
   const [carpoolCount, setCarpoolCount] = useState(0);
   const [community, setCommunity] = useState({ totalStudents: 0, totalParents: 0 });
+  const [doorNames, setDoorNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchAll();
@@ -89,10 +90,11 @@ export function Statistics() {
       formsRes,
       studentsCountRes,
       parentsCountRes,
+      doorsRes,
     ] = await Promise.all([
       supabase
         .from('pickup_events')
-        .select('id, status, announced_at, released_at, completed_at, door_id, location_verified')
+        .select('id, status, announced_at, completed_at, door_id, location_verified')
         .eq('tenant_id', profile.tenant_id)
         .gte('announced_at', sinceISO),
       supabase
@@ -119,7 +121,16 @@ export function Statistics() {
         .select('*', { count: 'exact', head: true })
         .eq('tenant_id', profile.tenant_id)
         .eq('role', 'parent'),
+      supabase
+        .from('exit_doors')
+        .select('id, name')
+        .eq('tenant_id', profile.tenant_id),
     ]);
+
+    if (pickupsRes.error) console.error('Error cargando pickup_events:', pickupsRes.error);
+    if (replacementsRes.error) console.error('Error cargando replacement_requests:', replacementsRes.error);
+    if (visitorsRes.error) console.error('Error cargando daily_visitors:', visitorsRes.error);
+    if (formsRes.error) console.error('Error cargando forms:', formsRes.error);
 
     setPickupEvents(pickupsRes.data || []);
     setReplacementRequests(replacementsRes.data || []);
@@ -129,6 +140,9 @@ export function Statistics() {
       totalStudents: studentsCountRes.count || 0,
       totalParents: parentsCountRes.count || 0,
     });
+    const doorMap: Record<string, string> = {};
+    (doorsRes.data || []).forEach((d: any) => { doorMap[d.id] = d.name; });
+    setDoorNames(doorMap);
 
     // Respuestas: se piden aparte, filtradas por los ids de forms del
     // periodo, porque el conteo embebido de arriba solo sirve para el total
@@ -170,20 +184,13 @@ export function Statistics() {
       ? withCycleTime.reduce((a, b) => a + b, 0) / withCycleTime.length
       : null;
 
-    const withResponseTime = pickupEvents
-      .map(p => minutesBetween(p.announced_at, p.released_at))
-      .filter((m): m is number => m !== null);
-    const avgResponseMinutes = withResponseTime.length > 0
-      ? withResponseTime.reduce((a, b) => a + b, 0) / withResponseTime.length
-      : null;
-
     const withLocationFlag = pickupEvents.filter(p => p.location_verified !== null && p.location_verified !== undefined);
     const gpsCount = withLocationFlag.filter(p => p.location_verified === true).length;
     const gpsPct = withLocationFlag.length > 0 ? Math.round((gpsCount / withLocationFlag.length) * 100) : null;
 
     const doorCounts: Record<string, number> = {};
     pickupEvents.forEach(p => {
-      const door = p.door_id || 'Sin especificar';
+      const door = (p.door_id && doorNames[p.door_id]) || 'Sin especificar';
       doorCounts[door] = (doorCounts[door] || 0) + 1;
     });
     const topDoor = Object.entries(doorCounts).sort((a, b) => b[1] - a[1])[0];
@@ -227,7 +234,6 @@ export function Statistics() {
       totalAnnounced: pickupEvents.length,
       totalCompleted: completed.length,
       avgCycleMinutes,
-      avgResponseMinutes,
       gpsPct,
       gpsCount,
       manualCount: withLocationFlag.length - gpsCount,
@@ -248,7 +254,7 @@ export function Statistics() {
       visitorsTotal: visitors.length,
       topReasons,
     };
-  }, [pickupEvents, replacementRequests, visitors, forms, formResponses]);
+  }, [pickupEvents, replacementRequests, visitors, forms, formResponses, doorNames]);
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans p-4 md:p-6">
