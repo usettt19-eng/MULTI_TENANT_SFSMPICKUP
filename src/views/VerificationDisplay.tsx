@@ -247,7 +247,11 @@ export function VerificationDisplay() {
 
   const currentPickup =
     (selectedPickupId && pickups.find(p => p.id === selectedPickupId)) || filteredPickups[0];
-  const queue = pickups.filter(p => p.id !== currentPickup?.id);
+  // La cola debe respetar el mismo filtro de puerta que la tarjeta principal
+  // — antes se armaba de `pickups` sin filtrar, así que con una puerta
+  // seleccionada la tarjeta sí filtraba pero la lista de "En cola" mostraba
+  // igual alumnos de todas las puertas.
+  const queue = filteredPickups.filter(p => p.id !== currentPickup?.id);
 
   // Quién recibió el aviso de "llegó" para este pickup puntual (profesores
   // encargados de esa sección + quien tenga activado "recibir todos los
@@ -629,7 +633,7 @@ export function VerificationDisplay() {
                       {t('monitor.exitQueue')}
                     </h4>
                     <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      {pickups.length} {t('monitor.totalSuffix')}
+                      {filteredPickups.length} {t('monitor.totalSuffix')}
                     </span>
                   </div>
 
@@ -641,7 +645,7 @@ export function VerificationDisplay() {
                     ) : (
                       <div className="grid grid-cols-1 gap-2">
                         {queue.map((pickup) => {
-                          const position = pickups.findIndex(p => p.id === pickup.id) + 1;
+                          const position = filteredPickups.findIndex(p => p.id === pickup.id) + 1;
                           return (
                             <div key={pickup.id} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3 hover:border-indigo-200 transition-all">
                               <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
