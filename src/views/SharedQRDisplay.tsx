@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ShieldCheck, UserCheck, AlertTriangle, User } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export function SharedQRDisplay() {
+  const { t } = useLanguage();
   const [qrData, setQrData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,13 +18,13 @@ export function SharedQRDisplay() {
         if (parsed.type === 'replacement_pickup') {
           setQrData(parsed);
         } else {
-          setError("Formato de código QR no válido.");
+          setError(t('qr.invalidFormat'));
         }
       } catch (e) {
-        setError("Error al leer el código QR.");
+        setError(t('qr.readError'));
       }
     } else {
-      setError("No se encontró ningún código QR en el enlace.");
+      setError(t('qr.noQrInLink'));
     }
   }, []);
 
@@ -33,7 +35,7 @@ export function SharedQRDisplay() {
           <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <AlertTriangle className="w-8 h-8 text-rose-500" />
           </div>
-          <h2 className="text-xl font-black text-slate-800 mb-2">Enlace Inválido</h2>
+          <h2 className="text-xl font-black text-slate-800 mb-2">{t('qr.invalidLinkTitle')}</h2>
           <p className="text-slate-500 font-medium text-sm">{error}</p>
         </div>
       </div>
@@ -56,7 +58,7 @@ export function SharedQRDisplay() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-3xl shadow-lg shadow-indigo-200 mb-4">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Pase de Recogida</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t('qr.passTitle')}</h1>
           <p className="text-slate-500 font-medium mt-1">SafePickup System</p>
         </div>
 
@@ -75,7 +77,7 @@ export function SharedQRDisplay() {
                   <User className="w-10 h-10 text-white/70" />
                 )}
               </div>
-              <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-1">Autorizado a</p>
+              <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-1">{t('qr.authorizedTo')}</p>
               <h2 className="text-2xl font-black">{qrData.replacement_name}</h2>
             </div>
           </div>
@@ -101,7 +103,7 @@ export function SharedQRDisplay() {
             </div>
 
             <p className="text-center text-xs text-slate-400 font-bold uppercase tracking-widest max-w-[200px]">
-              Muestra este código en el kiosco de la escuela
+              {t('qr.showAtKiosk')}
             </p>
           </div>
 
@@ -109,15 +111,15 @@ export function SharedQRDisplay() {
           <div className="bg-slate-50 p-6 border-t border-slate-100">
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Autorizado por</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('qr.authorizedBy')}</p>
                 <div className="flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-indigo-500" />
                   <p className="text-sm font-bold text-slate-700">{qrData.parent_name}</p>
                 </div>
               </div>
-              
+
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Alumnos a recoger</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('qr.studentsToPickUp')}</p>
                 <div className="space-y-1">
                   {qrData.students?.map((student: any, idx: number) => (
                     <p key={idx} className="text-sm font-bold text-slate-700 flex items-center gap-2">

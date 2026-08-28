@@ -19,18 +19,20 @@ import {
 
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut } = useAuth();
-  const { t, setLanguage } = useLanguage();
+  const { language, t, setLanguage, hasManualLanguage } = useLanguage();
 
-  // Los padres no tienen selector de idioma manual — la app se fuerza al
-  // idioma que el admin del colegio configuró en Settings (default_language
-  // de tenants). Si `profile.tenant` ya trae la columna (join en
-  // AuthContext), se usa directo; si no, se consulta aparte para no
-  // depender de que ese join la incluya.
+  // El idioma del colegio (Settings → default_language) es solo el punto de
+  // partida — el padre puede cambiarlo él mismo con el botón ES/EN del
+  // encabezado, y esa elección manual (guardada en localStorage vía
+  // hasManualLanguage) tiene prioridad sobre el default del colegio a partir
+  // de ahí. Si `profile.tenant` ya trae la columna (join en AuthContext), se
+  // usa directo; si no, se consulta aparte para no depender de que ese join
+  // la incluya.
   useEffect(() => {
-    if (!profile?.tenant_id) return;
+    if (!profile?.tenant_id || hasManualLanguage) return;
     const tenantLang = (profile as any)?.tenant?.default_language;
     if (tenantLang === 'en' || tenantLang === 'es') {
-      setLanguage(tenantLang);
+      setLanguage(tenantLang, { manual: false });
       return;
     }
     supabase
@@ -39,9 +41,9 @@ export function ParentDashboard() {
       .eq('id', profile.tenant_id)
       .maybeSingle()
       .then(({ data }) => {
-        setLanguage(data?.default_language === 'en' ? 'en' : 'es');
+        setLanguage(data?.default_language === 'en' ? 'en' : 'es', { manual: false });
       });
-  }, [profile?.tenant_id]);
+  }, [profile?.tenant_id, hasManualLanguage]);
 
   const [students, setStudents] = useState<any[]>([]);
   const [pendingForms, setPendingForms] = useState<any[]>([]);
@@ -1040,7 +1042,14 @@ export function ParentDashboard() {
             </div>
           </div>
           <div className="flex gap-3">
-            <button 
+            <button
+              onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
+              title={t('parent.language.toggleLabel')}
+              className="px-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 text-white text-xs font-black uppercase tracking-widest"
+            >
+              {language === 'es' ? 'ES' : 'EN'}
+            </button>
+            <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 relative transition-all active:scale-95"
             >

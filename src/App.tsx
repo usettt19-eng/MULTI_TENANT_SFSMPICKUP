@@ -41,9 +41,9 @@ export default function App() {
 
   if (isSharedQRRoute) {
     return (
-      <>
+      <LanguageProvider>
         <SharedQRDisplay />
-      </>
+      </LanguageProvider>
     );
   }
 

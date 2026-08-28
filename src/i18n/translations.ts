@@ -296,6 +296,7 @@ export const translations = {
     'students.noStudents': 'No students found.',
 
     // Parent Dashboard
+    'parent.language.toggleLabel': 'Switch to Spanish',
     'parent.header.switchSchoolFallback': 'Switch School',
     'parent.header.brandFallback': 'Safe SmartPickUP',
     'parent.schoolSelector.title': 'Select your school',
@@ -428,6 +429,17 @@ export const translations = {
     'parent.pickup.announceErrorPrefix': 'Error announcing: ',
     'parent.replacement.shareTitle': 'Pickup Pass - Safe SmartPickUP',
     'parent.replacement.shareTextTemplate': 'Hi {name}, here is your QR code to pick up the children today.',
+
+    // Shared QR pass page (SharedQRDisplay)
+    'qr.invalidFormat': 'Invalid QR code format.',
+    'qr.readError': 'Error reading the QR code.',
+    'qr.noQrInLink': 'No QR code was found in the link.',
+    'qr.invalidLinkTitle': 'Invalid Link',
+    'qr.passTitle': 'Pickup Pass',
+    'qr.authorizedTo': 'Authorized to',
+    'qr.showAtKiosk': 'Show this code at the school kiosk',
+    'qr.authorizedBy': 'Authorized by',
+    'qr.studentsToPickUp': 'Students to pick up',
 
     // General
     'general.language': 'Language',
@@ -727,6 +739,7 @@ export const translations = {
     'students.noStudents': 'No se encontraron alumnos.',
 
     // Parent Dashboard
+    'parent.language.toggleLabel': 'Cambiar a inglés',
     'parent.header.switchSchoolFallback': 'Cambiar Colegio',
     'parent.header.brandFallback': 'Safe SmartPickUP',
     'parent.schoolSelector.title': 'Selecciona tu colegio',
@@ -859,6 +872,17 @@ export const translations = {
     'parent.pickup.announceErrorPrefix': 'Error al anunciar: ',
     'parent.replacement.shareTitle': 'Pase de Recogida - Safe SmartPickUP',
     'parent.replacement.shareTextTemplate': 'Hola {name}, aquí tienes tu código QR para recoger a los niños hoy.',
+
+    // Shared QR pass page (SharedQRDisplay)
+    'qr.invalidFormat': 'Formato de código QR no válido.',
+    'qr.readError': 'Error al leer el código QR.',
+    'qr.noQrInLink': 'No se encontró ningún código QR en el enlace.',
+    'qr.invalidLinkTitle': 'Enlace Inválido',
+    'qr.passTitle': 'Pase de Recogida',
+    'qr.authorizedTo': 'Autorizado a',
+    'qr.showAtKiosk': 'Muestra este código en el kiosco de la escuela',
+    'qr.authorizedBy': 'Autorizado por',
+    'qr.studentsToPickUp': 'Alumnos a recoger',
 
     // General
     'general.language': 'Idioma',
