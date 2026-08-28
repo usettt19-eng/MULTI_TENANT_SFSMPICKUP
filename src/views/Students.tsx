@@ -75,12 +75,27 @@ export function Students() {
   const extraGrades = Array.from(new Set(students.map(s => s.grade).filter(g => g && !knownGrades.has(g)))).sort();
   const orderedGrades = [...gradeOrder, ...extraGrades];
 
+  // Dentro de cada grado, sub-agrupar por sección — orden alfabético (con
+  // "Sin sección" siempre al final, sin importar cómo ordene el alfabeto).
+  const bySection = (list: any[]) => {
+    const sections = Array.from(new Set(list.map(s => s.section).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' })
+    );
+    const groups = sections.map(sec => ({ section: sec, students: list.filter(s => s.section === sec) }));
+    const noSection = list.filter(s => !s.section);
+    if (noSection.length > 0) groups.push({ section: '', students: noSection });
+    return groups;
+  };
+
   const groupedStudents = orderedGrades
-    .map(g => ({ grade: g, list: filteredStudents.filter(s => s.grade === g) }))
+    .map(g => {
+      const list = filteredStudents.filter(s => s.grade === g);
+      return { grade: g, list, sections: bySection(list) };
+    })
     .filter(group => group.list.length > 0);
   // Alumnos sin grado asignado, si los hay dentro del filtro actual.
   const noGradeList = filteredStudents.filter(s => !s.grade);
-  if (noGradeList.length > 0) groupedStudents.push({ grade: '', list: noGradeList });
+  if (noGradeList.length > 0) groupedStudents.push({ grade: '', list: noGradeList, sections: bySection(noGradeList) });
 
   const fetchStudents = async () => {
     if (!profile?.tenant_id) return;
@@ -464,54 +479,65 @@ export function Students() {
                           {group.grade || 'Sin grado asignado'} · {group.list.length} alumno{group.list.length !== 1 ? 's' : ''}
                         </td>
                       </tr>
-                      {group.list.map((student) => (
-                        <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              {student.photo_url ? (
-                                <img
-                                  src={student.photo_url}
-                                  alt={student.first_name}
-                                  className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs uppercase border border-primary/5">
-                                  {student.first_name[0]}
+                      {group.sections.map(secGroup => (
+                        <React.Fragment key={secGroup.section || '__sin_seccion__'}>
+                          {group.sections.length > 1 && (
+                            <tr className="bg-slate-50/70">
+                              <td colSpan={5} className="px-6 py-1.5 pl-10 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                {secGroup.section || 'Sin sección'} · {secGroup.students.length}
+                              </td>
+                            </tr>
+                          )}
+                          {secGroup.students.map((student: any) => (
+                            <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  {student.photo_url ? (
+                                    <img
+                                      src={student.photo_url}
+                                      alt={student.first_name}
+                                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs uppercase border border-primary/5">
+                                      {student.first_name[0]}
+                                    </div>
+                                  )}
+                                  <span className="font-bold text-primary">{student.first_name}</span>
                                 </div>
-                              )}
-                              <span className="font-bold text-primary">{student.first_name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 font-medium text-slate-600">{student.last_name}</td>
-                          <td className="px-6 py-4">
-                            <span className="bg-secondary-container/30 text-secondary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                              {student.grade || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="bg-tertiary-container/30 text-tertiary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                              {student.section || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleEdit(student)}
-                                className="p-2 hover:bg-primary/10 rounded-lg text-primary transition-colors"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(student)}
-                                className="p-2 hover:bg-error/10 rounded-lg text-error transition-colors"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                              </td>
+                              <td className="px-6 py-4 font-medium text-slate-600">{student.last_name}</td>
+                              <td className="px-6 py-4">
+                                <span className="bg-secondary-container/30 text-secondary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                                  {student.grade || 'N/A'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="bg-tertiary-container/30 text-tertiary px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                                  {student.section || 'N/A'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleEdit(student)}
+                                    className="p-2 hover:bg-primary/10 rounded-lg text-primary transition-colors"
+                                    title="Editar"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(student)}
+                                    className="p-2 hover:bg-error/10 rounded-lg text-error transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       ))}
                     </React.Fragment>
                   ))
