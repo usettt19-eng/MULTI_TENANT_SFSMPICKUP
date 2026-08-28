@@ -354,10 +354,10 @@ export function DismissalScheduleSettings() {
             : 'Encargado';
 
           return (
-            <section key={grade.id} className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-6">
+            <section key={grade.id} className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm space-y-4 sm:space-y-6">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4 flex-wrap gap-2">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-3">
-                  <CalendarClock className="w-5 h-5 text-indigo-500" /> {grade.name}
+                <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <CalendarClock className="w-5 h-5 text-indigo-500 shrink-0" /> {grade.name}
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
                     {grade.stage === 'primaria' ? 'Primaria' : 'Secundaria'}
                   </span>
@@ -369,7 +369,7 @@ export function DismissalScheduleSettings() {
 
               <div className="space-y-4">
                 {sections.map(section => (
-                  <div key={section || '__default__'} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                  <div key={section || '__default__'} className="bg-slate-50 rounded-2xl p-3 sm:p-5 border border-slate-100">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-black text-slate-600 uppercase tracking-widest">
                         Sección {section || '(todo el grado)'}
@@ -387,17 +387,17 @@ export function DismissalScheduleSettings() {
                     </div>
 
                     {grade.stage === 'primaria' ? (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {([1, 2] as const).map(slot => (
-                          <div key={slot} className="flex items-center gap-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">
+                          <div key={slot} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest sm:w-32 shrink-0">
                               {staffModeLabel} {slot}
                             </label>
                             <select
                               value={(slot === 1 ? getAssignment(grade.id, section, 1)?.staff_id : getAssignment(grade.id, section, 1)?.staff_id_2) || ''}
                               onChange={e => handleAssignAllWeekSlot(grade, section, slot, e.target.value)}
                               disabled={savingKey === `${grade.id}|${section}|all|${slot}`}
-                              className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500"
+                              className="flex-1 w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500"
                             >
                               <option value="">— Sin asignar —</option>
                               {staff.map(s => (
@@ -408,33 +408,35 @@ export function DismissalScheduleSettings() {
                         ))}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-5 gap-2">
-                        {WEEKDAYS.map(day => (
-                          <div key={day.value} className="space-y-1">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">{day.label}</label>
-                            {([1, 2] as const).map(slot => (
-                              <select
-                                key={slot}
-                                value={(slot === 1 ? getAssignment(grade.id, section, day.value)?.staff_id : getAssignment(grade.id, section, day.value)?.staff_id_2) || ''}
-                                onChange={e => handleAssignSlot(grade, section, day.value, slot, e.target.value)}
-                                disabled={savingKey === `${grade.id}|${section}|${day.value}|${slot}`}
-                                title={`Persona ${slot}`}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-medium outline-none focus:border-indigo-500"
-                              >
-                                <option value="">—</option>
-                                {staff.map(s => (
-                                  <option key={s.id} value={s.id}>{s.first_name} {(s.last_name || '').slice(0, 1)}.</option>
-                                ))}
-                              </select>
-                            ))}
-                          </div>
-                        ))}
+                      <div className="overflow-x-auto -mx-1 px-1">
+                        <div className="grid grid-cols-5 gap-2 min-w-[440px]">
+                          {WEEKDAYS.map(day => (
+                            <div key={day.value} className="space-y-1">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">{day.label}</label>
+                              {([1, 2] as const).map(slot => (
+                                <select
+                                  key={slot}
+                                  value={(slot === 1 ? getAssignment(grade.id, section, day.value)?.staff_id : getAssignment(grade.id, section, day.value)?.staff_id_2) || ''}
+                                  onChange={e => handleAssignSlot(grade, section, day.value, slot, e.target.value)}
+                                  disabled={savingKey === `${grade.id}|${section}|${day.value}|${slot}`}
+                                  title={`Persona ${slot}`}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-medium outline-none focus:border-indigo-500"
+                                >
+                                  <option value="">—</option>
+                                  {staff.map(s => (
+                                    <option key={s.id} value={s.id}>{s.first_name} {(s.last_name || '').slice(0, 1)}.</option>
+                                  ))}
+                                </select>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
 
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <input
                     placeholder="Nueva sección (ej. A, B)"
                     value={newSectionInput[grade.id] || ''}
@@ -445,7 +447,7 @@ export function DismissalScheduleSettings() {
                   <button
                     type="button"
                     onClick={() => addSection(grade.id)}
-                    className="bg-indigo-50 text-indigo-600 px-4 rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-2 text-xs font-black uppercase tracking-widest"
+                    className="bg-indigo-50 text-indigo-600 px-4 py-2.5 sm:py-0 rounded-xl hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
                   >
                     <Plus className="w-4 h-4" /> Sección
                   </button>
@@ -457,9 +459,9 @@ export function DismissalScheduleSettings() {
       )}
 
       {/* Excepciones de un solo día */}
-      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-6">
-        <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
-          <CalendarClock className="w-5 h-5 text-amber-500" /> Excepciones de un Día ({scheduleLabel})
+      <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm space-y-6">
+        <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+          <CalendarClock className="w-5 h-5 text-amber-500 shrink-0" /> Excepciones de un Día ({scheduleLabel})
         </h3>
         <p className="text-xs text-slate-500 font-medium leading-relaxed">
           Para cuando una de las personas encargadas no está ese día — se reemplaza solo a esa, la otra sigue igual.
@@ -509,13 +511,13 @@ export function DismissalScheduleSettings() {
             overrides.filter(o => o.schedule_type === scheduleType).map(ov => {
               const grade = grades.find(g => g.id === ov.grade_id);
               return (
-                <div key={ov.id} className="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                <div key={ov.id} className="flex items-center justify-between gap-3 flex-wrap p-4 bg-amber-50 rounded-2xl border border-amber-100">
                   <div className="text-sm">
                     <span className="font-black text-slate-800">{ov.override_date}</span>
                     <span className="text-slate-500"> — {grade?.name || 'Grado'}{ov.section ? ` - ${ov.section}` : ''} (persona {ov.slot}): </span>
                     <span className="font-bold text-amber-700">{staffLabel(ov.staff_id)}</span>
                   </div>
-                  <button onClick={() => handleDeleteOverride(ov)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                  <button onClick={() => handleDeleteOverride(ov)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

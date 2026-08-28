@@ -283,9 +283,9 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Exit Doors Section */}
-        <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <DoorOpen className="w-5 h-5 text-indigo-500" /> Puertas de Salida
+        <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
+          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
+            <DoorOpen className="w-5 h-5 text-indigo-500 shrink-0" /> Puertas de Salida
           </h3>
           
           <form onSubmit={handleAddDoor} className="mb-6 flex gap-3">
@@ -336,9 +336,9 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
         </section>
 
         {/* Grades Section */}
-        <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <GraduationCap className="w-5 h-5 text-amber-500" /> Grados Escolares
+        <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
+          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
+            <GraduationCap className="w-5 h-5 text-amber-500 shrink-0" /> Grados Escolares
           </h3>
           
           <form onSubmit={handleAddGrade} className="mb-6 space-y-3">
@@ -420,11 +420,11 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex gap-3 pl-9">
+                  <div className="flex flex-wrap gap-3 pl-0 sm:pl-9">
                     <select
                       value={grade.stage}
                       onChange={e => handleUpdateGradeField(grade.id, 'stage', e.target.value)}
-                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
+                      className="flex-1 min-w-[110px] bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
                     >
                       <option value="primaria">Primaria</option>
                       <option value="secundaria">Secundaria</option>
@@ -434,7 +434,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                       value={grade.exit_time?.slice(0, 5) || ''}
                       onChange={e => handleUpdateGradeField(grade.id, 'exit_time', e.target.value)}
                       title="Hora de salida"
-                      className="w-32 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
+                      className="flex-1 min-w-[110px] sm:w-32 sm:flex-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -446,9 +446,9 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
 
       {/* Door Assignments Section */}
       {doors.length > 0 && grades.length > 0 && (
-        <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <LinkIcon className="w-5 h-5 text-emerald-500" /> Asignación de Puertas por Grado
+        <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
+          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
+            <LinkIcon className="w-5 h-5 text-emerald-500 shrink-0" /> Asignación de Puertas por Grado
           </h3>
           <p className="text-sm text-slate-500 mb-6">
             Selecciona por qué puertas está permitida la salida para cada grado. Un grado puede tener múltiples puertas asignadas.

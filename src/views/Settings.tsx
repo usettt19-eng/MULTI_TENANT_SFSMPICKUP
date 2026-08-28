@@ -127,20 +127,20 @@ export function Settings() {
     <>
       <TopNav title="SmartPickup" subtitle="Configuración Global del Colegio" />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-8 w-full font-body animate-in slide-in-from-bottom-5 duration-700">
-        <header className="flex justify-between items-center">
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 sm:space-y-8 w-full font-body animate-in slide-in-from-bottom-5 duration-700">
+        <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Ajustes del Sistema <SettingsIcon className="w-8 h-8 text-primary animate-[spin_4s_linear_infinite]" />
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              Ajustes del Sistema <SettingsIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary animate-[spin_4s_linear_infinite]" />
             </h1>
             <p className="text-sm text-slate-500 font-medium font-body mt-1">Control de georeferencia, perímetros y datos oficiales.</p>
           </div>
           {activeTab === 'general' && (
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               form="settings-form"
               disabled={saving}
-              className="flex items-center gap-2 bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black text-xs hover:bg-primary-container transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black text-xs hover:bg-primary-container transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50 w-full sm:w-auto"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               GUARDAR CAMBIOS
@@ -148,12 +148,12 @@ export function Settings() {
           )}
         </header>
 
-        <div className="flex gap-2 border-b border-slate-200 pb-px">
+        <div className="flex gap-2 border-b border-slate-200 pb-px overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             onClick={() => setActiveTab('general')}
-            className={`px-6 py-3 font-bold text-sm rounded-t-2xl transition-colors ${
-              activeTab === 'general' 
-                ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10' 
+            className={`shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 font-bold text-xs sm:text-sm rounded-t-2xl transition-colors whitespace-nowrap ${
+              activeTab === 'general'
+                ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10'
                 : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
@@ -161,24 +161,24 @@ export function Settings() {
           </button>
           <button
             onClick={() => setActiveTab('structure')}
-            className={`px-6 py-3 font-bold text-sm rounded-t-2xl transition-colors flex items-center gap-2 ${
-              activeTab === 'structure' 
-                ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10' 
+            className={`shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 font-bold text-xs sm:text-sm rounded-t-2xl transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'structure'
+                ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10'
                 : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
-            <DoorOpen className="w-4 h-4" />
+            <DoorOpen className="w-4 h-4 shrink-0" />
             Estructura y Puertas
           </button>
           <button
             onClick={() => setActiveTab('dismissal')}
-            className={`px-6 py-3 font-bold text-sm rounded-t-2xl transition-colors flex items-center gap-2 ${
+            className={`shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 font-bold text-xs sm:text-sm rounded-t-2xl transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'dismissal'
                 ? 'bg-white text-primary border-t border-l border-r border-slate-200 -mb-px relative z-10'
                 : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
-            <CalendarClock className="w-4 h-4" />
+            <CalendarClock className="w-4 h-4 shrink-0" />
             Horarios de Salida
           </button>
         </div>
