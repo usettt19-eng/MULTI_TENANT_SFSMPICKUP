@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
@@ -17,6 +17,27 @@ const REPLACEMENT_NOTE_PREFIX = '[REEMPLAZO] ';
 function getReplacementNameFromNotes(notes: string | null | undefined): string | null {
   if (!notes || !notes.startsWith(REPLACEMENT_NOTE_PREFIX)) return null;
   return notes.slice(REPLACEMENT_NOTE_PREFIX.length);
+}
+
+// Sin esto, la tarjeta de verificación no decía cuándo se anunció la
+// llegada — el personal no podía distinguir un aviso reciente de uno que
+// lleva rato esperando en la cola. Si no es de hoy, se muestra también la
+// fecha; si es de hoy pero pasó el umbral, se marca en rojo como atrasado.
+const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutos
+function formatAnnouncedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const time = d.toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return time;
+  return `${d.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+function isStaleAnnouncement(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  return Date.now() - d.getTime() > STALE_THRESHOLD_MS;
 }
 
 export function VerificationDisplay() {
@@ -565,6 +586,13 @@ export function VerificationDisplay() {
                           Puerta: {doors.find(d => d.id === currentPickup.door_id)?.name || '—'}
                         </p>
                       )}
+                      {formatAnnouncedAt(currentPickup.announced_at) && (
+                        <p className={`text-xs font-black uppercase tracking-wider mt-1 flex items-center justify-center md:justify-start gap-1 ${isStaleAnnouncement(currentPickup.announced_at) ? 'text-rose-600' : 'text-slate-400'}`}>
+                          <Clock className="w-3 h-3" />
+                          Anunciado: {formatAnnouncedAt(currentPickup.announced_at)}
+                          {isStaleAnnouncement(currentPickup.announced_at) && ' · Atrasado'}
+                        </p>
+                      )}
                     </div>
 
                     {/* Verification Interface */}
@@ -714,6 +742,11 @@ export function VerificationDisplay() {
                                 <p className="text-[10px] text-slate-500 truncate leading-tight">
                                   {pickup.students?.grade} • {pickup.profiles?.first_name}
                                   {pickup.door_id && ` • ${doors.find(d => d.id === pickup.door_id)?.name || '—'}`}
+                                  {formatAnnouncedAt(pickup.announced_at) && (
+                                    <span className={isStaleAnnouncement(pickup.announced_at) ? 'text-rose-600 font-bold' : ''}>
+                                      {' '}• {formatAnnouncedAt(pickup.announced_at)}
+                                    </span>
+                                  )}
                                 </p>
                               </div>
                               <button
