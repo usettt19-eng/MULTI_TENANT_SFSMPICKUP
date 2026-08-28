@@ -370,7 +370,8 @@ export function SmartCheckIn() {
         .from('profiles')
         .select('id, first_name, last_name, photo_url, tenant_id')
         .eq('tenant_id', staffProfile.tenant_id)
-        .not('photo_url', 'is', null);
+        .not('photo_url', 'is', null)
+        .neq('photo_url', '');
 
       if (fetchError || !parents || parents.length === 0) {
         throw new Error("No hay padres registrados con foto para comparar.");
@@ -381,9 +382,16 @@ export function SmartCheckIn() {
 
       for (const parent of parents) {
         try {
-          // Use proxy to avoid CORS issues
-          const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(parent.photo_url)}`;
-          const img = await faceapi.fetchImage(proxiedUrl);
+          // Muchas fotos de perfil quedaron guardadas como base64 inline
+          // (data:image/...) en vez de subirse a Storage — esas no tienen
+          // problema de CORS (no "manchan" el canvas) y no caben como query
+          // string en el proxy, así que se cargan directo. Solo las URLs
+          // http(s) reales (Supabase Storage) necesitan pasar por el proxy.
+          const isDataUrl = parent.photo_url.startsWith('data:');
+          const imgSrc = isDataUrl
+            ? parent.photo_url
+            : `/api/proxy-image?url=${encodeURIComponent(parent.photo_url)}`;
+          const img = await faceapi.fetchImage(imgSrc);
           const parentDetection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
           
           if (parentDetection) {
