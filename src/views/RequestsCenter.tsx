@@ -120,7 +120,7 @@ export function RequestsCenter() {
     if (isInitial) setLoading(true);
     const { data } = await supabase
       .from('replacement_requests')
-      .select('*, parent:profiles(first_name, last_name, tenant_id)')
+      .select('*, parent:profiles(first_name, last_name, tenant_id, parent_students(students(first_name, last_name)))')
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
 
@@ -320,9 +320,24 @@ export function RequestsCenter() {
                             )}
                           </div>
                         ) : (
-                          <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                            {t('requests.requestsAuthPrefix')} <span className="text-slate-900 font-bold">{req.replacement_name}</span> {t('requests.withPhone')} <span className="text-slate-900 font-bold">{req.replacement_phone}</span> {t('requests.forTodayPickup')}
-                          </p>
+                          <>
+                            <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                              {t('requests.requestsAuthPrefix')} <span className="text-slate-900 font-bold">{req.replacement_name}</span> {t('requests.withPhone')} <span className="text-slate-900 font-bold">{req.replacement_phone}</span> {t('requests.forTodayPickup')}
+                            </p>
+                            <p className="text-xs font-bold mt-1">
+                              {t('requests.forChildren')}{' '}
+                              {req.parent?.parent_students?.length > 0 ? (
+                                <span className="text-indigo-600">
+                                  {req.parent.parent_students
+                                    .map((ps: any) => ps.students ? `${ps.students.first_name} ${ps.students.last_name || ''}`.trim() : null)
+                                    .filter(Boolean)
+                                    .join(', ')}
+                                </span>
+                              ) : (
+                                <span className="text-amber-600">{t('requests.noChildrenLinked')}</span>
+                              )}
+                            </p>
+                          </>
                         )}
                         <div className="flex items-center gap-4 mt-3">
                           <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
