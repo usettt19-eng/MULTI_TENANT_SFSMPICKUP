@@ -5,7 +5,10 @@ en orden, y cómo está armada la base de datos en Supabase. Última actualizaci
 2026-08-28 (idioma de la app de padres configurable por el admin, panel de
 Estadísticas por colegio, fix del filtro de puerta en Monitor Externo,
 agrupación por grado/sección y buscadores inteligentes en Alumnos y Staff,
-fotos de alumnos importadas desde Google Drive para TCS Albrook secundaria).
+fotos de alumnos importadas desde Google Drive para TCS Albrook secundaria,
+Ajustes responsive para teléfono, alumno vinculado visible en cada solicitud
+de reemplazo, y fix del lector QR de Check-In que no detectaba nada y de las
+recogidas por reemplazo que se anunciaban como si hubiera llegado el papá/mamá).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -104,13 +107,24 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   los padres que correspondan, en vez de que dependan de abrir la app para
   enterarse.
 - Bitácora de auditoría de todo evento sensible.
+- Inbox de solicitudes (`RequestsCenter.tsx`): cada solicitud de reemplazo
+  muestra debajo el/los alumno(s) vinculados al padre que la hizo ("Para:
+  Nombre1, Nombre2"), para que el personal sepa a qué hijo aplica sin tener
+  que adivinar (ver §3).
 - Verificación de tutores / monitor externo (pantalla de puerta con cola y
   escaneo QR); la tarjeta de cada llegada muestra quién del personal fue
   avisado (nombre de cada profesor/recepción notificado), y "Atender ahora"
   para verificar a alguien fuera del orden de llegada sin perder la cola real
   de los demás. El filtro "Puerta a monitorear" aplica también a la lista "En
   cola" del panel lateral y a su contador (antes solo filtraba la tarjeta
-  principal, ver §3).
+  principal, ver §3). Cuando quien retira es un reemplazo autorizado
+  verificado por QR (no el papá/mamá/tutor), la tarjeta, el toast y el
+  anuncio de voz muestran su nombre real con la etiqueta "(autorizado)" en
+  vez de asumir que llegó el titular (ver §3).
+- **Ajustes**, pantalla completa (pestañas, cabecera, Configuración General,
+  Estructura y Puertas, Horarios de Salida) adaptada para verse bien en
+  teléfono: pestañas con scroll horizontal, cabecera apilada, grillas y
+  selects que se apilan en vez de comprimirse en pantallas angostas (ver §3).
 - **Panel de Estadísticas** por colegio (solo admin): tiempo promedio de
   recogida, % de confirmación automática (GPS) vs. manual, puerta más usada,
   recogidas por hora del día y por día de la semana, reemplazos
@@ -601,6 +615,62 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   vinculación `students.photo_url` se hizo con un `UPDATE` masivo por SQL
   cruzando el nombre de archivo contra el `student_id` ya identificado.
 
+### Ajustes: diseño responsive para teléfono (2026-08-28)
+- Motivado por necesitar una captura limpia de "Horarios de Salida" tomada
+  desde un teléfono real para la ficha de Google Play (ver pendiente de
+  "afirmaciones engañosas" en §7). `Settings.tsx`: la barra de pestañas ahora
+  tiene scroll horizontal en vez de comprimirse, la cabecera se apila en
+  vertical en pantallas angostas. `DismissalScheduleSettings.tsx`: en
+  primaria los selects de encargado se apilan verticalmente; en secundaria la
+  grilla de 5 días × 2 encargados vive en un contenedor con scroll horizontal
+  en vez de aplastarse hasta ser ilegible. `SchoolStructureSettings.tsx`:
+  mismos ajustes de padding/tamaño de texto y la fila "Etapa + Hora de
+  salida" por grado ahora se envuelve en vez de desbordar.
+
+### Solicitudes: alumno vinculado visible en cada solicitud de reemplazo (2026-08-28)
+- La tarjeta de "Solicita autorizar a..." en `RequestsCenter.tsx` solo
+  mostraba el nombre/teléfono de la persona a autorizar, sin indicar a qué
+  hijo del padre aplica — el personal tenía que adivinarlo. Se unió
+  `parent_students` en la consulta de `replacement_requests` y se agregó una
+  línea "Para: Nombre1, Nombre2" con los alumnos vinculados a ese padre (o un
+  aviso en ámbar si el padre todavía no tiene ninguno vinculado).
+
+### Check-In: lector QR que no detectaba nada, y recogidas por reemplazo mal atribuidas (2026-08-28)
+- **El lector QR de recepción (`SmartCheckIn.tsx`) abría la cámara
+  normalmente pero nunca detectaba ningún código**, ni siquiera QR reales
+  generados por la propia app. Dos causas reales encontradas:
+  1. `qrbox` fijo en 200×200px podía quedar mal calculado contra el tamaño
+     real del contenedor en el momento de iniciar el escaneo (layout no
+     asentado todavía), y sin `videoConstraints` el navegador entregaba video
+     en baja resolución — casi imposible de decodificar, sobre todo un QR
+     mostrado en otra pantalla (moiré). Se cambió `qrbox` a una función que
+     se calcula contra el viewfinder real, y se pide explícitamente
+     1280×720.
+  2. El QR de "Pase de Recogida" (`ParentDashboard.tsx` y
+     `SharedQRDisplay.tsx`) codificaba la **URL completa de la foto** del
+     reemplazo (100+ caracteres) dentro del payload, sin que el lector la use
+     para nada (`handleQrSuccess` solo valida `parent_id`/`token`/
+     `replacement_name`) — eso inflaba la densidad del código muy por encima
+     de lo necesario. Se quitó `photo_url` del payload en ambos lugares y se
+     bajó el nivel de corrección de errores de H a M en la versión grande.
+- **Las recogidas hechas por un reemplazo autorizado (verificado por QR) se
+  anunciaban/mostraban como si hubiera llegado el papá/mamá/tutor**: al
+  escanear el QR y elegir el alumno, `pickup_events` se creaba solo con
+  `parent_id` (el titular que autorizó), sin registrar en ningún lado que
+  quien llegó físicamente fue otra persona — el Monitor Externo entonces
+  decía "el papá de X ha llegado" por voz y en pantalla, aunque fuera el
+  reemplazo. Se guarda ahora el nombre del reemplazo en
+  `pickup_events.notes` (prefijo `[REEMPLAZO]`) y `VerificationDisplay.tsx`
+  lo usa en sus dos anuncios de voz/toast y en la tarjeta principal de
+  verificación para mostrar el nombre correcto con la etiqueta "(autorizado)".
+  **Bug de despliegue encontrado al probar el fix**: la columna `notes` ya
+  estaba en el archivo de tipos TypeScript pero **nunca existió realmente**
+  en la tabla `pickup_events` de producción — el `INSERT` fallaba en
+  silencio (el cliente de Supabase no lanza excepción por defecto) y el
+  campo quedaba `null` pese a que el código ya la mandaba. Se agregó la
+  columna real con una migración (`ALTER TABLE pickup_events ADD COLUMN
+  notes text`) directamente sobre el proyecto de producción.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
@@ -730,7 +800,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `school_settings` | `id, school_name, address, latitude, longitude, pickup_radius_meters, updated_at, tenant_id, logo_url, primary_dismissal_mode` | Una fila por colegio; `primary_dismissal_mode` = `teacher`\|`staff` |
 | `dismissal_assignments` | `id, tenant_id, grade_id, section, schedule_type, day_of_week, staff_id, created_at, updated_at` | Horario regular/post-school recurrente |
 | `dismissal_overrides` | `id, tenant_id, grade_id, section, schedule_type, override_date, staff_id, created_by, created_at` | Excepción de un solo día |
-| `pickup_events` | `id, parent_id, student_id, status(pickup_status), announced_at, completed_at, verified_at, tenant_id, door_id, location_verified` | El evento central de recogida. `verified_at` existe pero ningún flujo la escribe todavía (no usar en queries nuevos); `location_verified = false` marca confirmación manual sin GPS |
+| `pickup_events` | `id, parent_id, student_id, status(pickup_status), announced_at, completed_at, verified_at, tenant_id, door_id, location_verified, notes` | El evento central de recogida. `verified_at` existe pero ningún flujo la escribe todavía (no usar en queries nuevos); `location_verified = false` marca confirmación manual sin GPS; `notes` (agregada 2026-08-28) guarda el nombre del reemplazo autorizado cuando quien retira no es el titular (prefijo `[REEMPLAZO] `, ver §3) |
 | `carpool_authorizations` | `id, tenant_id, student_id, authorizing_parent_id, driver_parent_id, day_of_week, created_at, updated_at` | Pool Day recurrente |
 | `carpool_overrides` | `id, tenant_id, student_id, authorizing_parent_id, driver_parent_id, override_date, created_by, created_at` | Pool Day de un solo día |
 | `replacement_requests` | `id, parent_id, replacement_name, replacement_phone, status, created_at, updated_at, tenant_id` | |
