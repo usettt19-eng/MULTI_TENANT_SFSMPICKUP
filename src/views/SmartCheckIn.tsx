@@ -136,7 +136,24 @@ export function SmartCheckIn() {
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 200, height: 200 }
+            // Caja fija en px: si el contenedor real termina siendo más chico
+            // que 200x200 (pantallas angostas, o el layout no terminó de
+            // asentarse en los 100ms de espera), html5-qrcode puede ignorar
+            // la caja o calcular mal la región de escaneo y nunca detecta
+            // nada aunque la cámara se vea bien. Con una función se recalcula
+            // contra el tamaño real del viewfinder en cada intento.
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+              return { width: edge, height: edge };
+            },
+            // Sin esto, el navegador suele entregar video en baja resolución
+            // (ej. 640x480), lo que hace casi imposible decodificar un QR
+            // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
+            videoConstraints: {
+              facingMode: "environment",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           },
           async (decodedText: string) => {
             // Handle success
