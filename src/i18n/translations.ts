@@ -26,6 +26,7 @@ export const translations = {
     'transit.authorizedTag': 'authorized',
     'transit.emptyTitle': 'Nobody in transit right now',
     'transit.emptySubtitle': 'Students appear here once the teacher approves the pickup, until the parent confirms in their app.',
+    'transit.audioActivationDesc': 'This screen announces by voice, in Spanish and English, when a student is approved and heading to the exit — for the final hand-off staff.',
     'nav.staff': 'Staff Management',
     'nav.statistics': 'Statistics',
 
@@ -492,6 +493,7 @@ export const translations = {
     'transit.authorizedTag': 'autorizado',
     'transit.emptyTitle': 'Nadie en tránsito por ahora',
     'transit.emptySubtitle': 'Los alumnos aparecen aquí en cuanto el profesor aprueba la salida, hasta que el padre confirma en su app.',
+    'transit.audioActivationDesc': 'Esta pantalla avisa por voz, en español e inglés, cuando un alumno queda aprobado y viene hacia la salida — para el personal de entrega final.',
     'nav.staff': 'Gestión de Staff',
     'nav.statistics': 'Estadísticas',
 

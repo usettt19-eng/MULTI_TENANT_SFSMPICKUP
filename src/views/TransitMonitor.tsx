@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Footprints, DoorOpen, Car, User, ShieldCheck } from 'lucide-react';
+import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
+import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
 
 /**
  * Pantalla de solo lectura: alumnos ya aprobados por el profesor (status
@@ -20,6 +21,26 @@ export function TransitMonitor() {
   const [doors, setDoors] = useState<any[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  // Para avisar al personal de entrega final (voz, en español e inglés) en
+  // cuanto un alumno entra a la lista — solo una vez por alumno, y nunca
+  // para lo que ya estaba en tránsito al abrir la pantalla (si no, cada
+  // recarga anunciaría de nuevo a todos los que ya estaban esperando).
+  const announcedTransitIds = useRef<Set<string>>(new Set());
+  const isFirstFetch = useRef(true);
+  // doorsRef porque fetchTransit se dispara antes de que fetchDoors termine
+  // de traer los nombres — sin la referencia, el anuncio de voz podría
+  // salir sin nombre de puerta la primera vez.
+  const doorsRef = useRef<any[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAudioState(setAudioEnabled);
+    return unsubscribe;
+  }, []);
+
+  const enableAudio = () => {
+    enableGlobalAudio();
+  };
 
   useEffect(() => {
     if (!profile?.tenant_id) return;
@@ -44,7 +65,10 @@ export function TransitMonitor() {
   const fetchDoors = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase.from('exit_doors').select('*').eq('tenant_id', profile.tenant_id).order('name');
-    if (data) setDoors(data);
+    if (data) {
+      setDoors(data);
+      doorsRef.current = data;
+    }
   };
 
   const fetchTransit = async () => {
@@ -57,7 +81,32 @@ export function TransitMonitor() {
       .order('announced_at', { ascending: true });
 
     if (error) console.error('Error cargando en tránsito:', error);
-    if (data) setPickups(data);
+    if (data) {
+      setPickups(data);
+
+      if (isFirstFetch.current) {
+        data.forEach(p => announcedTransitIds.current.add(p.id));
+        isFirstFetch.current = false;
+      } else {
+        data.forEach(pickup => {
+          if (announcedTransitIds.current.has(pickup.id)) return;
+          announcedTransitIds.current.add(pickup.id);
+
+          const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
+          const gradeName = pickup.students?.grade || '—';
+          const sectionName = pickup.students?.section || '—';
+          const door = doorsRef.current.find(d => d.id === pickup.door_id)?.name;
+
+          // Aviso para el personal de entrega final (puerta de salida): el
+          // alumno ya fue aprobado por el profesor y viene en camino. En
+          // español y después en inglés, igual que el anuncio del profesor.
+          const esDoor = door ? `, hacia la puerta ${door}` : '';
+          const enDoor = door ? `, heading to door ${door}` : '';
+          playGlobalVoiceMessage(`Alumno en tránsito: ${fullName}, grado ${gradeName}, sección ${sectionName}${esDoor}.`, 'es');
+          playGlobalVoiceMessage(`Student in transit: ${fullName}, grade ${gradeName}, section ${sectionName}${enDoor}.`, 'en');
+        });
+      }
+    }
     setLoading(false);
   };
 
@@ -94,6 +143,26 @@ export function TransitMonitor() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <TopNav title={t('transit.title')} subtitle={t('transit.subtitle')} />
+
+      {!audioEnabled && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full text-center space-y-5">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto">
+              <Bell className="w-8 h-8 text-indigo-600 animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-black text-slate-900">{t('monitor.audioActivationRequired')}</h2>
+              <p className="text-sm text-slate-500 font-medium">{t('transit.audioActivationDesc')}</p>
+            </div>
+            <button
+              onClick={enableAudio}
+              className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-200"
+            >
+              {t('monitor.activateSpeakers')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="p-6 max-w-6xl mx-auto w-full space-y-6 animate-in slide-in-from-bottom-4">
         <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
