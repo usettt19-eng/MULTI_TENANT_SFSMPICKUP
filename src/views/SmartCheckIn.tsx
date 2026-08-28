@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { 
@@ -27,6 +27,11 @@ export function SmartCheckIn() {
   const [recognitionResult, setRecognitionResult] = useState<'idle' | 'success' | 'failure'>('idle');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [recognizedParent, setRecognizedParent] = useState<any>(null);
+  // Cuando la verificación viene de un QR de reemplazo, quien llega
+  // físicamente NO es el papá/mamá/tutor (recognizedParent solo se usa para
+  // buscar sus hijos vinculados) — se guarda el nombre del reemplazo para
+  // que el pickup_event que se cree no diga que llegó el titular.
+  const [recognizedReplacementName, setRecognizedReplacementName] = useState<string | null>(null);
   const [linkedStudents, setLinkedStudents] = useState<any[]>([]);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -205,7 +210,8 @@ export function SmartCheckIn() {
           if (isValid) {
             setStatusMsg(`¡QR Válido! Bienvenido/a ${data.replacement_name}`);
             playVoiceMessage(`Código verificado para ${data.replacement_name}. Por favor, seleccione al alumno.`);
-            
+            setRecognizedReplacementName(data.replacement_name);
+
             // Set recognized parent so the modal works
             setRecognizedParent(parentProfile);
             
@@ -326,6 +332,7 @@ export function SmartCheckIn() {
     setRecognitionResult('idle');
     setCapturedPhoto(null);
     setRecognizedParent(null);
+    setRecognizedReplacementName(null);
     setLinkedStudents([]);
     
     try {
@@ -441,23 +448,40 @@ export function SmartCheckIn() {
 
   const handleStudentSelect = async (studentId: string) => {
     if (!recognizedParent) return;
-    
+
     try {
       const student = linkedStudents.find(s => s.id === studentId);
+      const parentName = `${recognizedParent.first_name || ''} ${recognizedParent.last_name || ''}`.trim();
+      // parent_id sigue siendo el titular (así se ubica su ficha/relación con
+      // el alumno), pero quien llegó de verdad puede ser un reemplazo
+      // autorizado por QR — eso se guarda en notes para que el monitor
+      // externo anuncie/muestre el nombre correcto, no el del papá/mamá.
       await supabase.from('pickup_events').insert({
         student_id: studentId,
         parent_id: recognizedParent.id,
         status: 'announced',
         announced_at: new Date(),
-        tenant_id: student?.tenant_id
+        tenant_id: student?.tenant_id,
+        notes: recognizedReplacementName ? `[REEMPLAZO] ${recognizedReplacementName}` : null,
       });
-      
+
+      await logActivity(
+        'PICKUP',
+        recognizedReplacementName
+          ? `LLEGADA (REEMPLAZO): ${recognizedReplacementName}, autorizado por ${parentName}, retira a ${student?.first_name || ''} ${student?.last_name || ''}.`
+          : `LLEGADA: ${parentName} retira a ${student?.first_name || ''} ${student?.last_name || ''}.`,
+        'Check-In QR',
+        { parent_id: recognizedParent.id, student_id: studentId, replacement_name: recognizedReplacementName },
+        student?.tenant_id,
+      );
+
       setShowStudentModal(false);
       setStatusMsg('¡Anuncio Exitoso!');
       setTimeout(() => {
         setStatusMsg('');
         setRecognitionResult('idle');
         setCapturedPhoto(null);
+        setRecognizedReplacementName(null);
       }, 3000);
     } catch (error) {
       console.error("Error al anunciar recogida:", error);

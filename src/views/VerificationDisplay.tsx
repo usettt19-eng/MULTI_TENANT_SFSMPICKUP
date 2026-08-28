@@ -9,6 +9,16 @@ import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
 
+// SmartCheckIn.tsx guarda esto en pickup_events.notes cuando el que llega es
+// un reemplazo autorizado (no el papá/mamá/tutor) verificado por QR — así
+// esta pantalla puede mostrar/anunciar el nombre correcto en vez de asumir
+// que quien llegó fue el titular de la cuenta.
+const REPLACEMENT_NOTE_PREFIX = '[REEMPLAZO] ';
+function getReplacementNameFromNotes(notes: string | null | undefined): string | null {
+  if (!notes || !notes.startsWith(REPLACEMENT_NOTE_PREFIX)) return null;
+  return notes.slice(REPLACEMENT_NOTE_PREFIX.length);
+}
+
 export function VerificationDisplay() {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
@@ -186,21 +196,30 @@ export function VerificationDisplay() {
 
             if (shouldAnnounce) {
               announcedPickupIds.current.add(pickup.id);
-              
-              // Fetch relationship
-              const { data: relData } = await supabase
-                .from('parent_students')
-                .select('relationship')
-                .eq('parent_id', pickup.parent_id)
-                .eq('student_id', pickup.student_id)
-                .maybeSingle();
 
               const fullName = `${pickup.students?.first_name} ${pickup.students?.last_name}`;
-              let relLabel = "el representante";
-              if (relData) {
-                if (relData.relationship === 'father') relLabel = "el papá";
-                else if (relData.relationship === 'mother') relLabel = "la mamá";
-                else if (relData.relationship === 'guardian') relLabel = "el tutor";
+              // Si vino un reemplazo autorizado (ver REPLACEMENT_NOTE_PREFIX),
+              // NO es el papá/mamá/tutor quien llegó — decirlo así sería
+              // engañoso para el personal en la puerta.
+              const replacementName = getReplacementNameFromNotes(pickup.notes);
+              let relLabel: string;
+              if (replacementName) {
+                relLabel = `${replacementName} (autorizado)`;
+              } else {
+                // Fetch relationship
+                const { data: relData } = await supabase
+                  .from('parent_students')
+                  .select('relationship')
+                  .eq('parent_id', pickup.parent_id)
+                  .eq('student_id', pickup.student_id)
+                  .maybeSingle();
+
+                relLabel = "el representante";
+                if (relData) {
+                  if (relData.relationship === 'father') relLabel = "el papá";
+                  else if (relData.relationship === 'mother') relLabel = "la mamá";
+                  else if (relData.relationship === 'guardian') relLabel = "el tutor";
+                }
               }
 
               console.log(`VerificationDisplay Auto-announcing: ${fullName} (${relLabel})`);
@@ -296,20 +315,26 @@ export function VerificationDisplay() {
       currentlyDisplayedId.current = currentPickup.id;
       
       const announceFrontOfQueue = async () => {
-        // Fetch relationship
-        const { data: relData } = await supabase
-          .from('parent_students')
-          .select('relationship')
-          .eq('parent_id', currentPickup.parent_id)
-          .eq('student_id', currentPickup.student_id)
-          .maybeSingle();
-
         const fullName = `${currentPickup.students?.first_name} ${currentPickup.students?.last_name}`;
-        let relLabel = "El representante";
-        if (relData) {
-          if (relData.relationship === 'father') relLabel = "El papá";
-          else if (relData.relationship === 'mother') relLabel = "La mamá";
-          else if (relData.relationship === 'guardian') relLabel = "El tutor";
+        const replacementName = getReplacementNameFromNotes(currentPickup.notes);
+        let relLabel: string;
+        if (replacementName) {
+          relLabel = `${replacementName} (autorizado)`;
+        } else {
+          // Fetch relationship
+          const { data: relData } = await supabase
+            .from('parent_students')
+            .select('relationship')
+            .eq('parent_id', currentPickup.parent_id)
+            .eq('student_id', currentPickup.student_id)
+            .maybeSingle();
+
+          relLabel = "El representante";
+          if (relData) {
+            if (relData.relationship === 'father') relLabel = "El papá";
+            else if (relData.relationship === 'mother') relLabel = "La mamá";
+            else if (relData.relationship === 'guardian') relLabel = "El tutor";
+          }
         }
 
         playGlobalVoiceMessage(`Atención, es el turno para ${relLabel} de ${fullName}. Por favor acérquese.`);
@@ -545,66 +570,90 @@ export function VerificationDisplay() {
                     {/* Verification Interface */}
                     <div className="flex-1 space-y-4">
                       <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            {replacementData ? t('monitor.authorizedReplacement') : t('monitor.mainGuardian')}
-                          </span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${replacementData ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}`}>
-                            {replacementData ? t('monitor.replacementBadge') : t('monitor.holderBadge')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-slate-200 border border-slate-200">
-                            {replacementData ? (
-                              replacementData.photo_url ? (
-                                <img
-                                  src={replacementData.photo_url}
-                                  alt={replacementData.replacement_name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-amber-50">
-                                  <User className="w-10 h-10 text-amber-400" />
+                        {(() => {
+                          // El nombre real de quien llegó puede venir de dos
+                          // fuentes: el QR pegado a mano en este monitor
+                          // (replacementData), o el nombre guardado en
+                          // pickup_events.notes cuando se anunció desde el
+                          // lector QR de recepción (SmartCheckIn). Sin esto,
+                          // esta tarjeta seguía mostrando al papá/mamá como
+                          // si hubiera llegado él, aunque haya sido un
+                          // reemplazo autorizado.
+                          const notesReplacementName = getReplacementNameFromNotes(currentPickup.notes);
+                          const isReplacement = !!(replacementData || notesReplacementName);
+                          const displayName = replacementData
+                            ? replacementData.replacement_name
+                            : notesReplacementName || `${currentPickup.profiles?.first_name} ${currentPickup.profiles?.last_name}`;
+                          const subLabel = replacementData
+                            ? `${t('monitor.requestedBy')}: ${replacementData.parent_name}`
+                            : notesReplacementName
+                              ? `${t('monitor.requestedBy')}: ${currentPickup.profiles?.first_name} ${currentPickup.profiles?.last_name}`
+                              : (currentPickup.profiles?.phone || t('monitor.verifiedContact'));
+                          return (
+                            <>
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  {isReplacement ? t('monitor.authorizedReplacement') : t('monitor.mainGuardian')}
+                                </span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${isReplacement ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}`}>
+                                  {isReplacement ? t('monitor.replacementBadge') : t('monitor.holderBadge')}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-slate-200 border border-slate-200">
+                                  {isReplacement ? (
+                                    replacementData?.photo_url ? (
+                                      <img
+                                        src={replacementData.photo_url}
+                                        alt={displayName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center bg-amber-50">
+                                        <User className="w-10 h-10 text-amber-400" />
+                                      </div>
+                                    )
+                                  ) : (
+                                    <img
+                                      src={currentPickup.profiles?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"}
+                                      alt="Adult Profile"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
                                 </div>
-                              )
-                            ) : (
-                              <img 
-                                src={currentPickup.profiles?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} 
-                                alt="Adult Profile" 
-                                className="w-full h-full object-cover" 
-                              />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-lg font-black text-primary truncate leading-tight">
-                              {replacementData ? replacementData.replacement_name : `${currentPickup.profiles?.first_name} ${currentPickup.profiles?.last_name}`}
-                            </h4>
-                            <p className="text-xs text-slate-500 font-medium">
-                              {replacementData ? `${t('monitor.requestedBy')}: ${replacementData.parent_name}` : (currentPickup.profiles?.phone || t('monitor.verifiedContact'))}
-                            </p>
-                            <div className="flex gap-2 mt-2">
-                              <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg font-black uppercase">
-                                <ShieldCheck className="w-3 h-3" /> {replacementData ? t('monitor.qrValid') : t('monitor.pinOk')}
-                              </span>
-                              {!replacementData && (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg font-black uppercase">
-                                  <CheckCircle2 className="w-3 h-3" /> {t('monitor.biometryOk')}
-                                </span>
-                              )}
-                              {currentPickup.location_verified === false && (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black uppercase">
-                                  <AlertTriangle className="w-3 h-3" /> Sin GPS
-                                </span>
-                              )}
-                            </div>
-                            {notifiedStaff.length > 0 && (
-                              <p className="text-[10px] text-slate-400 font-bold mt-2">
-                                <Bell className="w-3 h-3 inline -mt-0.5 mr-1" />
-                                Avisado: {notifiedStaff.map(s => `${s.first_name} ${s.last_name}`).join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-lg font-black text-primary truncate leading-tight">
+                                    {displayName}
+                                  </h4>
+                                  <p className="text-xs text-slate-500 font-medium">
+                                    {subLabel}
+                                  </p>
+                                  <div className="flex gap-2 mt-2">
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg font-black uppercase">
+                                      <ShieldCheck className="w-3 h-3" /> {isReplacement ? t('monitor.qrValid') : t('monitor.pinOk')}
+                                    </span>
+                                    {!isReplacement && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg font-black uppercase">
+                                        <CheckCircle2 className="w-3 h-3" /> {t('monitor.biometryOk')}
+                                      </span>
+                                    )}
+                                    {currentPickup.location_verified === false && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black uppercase">
+                                        <AlertTriangle className="w-3 h-3" /> Sin GPS
+                                      </span>
+                                    )}
+                                  </div>
+                                  {notifiedStaff.length > 0 && (
+                                    <p className="text-[10px] text-slate-400 font-bold mt-2">
+                                      <Bell className="w-3 h-3 inline -mt-0.5 mr-1" />
+                                      Avisado: {notifiedStaff.map(s => `${s.first_name} ${s.last_name}`).join(', ')}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Final Action CTA */}
