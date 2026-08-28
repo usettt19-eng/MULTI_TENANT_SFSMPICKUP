@@ -2,9 +2,10 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-26 (formularios tipo Aviso, confirmación de llegada sin GPS, visitantes
-con identificación/empresa, quién fue avisado de cada llegada, pruebas beta de
-Android/iOS con padres reales).
+2026-08-28 (idioma de la app de padres configurable por el admin, panel de
+Estadísticas por colegio, fix del filtro de puerta en Monitor Externo,
+agrupación por grado/sección y buscadores inteligentes en Alumnos y Staff,
+fotos de alumnos importadas desde Google Drive para TCS Albrook secundaria).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -60,6 +61,9 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - Centro de mensajes / notificaciones, incluye **avisos del colegio** (ver
   "Formularios/Avisos" más abajo) con sonido en tiempo real si tiene la app
   abierta.
+- **Idioma de la app fijado por el colegio**: el admin elige español o inglés
+  para todo su colegio desde Ajustes; los padres ven la app en ese idioma sin
+  poder cambiarlo ellos mismos (no hay selector manual en la app de padres).
 - Registro de vehículo (placa + descripción) en el alta.
 - App Android nativa (Capacitor) distribuida por link de descarga en el correo
   de invitación, servida desde un bucket público de Supabase Storage; además
@@ -70,9 +74,14 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 ### Para personal / administración del colegio
 - Dashboard operativo (cola en vivo, sincronización en tiempo real).
 - Gestión de alumnos, padres/tutores (alta individual y **carga masiva por
-  CSV**, con auto-vinculación padre↔alumno por nombre).
+  CSV**, con auto-vinculación padre↔alumno por nombre). El listado de alumnos
+  se agrupa por grado y, dentro de cada grado, por sección (orden alfabético),
+  con selector rápido de grado (pills con conteo) y buscador por
+  nombre/grado/sección.
 - Gestión de personal (alta individual y **carga masiva por CSV**, con permisos
-  por módulo).
+  por módulo), con **buscador inteligente**: filtra por nombre, correo o el
+  nombre del módulo al que tienen acceso (ej. escribir "salidas" encuentra a
+  quien tiene el permiso de Seguridad/Salidas).
 - Estructura del colegio: puertas de salida, grados (crear, **editar nombre y
   orden después de creados**), secciones por grado (persistidas, se pueden
   agregar y quitar desde Horarios de Salida).
@@ -96,7 +105,17 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   escaneo QR); la tarjeta de cada llegada muestra quién del personal fue
   avisado (nombre de cada profesor/recepción notificado), y "Atender ahora"
   para verificar a alguien fuera del orden de llegada sin perder la cola real
-  de los demás.
+  de los demás. El filtro "Puerta a monitorear" aplica también a la lista "En
+  cola" del panel lateral y a su contador (antes solo filtraba la tarjeta
+  principal, ver §3).
+- **Panel de Estadísticas** por colegio (solo admin): tiempo promedio de
+  recogida, % de confirmación automática (GPS) vs. manual, puerta más usada,
+  recogidas por hora del día y por día de la semana, reemplazos
+  solicitados/aprobados/rechazados, avisos y autorizaciones enviados/
+  respondidos, uso de Pool Day, visitantes registrados y tamaño de la
+  comunidad (alumnos/padres). Selector de periodo: Hoy, 7, 30 o 90 días. Todo
+  filtrado por `tenant_id` como el resto del panel, sin exponer datos entre
+  colegios.
 - **Modo super_admin → "Entrar como Admin"**: el super_admin puede impersonar a
   un colegio específico para configurarlo de punta a punta (uso pensado para
   onboarding de colegios nuevos), con aislamiento de datos verificado entre
@@ -495,6 +514,79 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   empresa de origen (`daily_visitors.id_number`, `daily_visitors.company`),
   visibles en la bitácora y en el PDF exportado.
 
+### Idioma de la app de padres configurable por colegio (2026-08-28)
+- Nueva columna `tenants.default_language` (`'es'`\|`'en'`, default `'es'`),
+  editable por el admin desde Ajustes → Perfil Institucional (toggle
+  Español/English).
+- `ParentDashboard.tsx` (única pantalla que no pasaba por el sistema de
+  `t()`/`useLanguage`, ~1850 líneas casi todas en español fijo) se conectó por
+  completo: al cargar el perfil, un `useEffect` fuerza `setLanguage(...)` al
+  idioma configurado del colegio — los padres no tienen selector manual, ven
+  el idioma que fijó el colegio. Se agregaron 132 claves nuevas `parent.*` a
+  `src/i18n/translations.ts` (inglés y español) cubriendo cabecera, ubicación,
+  puertas, avisos/autorizaciones, reemplazo, delivery, Pool Day, centro de
+  mensajes y los estados de recogida.
+
+### Panel de Estadísticas (2026-08-27/28)
+- Vista nueva `Statistics.tsx`, solo para admin (no se puede otorgar como
+  permiso de staff — el módulo ni siquiera existe en la lista de permisos de
+  `StaffManagement.tsx`), con las métricas descritas en §2. Gráficos de
+  barras simples con CSS, sin librería nueva.
+- **Bug real encontrado tras el primer despliegue**: el `SELECT` a
+  `pickup_events` pedía la columna `released_at`, que nunca existió en la
+  tabla (la columna real es `verified_at`, que además no la usa/escribe
+  ningún flujo todavía). Supabase rechazaba el query completo con 400, y como
+  el código hacía `data || []` sin revisar `error`, el panel mostraba
+  "Recogidas completadas: 0" y los gráficos "Sin datos" en silencio pese a
+  haber cientos de recogidas reales en el periodo. Corregido: se quitó
+  `released_at` del `SELECT` (y el cómputo de "tiempo de respuesta" que
+  dependía de esa columna inexistente, nunca mostrado en pantalla), y se
+  agregaron `console.error` en cada query del panel para que un fallo similar
+  no vuelva a pasar inadvertido.
+- De paso, "Puerta más usada" mostraba el UUID crudo de `door_id` en vez del
+  nombre — ahora se resuelve contra `exit_doors`.
+- Selector de periodo ganó la opción **"Hoy"** (desde la medianoche), además
+  de 7/30/90 días.
+
+### Fix: filtro de puerta en Monitor Externo no aplicaba a la cola (2026-08-27)
+- La tarjeta principal de verificación sí filtraba por la puerta seleccionada
+  (`filteredPickups[0]`), pero la lista "En cola" del panel derecho, su
+  contador ("N total") y la numeración de posición se calculaban de
+  `pickups` sin filtrar — con una puerta específica seleccionada, la tarjeta
+  filtraba bien pero la cola seguía mostrando alumnos de todas las puertas.
+  Los tres ahora usan `filteredPickups` consistentemente.
+
+### Alumnos: agrupación y buscadores (2026-08-28)
+- `Students.tsx` (Student Registry): listado agrupado por grado (pills de
+  filtro rápido con conteo, en el orden de `school_grades.level_order`), y
+  dentro de cada grado, sub-agrupado por sección en orden alfabético (el
+  sub-encabezado solo aparece si el grado tiene más de una sección). La
+  búsqueda por nombre/grado/sección ya existente se combina con el filtro de
+  grado.
+- `StaffManagement.tsx`: buscador inteligente que además de nombre/correo
+  encuentra por el nombre del módulo al que tienen acceso.
+
+### Fotos de alumnos de secundaria — TCS Albrook (2026-08-28)
+- El colegio compartió por Google Drive una carpeta de fotos ("High School
+  Pictures", subcarpetas "Year 7".."Year 11") con el nombre y apellido del
+  alumno como nombre de archivo. **Hallazgo**: las subcarpetas de Drive
+  correspondían al grado de un año escolar anterior, no al grado actual en
+  el sistema (ej. la carpeta "Year 7" tenía mezclados alumnos que hoy están
+  en grados 08, 09, 12 y 13) — el cruce se hizo por nombre contra **todos**
+  los alumnos de secundaria (grados 07-13), ignorando de qué subcarpeta venía
+  cada foto.
+- De 105 fotos, 77 hicieron match exacto (o casi exacto, 4 con variación de
+  ortografía confirmadas a mano) con un alumno real; 28 no correspondían a
+  ningún alumno actualmente matriculado (probablemente egresados/retirados,
+  la carpeta es de un año anterior) y 42 alumnos de secundaria (31 de ellos
+  del grado 07 completo, matriculados después de esa carpeta) siguen sin
+  foto.
+- Las fotos se subieron directo a Supabase Storage (bucket `avatars`, carpeta
+  `<tenant_id>/`) manualmente por el colegio vía el Dashboard de Supabase —
+  más rápido que descargar cada archivo de Drive por API uno por uno — y la
+  vinculación `students.photo_url` se hizo con un `UPDATE` masivo por SQL
+  cruzando el nombre de archivo contra el `student_id` ya identificado.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
@@ -524,7 +616,9 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - Páginas de invitación a la prueba beta (`public/prueba-android.html`,
   `public/prueba-ios.html`) con los enlaces de unirse a TestFlight / Google
   Play, para compartir con los padres seleccionados (ver "Apps móviles" más
-  abajo).
+  abajo). `prueba-ios.html` ganó (2026-08-27) una aclaración sobre el código
+  de canje de TestFlight (aparece si el enlace se abre desde Gmail/Mail en
+  vez de Safari) con el código correcto visible en la página.
 
 ### Infraestructura de despliegue (self-hosted)
 - Se pasó de Vercel a **Docker Compose auto-alojado** en servidor propio
@@ -611,7 +705,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 
 | Tabla | Columnas | Notas |
 |---|---|---|
-| `tenants` | `id, name, domain, status, subscription_plan, created_at, updated_at` | La tabla raíz del multi-tenant |
+| `tenants` | `id, name, domain, status, subscription_plan, created_at, updated_at, default_language` | La tabla raíz del multi-tenant; `default_language` (`'es'`\|`'en'`, agregada 2026-08-28) fija el idioma de la app de padres para todo el colegio |
 | `profiles` | `id, role(user_role), first_name, last_name, phone, created_at, updated_at, pin_code, photo_url, email, additional_tutor_name, additional_tutor_phone, tenant_id` | `PRIMARY KEY (id)` — un padre con hijos en 2 colegios comparte una sola fila; `additional_tutor_name` guarda JSON con `{is_staff, permissions}` para el personal que no es `admin`/`teacher`/`guard` |
 | `staff_school_access` | `staff_id, tenant_id, role, permissions jsonb, granted_by, created_at` | `PRIMARY KEY (staff_id, tenant_id)` — acceso de un staff a un colegio ADEMÁS del suyo (`profiles.tenant_id`), sin duplicar su perfil |
 | `students` | `id, first_name, last_name, grade, section, created_at, photo_url, tenant_id` | |
@@ -622,7 +716,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `school_settings` | `id, school_name, address, latitude, longitude, pickup_radius_meters, updated_at, tenant_id, logo_url, primary_dismissal_mode` | Una fila por colegio; `primary_dismissal_mode` = `teacher`\|`staff` |
 | `dismissal_assignments` | `id, tenant_id, grade_id, section, schedule_type, day_of_week, staff_id, created_at, updated_at` | Horario regular/post-school recurrente |
 | `dismissal_overrides` | `id, tenant_id, grade_id, section, schedule_type, override_date, staff_id, created_by, created_at` | Excepción de un solo día |
-| `pickup_events` | `id, parent_id, student_id, status(pickup_status), announced_at, completed_at, verified_at, tenant_id` | El evento central de recogida |
+| `pickup_events` | `id, parent_id, student_id, status(pickup_status), announced_at, completed_at, verified_at, tenant_id, door_id, location_verified` | El evento central de recogida. `verified_at` existe pero ningún flujo la escribe todavía (no usar en queries nuevos); `location_verified = false` marca confirmación manual sin GPS |
 | `carpool_authorizations` | `id, tenant_id, student_id, authorizing_parent_id, driver_parent_id, day_of_week, created_at, updated_at` | Pool Day recurrente |
 | `carpool_overrides` | `id, tenant_id, student_id, authorizing_parent_id, driver_parent_id, override_date, created_by, created_at` | Pool Day de un solo día |
 | `replacement_requests` | `id, parent_id, replacement_name, replacement_phone, status, created_at, updated_at, tenant_id` | |
@@ -632,12 +726,12 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `medication_schedule` | `id, student_id, medication_name, dosage, scheduled_time, status, administered_by, administered_at, notes, created_at, frequency, is_critical, critical_reason, tenant_id` | Trigger `create_critical_alert_for_med_schedule` genera alerta automática |
 | `student_incidents` | `id, student_id, type, description, reported_by, created_at, tenant_id` | Sin columna `evolution` — se agrega al `description` con timestamp desde el backend |
 | `wellness_logs` | `id, student_id, type, value, logged_by, created_at, tenant_id` | |
-| `daily_visitors` | `id, visitor_name, visiting_whom, reason, check_in_time, tenant_id` | |
+| `daily_visitors` | `id, visitor_name, id_number, company, visiting_whom, reason, check_in_time, tenant_id` | `id_number`/`company` agregadas 2026-08-26 |
 | `camera_detections` | `id, door_id, image_url, detected_at, tenant_id` | El `INSERT` anónimo se cerró; falta endpoint propio para el webhook de cámaras (pendiente, ver `DISENO-Y-AVANCE.md` §6) |
-| `forms` | `id, title, description, is_active, created_at, updated_at, target_grades text[], tenant_id` | |
+| `forms` | `id, title, description, is_active, created_at, updated_at, target_grades text[], target_sections text[], form_type, tenant_id` | `form_type` (`'authorization'`\|`'announcement'`) y `target_sections` agregadas 2026-08-26 |
 | `form_questions` | `id, form_id, question_text, question_type, order, created_at, tenant_id` | |
 | `form_responses` | `id, form_id, parent_id, student_id, answers jsonb, created_at, tenant_id` | |
-| `notifications` | `id, user_id, title, message, type, is_read, created_at, tenant_id` | |
+| `notifications` | `id, user_id, title, message, type, is_read, created_at, tenant_id, pickup_event_id` | `pickup_event_id` (agregada 2026-08-26, `ON DELETE SET NULL`) liga el aviso al personal con el pickup puntual que lo generó — usado por "quién fue avisado" en el Monitor Externo |
 | `audit_logs` | `id, event_type, description, actor_name, metadata jsonb, created_at, tenant_id` | Bitácora de todo evento sensible |
 | `compliance_status` | `id, percentage, last_audit_at, warning_count, critical_violations, tenant_id` | |
 | `compliance_action_items` | `id, title, description, priority, status, created_at, tenant_id` | |
@@ -715,3 +809,15 @@ relevantes de cara a producción:
   2026-08-20 (nombre de hijo con orden invertido en el CSV, no encontró match
   exacto en el roster) — pendiente de vincular a mano desde el Directorio de
   Padres.
+- **Google Play rechazó la ficha por "afirmaciones engañosas"** (política de
+  comportamiento engañoso, fecha de aplicación 2026-08-27): al menos 2 de las
+  capturas de pantalla subidas a la ficha de Android tienen un badge morado
+  "Apple Review" superpuesto — son capturas hechas para la revisión de
+  App Store, subidas por error también a Google Play. Pendiente: reemplazar
+  esas capturas por capturas limpias reales de Android (sin overlays de
+  ningún tipo) en las Fichas de Play Store (la predeterminada y cualquier
+  ficha personalizada/traducida), y volver a enviar a revisión — Google
+  recomienda probar primero en un canal de pruebas antes de reenviar.
+- 42 alumnos de secundaria de TCS Albrook sin foto (31 de ellos todo el grado
+  07, matriculados después de la carpeta de fotos que compartió el colegio) —
+  pendiente de que el colegio tome/envíe fotos nuevas para completarlos.
