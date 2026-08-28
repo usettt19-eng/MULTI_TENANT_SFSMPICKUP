@@ -1601,7 +1601,6 @@ export function ParentDashboard() {
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
                         onChange={handleReplacementPhotoChange}
                         className="hidden"
                       />
