@@ -84,6 +84,10 @@ export function ParentDashboard() {
   const [isSearchingDrivers, setIsSearchingDrivers] = useState(false);
   const [classmateParents, setClassmateParents] = useState<any[]>([]);
   const [isLoadingClassmates, setIsLoadingClassmates] = useState(false);
+  // Antes estos fallos solo iban a console.error — invisibles en un
+  // celular. Sin esto, "no aparece nada" no dice si fue un 401, un fallo de
+  // red, o de verdad no hay resultados.
+  const [carpoolLookupError, setCarpoolLookupError] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
   const [isSubmittingCarpool, setIsSubmittingCarpool] = useState(false);
   const [carpoolData, setCarpoolData] = useState<{
@@ -250,12 +254,14 @@ export function ParentDashboard() {
       return;
     }
     setIsSearchingDrivers(true);
+    setCarpoolLookupError(null);
     const timeoutId = window.setTimeout(async () => {
       try {
         const res = await apiJson(`/api/parents/search?q=${encodeURIComponent(driverQuery.trim())}`);
         setDriverResults(res.data || []);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error al buscar padres:', e);
+        setCarpoolLookupError(e?.message || String(e));
       } finally {
         setIsSearchingDrivers(false);
       }
@@ -272,9 +278,14 @@ export function ParentDashboard() {
       return;
     }
     setIsLoadingClassmates(true);
+    setCarpoolLookupError(null);
     apiJson(`/api/carpool/classmates-parents?student_id=${encodeURIComponent(carpoolStudentId)}`)
       .then(res => setClassmateParents(res.data || []))
-      .catch(e => { console.error('Error al cargar padres del salón:', e); setClassmateParents([]); })
+      .catch(e => {
+        console.error('Error al cargar padres del salón:', e);
+        setClassmateParents([]);
+        setCarpoolLookupError(e?.message || String(e));
+      })
       .finally(() => setIsLoadingClassmates(false));
   }, [carpoolStudentId, showCarpoolModal]);
 
@@ -286,6 +297,7 @@ export function ParentDashboard() {
     setDriverQuery('');
     setDriverResults([]);
     setSelectedDriver(null);
+    setCarpoolLookupError(null);
   };
 
   const toggleCarpoolDay = (day: number) => {
@@ -1750,6 +1762,11 @@ export function ParentDashboard() {
 
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.carpool.whoDrivesLabel')}</label>
+                  {carpoolLookupError && (
+                    <p className="text-[10px] font-bold text-rose-500 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 mb-2">
+                      {carpoolLookupError}
+                    </p>
+                  )}
                   {selectedDriver ? (
                     <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-4">
                       <img src={selectedDriver.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-9 h-9 rounded-xl object-cover" />
