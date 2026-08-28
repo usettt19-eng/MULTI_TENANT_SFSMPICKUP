@@ -14,9 +14,24 @@ interface AudioTask {
 let audioQueue: AudioTask[] = [];
 let isPlaying = false;
 
+function notifyAudioState(enabled: boolean) {
+  if (isAudioEnabled === enabled) return;
+  isAudioEnabled = enabled;
+  audioEnableListeners.forEach(l => l(enabled));
+}
+
 export const getAudioContext = () => {
   if (!sharedAudioContext) {
     sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // El navegador puede suspender el AudioContext solo (ahorro de batería,
+    // pestaña en segundo plano, la tablet del kiosco apagó pantalla) sin que
+    // la app haga nada. Sin este listener, isAudioEnabled se quedaba en
+    // true para siempre aunque el audio real ya estuviera bloqueado de
+    // nuevo — la barra para reactivarlo nunca volvía a aparecer y no sonaba
+    // nada, sin ningún aviso de que había que tocarla otra vez.
+    sharedAudioContext.addEventListener('statechange', () => {
+      notifyAudioState(sharedAudioContext!.state === 'running');
+    });
   }
   return sharedAudioContext;
 };
@@ -36,8 +51,11 @@ export const enableGlobalAudio = async () => {
   if (ctx.state === 'suspended') {
     await ctx.resume();
   }
-  isAudioEnabled = true;
-  audioEnableListeners.forEach(l => l(true));
+  // El listener de 'statechange' ya sincroniza isAudioEnabled con el estado
+  // real, pero se confirma aquí también por si el navegador no dispara el
+  // evento de inmediato — así el botón no queda mostrando "activar" un
+  // instante de más después de que sí funcionó.
+  notifyAudioState(ctx.state === 'running');
 
   // Play a confirmation beep
   const osc = ctx.createOscillator();
