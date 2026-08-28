@@ -6,6 +6,13 @@ let audioEnableListeners: ((enabled: boolean) => void)[] = [];
 let lastPlayedText = "";
 let lastPlayedTime = 0;
 let quotaExceededUntil = 0;
+// Una vez que un clic real del usuario desbloqueó el audio, el navegador
+// deja reanudarlo sin pedir otro gesto — así que si se suspende solo
+// después de eso, se intenta reactivar automáticamente en vez de obligar
+// al kiosco a tocar la barra de nuevo cada vez.
+let hasBeenUnlockedByUser = false;
+let keepAliveOscillator: OscillatorNode | null = null;
+let keepAliveGain: GainNode | null = null;
 
 // Audio Queue
 interface AudioTask {
@@ -18,6 +25,33 @@ function notifyAudioState(enabled: boolean) {
   if (isAudioEnabled === enabled) return;
   isAudioEnabled = enabled;
   audioEnableListeners.forEach(l => l(enabled));
+  if (enabled) startKeepAlive(); else stopKeepAlive();
+}
+
+// Chrome (y derivados) suspenden un AudioContext que no tiene ningún nodo
+// de audio activo conectado por un rato, para ahorrar batería — no es solo
+// la pestaña en segundo plano. Un tono continuo casi inaudible (ganancia
+// mínima, fuera del rango audible normal) mantiene al menos un nodo activo
+// y reduce que esto pase entre un aviso de voz y el siguiente.
+function startKeepAlive() {
+  if (keepAliveOscillator || !sharedAudioContext) return;
+  try {
+    keepAliveGain = sharedAudioContext.createGain();
+    keepAliveGain.gain.value = 0.0001;
+    keepAliveOscillator = sharedAudioContext.createOscillator();
+    keepAliveOscillator.frequency.value = 20;
+    keepAliveOscillator.connect(keepAliveGain);
+    keepAliveGain.connect(sharedAudioContext.destination);
+    keepAliveOscillator.start();
+  } catch (e) {
+    console.error('No se pudo iniciar el tono de mantenimiento:', e);
+  }
+}
+
+function stopKeepAlive() {
+  try { keepAliveOscillator?.stop(); } catch {}
+  keepAliveOscillator = null;
+  keepAliveGain = null;
 }
 
 export const getAudioContext = () => {
@@ -30,11 +64,30 @@ export const getAudioContext = () => {
     // nuevo — la barra para reactivarlo nunca volvía a aparecer y no sonaba
     // nada, sin ningún aviso de que había que tocarla otra vez.
     sharedAudioContext.addEventListener('statechange', () => {
-      notifyAudioState(sharedAudioContext!.state === 'running');
+      const ctx = sharedAudioContext!;
+      if (ctx.state === 'suspended' && hasBeenUnlockedByUser) {
+        // Ya se activó una vez con un gesto real — el navegador deja
+        // reanudarlo sin pedir otro clic. Si de verdad hace falta un gesto
+        // nuevo, esto simplemente no hace nada y notifyAudioState(false)
+        // de abajo vuelve a mostrar la barra.
+        ctx.resume().catch(() => {});
+      }
+      notifyAudioState(ctx.state === 'running');
     });
   }
   return sharedAudioContext;
 };
+
+// Refuerzo extra: cuando el kiosco vuelve de estar en segundo plano (otra
+// app al frente, pantalla que se apagó y se prendió), a veces 'statechange'
+// tarda o no llega a tiempo — se intenta reanudar también aquí.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && hasBeenUnlockedByUser && sharedAudioContext?.state === 'suspended') {
+      sharedAudioContext.resume().catch(() => {});
+    }
+  });
+}
 
 export const getIsAudioEnabled = () => isAudioEnabled;
 
@@ -51,6 +104,7 @@ export const enableGlobalAudio = async () => {
   if (ctx.state === 'suspended') {
     await ctx.resume();
   }
+  hasBeenUnlockedByUser = true;
   // El listener de 'statechange' ya sincroniza isAudioEnabled con el estado
   // real, pero se confirma aquí también por si el navegador no dispara el
   // evento de inmediato — así el botón no queda mostrando "activar" un
