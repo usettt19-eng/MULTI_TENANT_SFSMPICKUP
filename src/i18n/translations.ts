@@ -195,6 +195,7 @@ export const translations = {
 
     // External Monitor
     'monitor.audioActivationRequired': 'The voice announcement system requires manual activation',
+    'monitor.audioActivationModalDesc': 'This monitor announces arrivals by voice. Browsers require a tap to allow sound.',
     'monitor.activateSpeakers': 'ACTIVATE SPEAKERS',
     'monitor.arrivalNotice': 'Arrival Notice',
     'monitor.doorToMonitor': 'Door to Monitor',
@@ -640,6 +641,7 @@ export const translations = {
 
     // External Monitor
     'monitor.audioActivationRequired': 'El sistema de anuncios por voz requiere activación manual',
+    'monitor.audioActivationModalDesc': 'Este monitor anuncia las llegadas por voz. El navegador exige un toque para permitir el sonido.',
     'monitor.activateSpeakers': 'ACTIVAR ALTAVOCES',
     'monitor.arrivalNotice': 'Aviso de Llegada',
     'monitor.doorToMonitor': 'Puerta a Monitorear',

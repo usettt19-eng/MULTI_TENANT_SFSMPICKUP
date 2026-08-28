@@ -418,19 +418,27 @@ export function VerificationDisplay() {
       {/* Usamos el TopNav estándar en lugar del header embebido para mantener consistencia */}
       <TopNav title="SafePickup" subtitle={t('monitor.pageSubtitle')} />
 
-      {/* Audio Activation Banner */}
+      {/* Audio Activation Prompt — Monitor Externo depende de los anuncios
+          por voz, así que en vez de una barra discreta que se puede pasar
+          por alto, se pide de entrada con un modal que bloquea la pantalla
+          hasta que se active (o se descarte a propósito). */}
       {!audioEnabled && (
-        <div className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between animate-in slide-in-from-top duration-500">
-          <div className="flex items-center gap-3">
-            <Bell className="w-5 h-5 animate-pulse" />
-            <p className="text-xs font-bold uppercase tracking-widest">{t('monitor.audioActivationRequired')}</p>
+        <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full text-center space-y-5">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto">
+              <Bell className="w-8 h-8 text-indigo-600 animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-black text-slate-900">{t('monitor.audioActivationRequired')}</h2>
+              <p className="text-sm text-slate-500 font-medium">{t('monitor.audioActivationModalDesc')}</p>
+            </div>
+            <button
+              onClick={enableAudio}
+              className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-200"
+            >
+              {t('monitor.activateSpeakers')}
+            </button>
           </div>
-          <button
-            onClick={enableAudio}
-            className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg"
-          >
-            {t('monitor.activateSpeakers')}
-          </button>
         </div>
       )}
 
