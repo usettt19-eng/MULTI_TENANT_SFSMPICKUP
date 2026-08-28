@@ -243,13 +243,14 @@ export function VerificationDisplay() {
                 }
               }
 
+              const gradeName = pickup.students?.grade || '—';
               const sectionName = pickup.students?.section || '—';
               console.log(`VerificationDisplay Auto-announcing: ${fullName} (${relLabel})`);
               // Pedido explícito del colegio: el anuncio por voz (para las
-              // bocinas del salón, no para el padre) dice el alumno y su
-              // sección, no quién lo retira — eso ya se ve en la tarjeta y
-              // en el toast, que sí siguen mostrando quién llegó.
-              playGlobalVoiceMessage(`Salida de ${fullName}, de la sección ${sectionName}, solicitada.`);
+              // bocinas del salón, no para el padre) dice el alumno, su
+              // grado y su sección, no quién lo retira — eso ya se ve en la
+              // tarjeta y en el toast, que sí siguen mostrando quién llegó.
+              playGlobalVoiceMessage(`Salida de ${fullName}, grado ${gradeName}, sección ${sectionName}, solicitada.`);
               setShowArrivalToast(`${relLabel.charAt(0).toUpperCase() + relLabel.slice(1)} de ${fullName}`);
               setTimeout(() => setShowArrivalToast(null), 4000);
             } else {
