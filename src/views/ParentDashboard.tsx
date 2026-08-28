@@ -14,7 +14,7 @@ import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
-  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera
+  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil
 } from 'lucide-react';
 
 export function ParentDashboard() {
@@ -71,6 +71,16 @@ export function ParentDashboard() {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
   const [deliveryLink, setDeliveryLink] = useState('');
+
+  // Vehículo: antes solo lo podía cargar el colegio al dar de alta al padre
+  // (GuardiansRegistry.tsx) — el colegio pidió que el padre también lo
+  // pueda cargar/editar él mismo, y que se vea en la tarjeta de verificación
+  // de la puerta (VerificationDisplay.tsx).
+  const [vehicle, setVehicle] = useState<{ id: string; license_plate: string; description: string | null } | null>(null);
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
+  const [vehiclePlateInput, setVehiclePlateInput] = useState('');
+  const [vehicleDescInput, setVehicleDescInput] = useState('');
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
 
   // "Pool day": otro padre registrado recoge a mi hijo/a ciertos días (fijo
   // cada semana o solo un día puntual), con aviso al encargado y al admin.
@@ -243,6 +253,51 @@ export function ParentDashboard() {
       setCarpoolData(res.data);
     } catch (e) {
       console.error('Error al cargar pool days:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    supabase
+      .from('vehicles')
+      .select('id, license_plate, description')
+      .eq('parent_id', profile.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setVehicle(data);
+          setVehiclePlateInput(data.license_plate || '');
+          setVehicleDescInput(data.description || '');
+        }
+      });
+  }, [profile?.id]);
+
+  const handleSaveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vehiclePlateInput.trim() || !profile?.id || !profile?.tenant_id) return;
+    setIsSavingVehicle(true);
+    try {
+      // Un solo vehículo por padre: se borra el anterior (si había) y se
+      // inserta el nuevo, mismo patrón que ya usa GuardiansRegistry.tsx
+      // desde el lado del colegio.
+      await supabase.from('vehicles').delete().eq('parent_id', profile.id);
+      const { data, error } = await supabase
+        .from('vehicles')
+        .insert({
+          parent_id: profile.id,
+          tenant_id: profile.tenant_id,
+          license_plate: vehiclePlateInput.trim().toUpperCase(),
+          description: vehicleDescInput.trim() || null,
+        })
+        .select('id, license_plate, description')
+        .single();
+      if (error) throw error;
+      setVehicle(data);
+      setIsEditingVehicle(false);
+    } catch (err: any) {
+      alert(t('parent.vehicle.saveErrorPrefix') + (err.message || String(err)));
+    } finally {
+      setIsSavingVehicle(false);
     }
   };
 
@@ -1455,6 +1510,81 @@ export function ParentDashboard() {
             </div>
           </section>
         )}
+
+        {/* Vehicle Section — visible en la tarjeta de verificación de la puerta */}
+        <section className="space-y-4">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('parent.vehicle.sectionTitle')}</h3>
+          <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
+            {isEditingVehicle ? (
+              <form onSubmit={handleSaveVehicle} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.vehicle.plateLabel')}</label>
+                  <input
+                    required
+                    value={vehiclePlateInput}
+                    onChange={e => setVehiclePlateInput(e.target.value)}
+                    placeholder={t('parent.vehicle.platePlaceholder')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-slate-700 uppercase outline-none focus:border-primary focus:bg-white transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.vehicle.descLabel')}</label>
+                  <input
+                    value={vehicleDescInput}
+                    onChange={e => setVehicleDescInput(e.target.value)}
+                    placeholder={t('parent.vehicle.descPlaceholder')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium text-slate-600 outline-none focus:border-primary focus:bg-white transition-all"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingVehicle(false);
+                      setVehiclePlateInput(vehicle?.license_plate || '');
+                      setVehicleDescInput(vehicle?.description || '');
+                    }}
+                    className="flex-1 bg-slate-100 text-slate-500 font-black py-4 rounded-2xl text-xs uppercase tracking-widest"
+                  >
+                    {t('parent.vehicle.cancelBtn')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingVehicle}
+                    className="flex-1 bg-primary text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSavingVehicle ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.vehicle.saveBtn')}
+                  </button>
+                </div>
+              </form>
+            ) : vehicle ? (
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center shrink-0">
+                  <Car className="w-6 h-6 text-slate-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-black text-slate-800 text-lg">{vehicle.license_plate}</h4>
+                  {vehicle.description && <p className="text-xs text-slate-500 font-medium truncate">{vehicle.description}</p>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingVehicle(true)}
+                  className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm shrink-0"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsEditingVehicle(true)}
+                className="w-full flex items-center justify-center gap-3 py-6 text-slate-400 font-black text-xs uppercase tracking-widest border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:text-primary transition-all"
+              >
+                <Car className="w-5 h-5" /> {t('parent.vehicle.addBtn')}
+              </button>
+            )}
+          </div>
+        </section>
 
         <div className="space-y-4">
            {pickupStudents.map(s => (

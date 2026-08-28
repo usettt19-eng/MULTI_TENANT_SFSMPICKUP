@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
@@ -185,7 +185,7 @@ export function VerificationDisplay() {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('pickup_events')
-      .select('*, profiles:parent_id(*), students:student_id(*)')
+      .select('*, profiles:parent_id(*, vehicles(*)), students:student_id(*)')
       .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced', 'in_queue'])
       .order('announced_at', { ascending: true })
@@ -243,8 +243,13 @@ export function VerificationDisplay() {
                 }
               }
 
+              const sectionName = pickup.students?.section || '—';
               console.log(`VerificationDisplay Auto-announcing: ${fullName} (${relLabel})`);
-              playGlobalVoiceMessage(`Atención, ${relLabel} de ${fullName} ha llegado.`);
+              // Pedido explícito del colegio: el anuncio por voz (para las
+              // bocinas del salón, no para el padre) dice el alumno y su
+              // sección, no quién lo retira — eso ya se ve en la tarjeta y
+              // en el toast, que sí siguen mostrando quién llegó.
+              playGlobalVoiceMessage(`Salida de ${fullName}, de la sección ${sectionName}, solicitada.`);
               setShowArrivalToast(`${relLabel.charAt(0).toUpperCase() + relLabel.slice(1)} de ${fullName}`);
               setTimeout(() => setShowArrivalToast(null), 4000);
             } else {
@@ -687,6 +692,15 @@ export function VerificationDisplay() {
                                   )}
                                 </div>
                               </div>
+                              {!isReplacement && currentPickup.profiles?.vehicles?.[0] && (
+                                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 text-xs font-bold text-slate-600">
+                                  <Car className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="font-black text-slate-800">{currentPickup.profiles.vehicles[0].license_plate}</span>
+                                  {currentPickup.profiles.vehicles[0].description && (
+                                    <span className="text-slate-400 font-medium truncate">— {currentPickup.profiles.vehicles[0].description}</span>
+                                  )}
+                                </div>
+                              )}
                             </>
                           );
                         })()}
