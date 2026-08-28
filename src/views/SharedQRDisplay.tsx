@@ -94,11 +94,10 @@ export function SharedQRDisplay() {
                   type: qrData.type,
                   parent_id: qrData.parent_id,
                   token: qrData.token,
-                  replacement_name: qrData.replacement_name,
-                  photo_url: qrData.photo_url ?? null
+                  replacement_name: qrData.replacement_name
                 })}
                 size={200}
-                level="H"
+                level="M"
               />
             </div>
 

@@ -1415,8 +1415,7 @@ export function ParentDashboard() {
                         type: 'replacement_pickup',
                         parent_id: profile.id,
                         token: rep.token,
-                        replacement_name: rep.name,
-                        photo_url: rep.photo_url ?? null
+                        replacement_name: rep.name
                       })}
                       size={64}
                     />
