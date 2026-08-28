@@ -8,37 +8,7 @@ import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
-
-// SmartCheckIn.tsx guarda esto en pickup_events.notes cuando el que llega es
-// un reemplazo autorizado (no el papá/mamá/tutor) verificado por QR — así
-// esta pantalla puede mostrar/anunciar el nombre correcto en vez de asumir
-// que quien llegó fue el titular de la cuenta.
-const REPLACEMENT_NOTE_PREFIX = '[REEMPLAZO] ';
-function getReplacementNameFromNotes(notes: string | null | undefined): string | null {
-  if (!notes || !notes.startsWith(REPLACEMENT_NOTE_PREFIX)) return null;
-  return notes.slice(REPLACEMENT_NOTE_PREFIX.length);
-}
-
-// Sin esto, la tarjeta de verificación no decía cuándo se anunció la
-// llegada — el personal no podía distinguir un aviso reciente de uno que
-// lleva rato esperando en la cola. Si no es de hoy, se muestra también la
-// fecha; si es de hoy pero pasó el umbral, se marca en rojo como atrasado.
-const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutos
-function formatAnnouncedAt(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  const time = d.toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return time;
-  return `${d.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit' })} ${time}`;
-}
-function isStaleAnnouncement(iso: string | null | undefined): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return false;
-  return Date.now() - d.getTime() > STALE_THRESHOLD_MS;
-}
+import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();

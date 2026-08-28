@@ -18,6 +18,7 @@ import { AuditLogs } from './views/AuditLogs';
 import { StaffManagement } from './views/StaffManagement';
 import { RequestsCenter } from './views/RequestsCenter';
 import { Statistics } from './views/Statistics';
+import { TransitMonitor } from './views/TransitMonitor';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LayoutProvider } from './contexts/LayoutContext';
 import { useAuth } from './contexts/AuthContext';
@@ -147,8 +148,12 @@ export default function App() {
   }
 
   if (isStaff) {
-    // If current view is not permitted, redirect to the first permitted view or a fallback
-    if (!permissions.includes(currentView) && currentView !== 'settings') {
+    // If current view is not permitted, redirect to the first permitted view or a fallback.
+    // 'transit' es de solo lectura y visible para cualquier staff (ver
+    // Sidebar.tsx alwaysVisibleToStaff) — sin esta excepción, un staff sin
+    // ningún permiso relacionado quedaría rebotado de la pantalla al
+    // navegar ahí, igual que pasaba antes con 'settings'.
+    if (!permissions.includes(currentView) && currentView !== 'settings' && currentView !== 'transit') {
       if (permissions.length > 0) {
         setCurrentView(permissions[0]);
       } else {
@@ -202,6 +207,8 @@ export default function App() {
         return <StaffManagement />;
       case 'statistics':
         return <Statistics />;
+      case 'transit':
+        return <TransitMonitor />;
       default:
         return <OperationsDashboard setCurrentView={setCurrentView} />;
       }

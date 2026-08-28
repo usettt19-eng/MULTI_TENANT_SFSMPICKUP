@@ -1,0 +1,215 @@
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { TopNav } from '../components/TopNav';
+import { useLanguage } from '../contexts/LanguageContext';
+import { Footprints, DoorOpen, Car, User, ShieldCheck } from 'lucide-react';
+import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
+
+/**
+ * Pantalla de solo lectura: alumnos ya aprobados por el profesor (status
+ * 'released') que todavía no fueron confirmados por el padre en el
+ * vehículo (status 'completed', vía el botón del padre en su app). No
+ * tiene ninguna acción — es guía visual para el personal en el trayecto
+ * entre el salón y la puerta.
+ */
+export function TransitMonitor() {
+  const { t } = useLanguage();
+  const { profile } = useAuth() as any;
+  const [pickups, setPickups] = useState<any[]>([]);
+  const [doors, setDoors] = useState<any[]>([]);
+  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!profile?.tenant_id) return;
+    fetchDoors();
+    fetchTransit();
+
+    const channel = supabase
+      .channel(`transit_monitor_${Math.random()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, () => {
+        fetchTransit();
+      })
+      .subscribe();
+
+    const pollInterval = window.setInterval(fetchTransit, 10000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [profile?.tenant_id]);
+
+  const fetchDoors = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase.from('exit_doors').select('*').eq('tenant_id', profile.tenant_id).order('name');
+    if (data) setDoors(data);
+  };
+
+  const fetchTransit = async () => {
+    if (!profile?.tenant_id) return;
+    const { data, error } = await supabase
+      .from('pickup_events')
+      .select('*, students:student_id(*), profiles:parent_id(*, vehicles(*))')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('status', 'released')
+      .order('announced_at', { ascending: true });
+
+    if (error) console.error('Error cargando en tránsito:', error);
+    if (data) setPickups(data);
+    setLoading(false);
+  };
+
+  // Prioridad por orden de espera: sin released_at en la base, announced_at
+  // es la mejor señal disponible de cuánto lleva esperando cada familia.
+  // Los primeros 5 en rojo (más urgente), los siguientes 5 en naranja, el
+  // resto en verde — es una banda por posición, no por tiempo transcurrido.
+  const priorityClass = (index: number) => {
+    if (index < 5) return { badge: 'bg-rose-500', card: 'border-rose-200 bg-rose-50/40' };
+    if (index < 10) return { badge: 'bg-amber-500', card: 'border-amber-200 bg-amber-50/40' };
+    return { badge: 'bg-emerald-500', card: 'border-emerald-200 bg-emerald-50/40' };
+  };
+
+  const doorName = (doorId: string | null) => doors.find(d => d.id === doorId)?.name || t('transit.noDoor');
+
+  const filtered = selectedDoorId ? pickups.filter(p => p.door_id === selectedDoorId) : pickups;
+
+  const groups: { doorId: string; doorLabel: string; items: any[] }[] = selectedDoorId
+    ? [{ doorId: selectedDoorId, doorLabel: doorName(selectedDoorId), items: filtered }]
+    : (() => {
+        const byDoor = new Map<string, any[]>();
+        filtered.forEach(p => {
+          const key = p.door_id || '__none__';
+          if (!byDoor.has(key)) byDoor.set(key, []);
+          byDoor.get(key)!.push(p);
+        });
+        return Array.from(byDoor.entries()).map(([doorId, items]) => ({
+          doorId,
+          doorLabel: doorId === '__none__' ? t('transit.noDoor') : doorName(doorId),
+          items,
+        }));
+      })();
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+      <TopNav title={t('transit.title')} subtitle={t('transit.subtitle')} />
+
+      <div className="p-6 max-w-6xl mx-auto w-full space-y-6 animate-in slide-in-from-bottom-4">
+        <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              {t('transit.title')} <Footprints className="w-8 h-8 text-indigo-600" />
+            </h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">{t('transit.subtitle')}</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100">
+            <DoorOpen className="w-4 h-4 text-slate-400 shrink-0" />
+            <select
+              value={selectedDoorId}
+              onChange={e => setSelectedDoorId(e.target.value)}
+              className="bg-transparent text-xs font-black uppercase tracking-widest text-slate-600 outline-none"
+            >
+              <option value="">{t('transit.allDoors')}</option>
+              {doors.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        </header>
+
+        {loading ? (
+          <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-[2.5rem] p-16 text-center shadow-sm border border-slate-100">
+            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Footprints className="w-10 h-10 text-slate-300" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800">{t('transit.emptyTitle')}</h3>
+            <p className="text-slate-400 font-medium mt-2">{t('transit.emptySubtitle')}</p>
+          </div>
+        ) : (
+          groups.map(group => (
+            <section key={group.doorId} className="space-y-3">
+              {!selectedDoorId && (
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                  <DoorOpen className="w-3.5 h-3.5" /> {group.doorLabel}
+                  <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full">{group.items.length}</span>
+                </h3>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {group.items.map((pickup: any) => {
+                  const globalIndex = pickups.findIndex(p => p.id === pickup.id);
+                  const priority = priorityClass(globalIndex);
+                  const replacementName = getReplacementNameFromNotes(pickup.notes);
+                  const isReplacement = !!replacementName;
+                  const adultName = isReplacement
+                    ? replacementName
+                    : `${pickup.profiles?.first_name || ''} ${pickup.profiles?.last_name || ''}`.trim();
+                  const vehicle = !isReplacement ? pickup.profiles?.vehicles?.[0] : null;
+
+                  return (
+                    <div key={pickup.id} className={`bg-white rounded-[2rem] p-5 shadow-sm border-2 ${priority.card} relative overflow-hidden`}>
+                      <span className={`absolute top-0 right-0 ${priority.badge} text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-bl-2xl`}>
+                        {t('transit.badge')}
+                      </span>
+
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 border border-slate-100 bg-slate-50">
+                          <img
+                            src={pickup.students?.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=200"}
+                            alt="Alumno"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-black text-slate-900 text-base leading-tight truncate">
+                            {pickup.students?.first_name} {pickup.students?.last_name}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                            {t('transit.gradeLabel')} {pickup.students?.grade || '—'} · {t('transit.sectionLabel')} {pickup.students?.section || '—'}
+                          </p>
+                          {formatAnnouncedAt(pickup.announced_at) && (
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{formatAnnouncedAt(pickup.announced_at)}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-3">
+                        <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-slate-200 flex items-center justify-center">
+                          {pickup.profiles?.photo_url && !isReplacement ? (
+                            <img src={pickup.profiles.photo_url} alt="Adulto" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-5 h-5 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-slate-800 truncate">
+                            {adultName}{isReplacement && <span className="text-amber-600"> ({t('transit.authorizedTag')})</span>}
+                          </p>
+                          {!isReplacement && pickup.profiles?.pin_code && (
+                            <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-indigo-400" /> PIN {pickup.profiles.pin_code}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {vehicle && (
+                        <div className="flex items-center gap-2 mt-3 text-xs font-bold text-slate-600">
+                          <Car className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-black text-slate-800">{vehicle.license_plate}</span>
+                          {vehicle.description && <span className="text-slate-400 font-medium truncate">— {vehicle.description}</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

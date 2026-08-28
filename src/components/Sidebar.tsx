@@ -16,7 +16,8 @@ import {
   History,
   UserCog,
   MessageSquare,
-  BarChart3
+  BarChart3,
+  Footprints
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -133,6 +134,10 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     { id: 'logs', label: t('nav.logs'), icon: History },
     { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
     { id: 'external', label: t('nav.external'), icon: Monitor },
+    // Pedido explícito: visible para cualquier miembro del personal, sin
+    // depender del permiso por módulo que sí exige el resto de pantallas de
+    // staff — es una pantalla de solo lectura, no expone ninguna acción.
+    { id: 'transit', label: t('nav.transit'), icon: Footprints, alwaysVisibleToStaff: true },
     { id: 'staff', label: t('nav.staff'), icon: UserCog, adminOnly: true },
     { id: 'statistics', label: t('nav.statistics'), icon: BarChart3, adminOnly: true },
   ];
@@ -153,6 +158,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
   const navItems = allNavItems.filter(item => {
     if (profile?.role === 'admin' && !isStaff) return true;
     if (item.adminOnly) return false;
+    if ((item as any).alwaysVisibleToStaff) return true;
     if (isStaff) return permissions.includes(item.id);
     return true; // Fallback
   });
