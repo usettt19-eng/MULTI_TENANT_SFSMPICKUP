@@ -61,9 +61,12 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - Centro de mensajes / notificaciones, incluye **avisos del colegio** (ver
   "Formularios/Avisos" más abajo) con sonido en tiempo real si tiene la app
   abierta.
-- **Idioma de la app fijado por el colegio**: el admin elige español o inglés
-  para todo su colegio desde Ajustes; los padres ven la app en ese idioma sin
-  poder cambiarlo ellos mismos (no hay selector manual en la app de padres).
+- **Idioma de la app, elegible por cada padre**: el admin fija español o
+  inglés para todo su colegio desde Ajustes (`tenants.default_language`) como
+  punto de partida, pero cada padre puede cambiarlo él mismo con el botón
+  ES/EN del encabezado — su elección se guarda en ese dispositivo
+  (`localStorage`) y tiene prioridad sobre el default del colegio de ahí en
+  adelante (ver §3, 2026-08-28).
 - Registro de vehículo (placa + descripción) en el alta.
 - App Android nativa (Capacitor) distribuida por link de descarga en el correo
   de invitación, servida desde un bucket público de Supabase Storage; además
@@ -514,18 +517,29 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   empresa de origen (`daily_visitors.id_number`, `daily_visitors.company`),
   visibles en la bitácora y en el PDF exportado.
 
-### Idioma de la app de padres configurable por colegio (2026-08-28)
+### Idioma de la app de padres: default del colegio + selector propio del padre (2026-08-28)
 - Nueva columna `tenants.default_language` (`'es'`\|`'en'`, default `'es'`),
   editable por el admin desde Ajustes → Perfil Institucional (toggle
   Español/English).
 - `ParentDashboard.tsx` (única pantalla que no pasaba por el sistema de
   `t()`/`useLanguage`, ~1850 líneas casi todas en español fijo) se conectó por
-  completo: al cargar el perfil, un `useEffect` fuerza `setLanguage(...)` al
-  idioma configurado del colegio — los padres no tienen selector manual, ven
-  el idioma que fijó el colegio. Se agregaron 132 claves nuevas `parent.*` a
+  completo — se agregaron 132 claves nuevas `parent.*` a
   `src/i18n/translations.ts` (inglés y español) cubriendo cabecera, ubicación,
   puertas, avisos/autorizaciones, reemplazo, delivery, Pool Day, centro de
   mensajes y los estados de recogida.
+- **Primera versión: el admin fijaba el idioma sin que el padre pudiera
+  cambiarlo.** Se revirtió el mismo día — el colegio pidió que el padre sí
+  pueda elegir. `LanguageContext.tsx` ganó persistencia en `localStorage`
+  (clave `ssp_language`) y un flag `hasManualLanguage`; se agregó un botón
+  ES/EN visible en el encabezado de `ParentDashboard.tsx`. El
+  `default_language` del colegio sigue aplicando como punto de partida (la
+  primera vez, o si el padre nunca tocó el botón en ese dispositivo), pero
+  una vez que el padre elige, su elección manda de ahí en adelante en ese
+  dispositivo.
+- De paso se tradujo `SharedQRDisplay.tsx` (el "Pase de Recogida" que se
+  comparte por WhatsApp/SMS con la persona de reemplazo), que vivía fuera del
+  `LanguageProvider` en `App.tsx` y no pasaba por `t()` — ahora hereda el
+  idioma guardado en `localStorage` del mismo navegador/dispositivo.
 
 ### Panel de Estadísticas (2026-08-27/28)
 - Vista nueva `Statistics.tsx`, solo para admin (no se puede otorgar como
