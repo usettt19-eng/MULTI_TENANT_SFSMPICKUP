@@ -2,7 +2,7 @@ import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
-import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload } from 'lucide-react';
+import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -24,6 +24,7 @@ export function StaffManagement() {
   const { profile } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -318,6 +319,35 @@ export function StaffManagement() {
     setIsModalOpen(true);
   };
 
+  // Búsqueda "inteligente": no solo nombre/correo, también permite encontrar
+  // staff por el módulo al que tienen acceso (ej. escribir "salidas"
+  // encuentra a quienes tienen el permiso "Seguridad (Salidas)").
+  const term = searchTerm.trim().toLowerCase();
+  const staffWithPerms = staff.map(user => {
+    let perms: string[] = [];
+    try {
+      const parsed = JSON.parse(user.additional_tutor_name || '{}');
+      perms = parsed.permissions || [];
+    } catch (e) {}
+    return { user, perms };
+  });
+  const filteredStaff = term
+    ? staffWithPerms.filter(({ user, perms }) => {
+        const haystack = [
+          user.first_name,
+          user.last_name,
+          user.email,
+          ...perms.map(p => AVAILABLE_MODULES.find(m => m.id === p)?.label || p),
+        ].join(' ').toLowerCase();
+        return haystack.includes(term);
+      })
+    : staffWithPerms;
+  const filteredGrantedAccess = term
+    ? grantedAccess.filter((g: any) =>
+        `${g.staff?.first_name} ${g.staff?.last_name} ${g.staff?.email}`.toLowerCase().includes(term)
+      )
+    : grantedAccess;
+
   if (profile?.role !== 'admin') {
     return (
       <div className="p-8 text-center text-red-500 font-bold">
@@ -339,6 +369,16 @@ export function StaffManagement() {
             <p className="text-sm text-slate-500 font-medium mt-1">Crea usuarios para enfermeras, recepcionistas y guardias.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar por nombre, correo o módulo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all w-64"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            </div>
             <input
               type="file"
               accept=".csv"
@@ -377,15 +417,13 @@ export function StaffManagement() {
 
         {loading ? (
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
+        ) : filteredStaff.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 font-bold text-sm">
+            {term ? 'Ningún miembro del staff coincide con la búsqueda.' : 'Todavía no hay staff creado.'}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {staff.map(user => {
-              let perms: string[] = [];
-              try { 
-                const parsed = JSON.parse(user.additional_tutor_name || '{}'); 
-                perms = parsed.permissions || [];
-              } catch (e) {}
-
+            {filteredStaff.map(({ user, perms }) => {
               return (
                 <div key={user.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-col relative group">
                   <button
@@ -440,14 +478,17 @@ export function StaffManagement() {
           <section className="space-y-4">
             <div>
               <h2 className="text-lg font-black text-slate-800">
-                Acceso de otros colegios <span className="text-xs font-bold text-slate-400">({grantedAccess.length})</span>
+                Acceso de otros colegios <span className="text-xs font-bold text-slate-400">({filteredGrantedAccess.length})</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-1">
                 Ya tienen cuenta en otro colegio de la organización y se les dio acceso a este también.
               </p>
             </div>
+            {filteredGrantedAccess.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Ninguno coincide con la búsqueda.</p>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {grantedAccess.map((g: any) => (
+              {filteredGrantedAccess.map((g: any) => (
                 <div key={g.staff_id} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 shrink-0 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
@@ -469,6 +510,7 @@ export function StaffManagement() {
                 </div>
               ))}
             </div>
+            )}
           </section>
         )}
       </div>
