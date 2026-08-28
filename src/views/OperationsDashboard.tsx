@@ -32,6 +32,10 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '' });
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
+  // reunión con el alumno), agrupadas por grado/sección — se acumula en
+  // tiempo real durante el día vía el mismo canal de pickup_events.
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number }[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -54,12 +58,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchPendingRequests();
     fetchStats();
     fetchSchoolSettings();
-    
+    fetchDailyDepartures();
+
     const pickupChannel = supabase
       .channel('public:pickup_events')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, async (payload: any) => {
         console.log('Pickup event change detected:', payload);
         fetchPickups();
+        fetchDailyDepartures();
       })
       .subscribe();
 
@@ -107,6 +113,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchHealthAlerts();
       fetchPendingRequests();
       fetchStats();
+      fetchDailyDepartures();
     }, 10000);
 
     return () => {
@@ -167,6 +174,44 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       }
     }
     setLoading(false);
+  };
+
+  // Cuenta las salidas ya completadas hoy (el padre confirmó reunión con el
+  // alumno), agrupadas por grado/sección — el acumulado del día que pidió
+  // el colegio. Se recalcula en cada cambio de pickup_events, así que crece
+  // en tiempo real conforme se van completando ciclos.
+  const fetchDailyDepartures = async () => {
+    if (!profile?.tenant_id) return;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('pickup_events')
+      .select('student:students(grade, section)')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('status', 'completed')
+      .gte('completed_at', startOfDay.toISOString());
+
+    if (error) {
+      console.error('Error cargando salidas del día:', error);
+      return;
+    }
+
+    const counts = new Map<string, { grade: string; section: string; count: number }>();
+    (data || []).forEach((row: any) => {
+      const grade = row.student?.grade || '—';
+      const section = row.student?.section || '—';
+      const key = `${grade}|${section}`;
+      const existing = counts.get(key);
+      if (existing) existing.count += 1;
+      else counts.set(key, { grade, section, count: 1 });
+    });
+
+    setDailyDepartures(
+      Array.from(counts.values()).sort((a, b) =>
+        a.grade.localeCompare(b.grade, 'es', { numeric: true }) || a.section.localeCompare(b.section, 'es', { numeric: true })
+      )
+    );
   };
 
   const fetchLatestDetections = async () => {
@@ -391,6 +436,43 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                             {t('dashboard.confirmRelease')}
                           </button>
                        </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Daily Departures by Grade/Section */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[#1e293b]" />
+                <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">{t('dashboard.dailyDepartures')}</h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-full border border-slate-200">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">{t('dashboard.realtimeSync')}</span>
+                </span>
+                <span className="bg-[#1e293b] text-white px-4 py-1.5 rounded-full text-xs font-black">
+                  {dailyDepartures.reduce((sum, d) => sum + d.count, 0)}
+                </span>
+              </div>
+            </div>
+            <div className="p-5">
+              {dailyDepartures.length === 0 ? (
+                <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest text-center py-6">
+                  {t('dashboard.noDeparturesToday')}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {dailyDepartures.map(d => (
+                    <div key={`${d.grade}|${d.section}`} className="bg-[#f8fafc] rounded-xl p-3 border border-slate-100 text-center">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider truncate">
+                        {d.grade}{d.section !== '—' ? ` · ${d.section}` : ''}
+                      </p>
+                      <p className="text-xl font-black text-[#1e293b] mt-1">{d.count}</p>
                     </div>
                   ))}
                 </div>
