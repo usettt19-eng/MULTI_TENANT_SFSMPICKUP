@@ -17,6 +17,7 @@ let keepAliveGain: GainNode | null = null;
 // Audio Queue
 interface AudioTask {
   text: string;
+  lang: 'es' | 'en';
 }
 let audioQueue: AudioTask[] = [];
 let isPlaying = false;
@@ -134,23 +135,30 @@ const processAudioQueue = async () => {
     return;
   }
 
-  const { text } = task;
+  const { text, lang } = task;
   const now = Date.now();
+
+  // Instrucción de ritmo en el mismo idioma del mensaje — pedido explícito
+  // del colegio: un poco más lenta que antes, para que se entienda bien en
+  // las bocinas del salón.
+  const promptPrefix = lang === 'en'
+    ? 'Say slowly, at an unhurried pace, in a warm and professional voice:'
+    : 'Diga despacio, con calma, con voz amable y profesional:';
 
   try {
     if (now < quotaExceededUntil) {
-      await useBrowserFallbackWait(text);
+      await useBrowserFallbackWait(text, lang);
     } else {
       const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error("GEMINI_API_KEY not configured");
       }
-      
+
       const ai = new GoogleGenAI({ apiKey });
-      
+
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Diga con voz amable y profesional: ${text}` }] }],
+        contents: [{ parts: [{ text: `${promptPrefix} ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -162,16 +170,16 @@ const processAudioQueue = async () => {
       } as any);
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      
+
       if (base64Audio) {
         await playBase64AudioWait(base64Audio);
       } else {
-        await useBrowserFallbackWait(text);
+        await useBrowserFallbackWait(text, lang);
       }
     }
   } catch (error: any) {
     console.error("Error generating voice message:", error);
-    
+
     const errorStr = JSON.stringify(error);
     if (error?.message?.includes('429') || error?.status === 429 || errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
       console.warn("Gemini Quota Exceeded. Switching to browser TTS for 60s.");
@@ -179,7 +187,7 @@ const processAudioQueue = async () => {
     }
 
     try {
-      await useBrowserFallbackWait(text);
+      await useBrowserFallbackWait(text, lang);
     } catch (e) {
       console.error("Fallback also failed", e);
     }
@@ -226,12 +234,13 @@ const playBase64AudioWait = (base64Audio: string): Promise<void> => {
   });
 };
 
-const useBrowserFallbackWait = (text: string): Promise<void> => {
+const useBrowserFallbackWait = (text: string, lang: 'es' | 'en'): Promise<void> => {
   return new Promise((resolve) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'es-ES';
-      utterance.rate = 0.9;
+      utterance.lang = lang === 'en' ? 'en-US' : 'es-ES';
+      // Un poco más lenta que antes (era 0.9) — pedido explícito del colegio.
+      utterance.rate = 0.8;
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
       window.speechSynthesis.speak(utterance);
@@ -241,24 +250,25 @@ const useBrowserFallbackWait = (text: string): Promise<void> => {
   });
 };
 
-export const playGlobalVoiceMessage = async (text: string) => {
-  console.log('playGlobalVoiceMessage called with:', text);
+export const playGlobalVoiceMessage = async (text: string, lang: 'es' | 'en' = 'es') => {
+  console.log('playGlobalVoiceMessage called with:', text, lang);
   if (!isAudioEnabled) {
     console.log('Audio is not enabled globally. Skipping message:', text);
     return;
   }
 
-  // Debounce exact duplicates within 3 seconds 
+  // Debounce exact duplicates within 3 seconds
   // (we still want them queued if they happen legally, but prevent double firing)
+  const key = `${lang}:${text}`;
   const now = Date.now();
-  if (text === lastPlayedText && now - lastPlayedTime < 3000) {
+  if (key === lastPlayedText && now - lastPlayedTime < 3000) {
     console.log('Debouncing duplicate message:', text);
     return;
   }
-  
-  lastPlayedText = text;
+
+  lastPlayedText = key;
   lastPlayedTime = now;
 
-  audioQueue.push({ text });
+  audioQueue.push({ text, lang });
   processAudioQueue();
 };
