@@ -924,15 +924,16 @@ relevantes de cara a producción:
   2026-08-20 (nombre de hijo con orden invertido en el CSV, no encontró match
   exacto en el roster) — pendiente de vincular a mano desde el Directorio de
   Padres.
-- **Google Play rechazó la ficha por "afirmaciones engañosas"** (política de
-  comportamiento engañoso, fecha de aplicación 2026-08-27): al menos 2 de las
-  capturas de pantalla subidas a la ficha de Android tienen un badge morado
-  "Apple Review" superpuesto — son capturas hechas para la revisión de
-  App Store, subidas por error también a Google Play. Pendiente: reemplazar
-  esas capturas por capturas limpias reales de Android (sin overlays de
-  ningún tipo) en las Fichas de Play Store (la predeterminada y cualquier
-  ficha personalizada/traducida), y volver a enviar a revisión — Google
-  recomienda probar primero en un canal de pruebas antes de reenviar.
+- ~~Google Play rechazó la ficha por "afirmaciones engañosas"~~ **Resuelto
+  2026-08-27/28**: al menos 2 de las capturas de pantalla subidas a la ficha
+  de Android tenían un badge morado "Apple Review" superpuesto (capturas
+  hechas para la revisión de App Store, subidas por error también a Google
+  Play). Se reemplazaron por capturas limpias reales de Android en todas las
+  fichas de Play Store (inglés, español España/EE.UU./Latinoamérica) —
+  Envío 3, publicado el 27-ago-2026 9:05pm en la pista de Prueba cerrada
+  (Alpha), sin aviso de rechazo en "Resumen de publicación". Esto también
+  desbloquea `android-deploy.yml`, que fallaba con 403 al subir un build
+  nuevo mientras la app estaba en estado "Rechazada".
 - 42 alumnos de secundaria de TCS Albrook sin foto (31 de ellos todo el grado
   07, matriculados después de la carpeta de fotos que compartió el colegio) —
   pendiente de que el colegio tome/envíe fotos nuevas para completarlos.
