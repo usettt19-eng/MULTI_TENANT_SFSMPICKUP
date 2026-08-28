@@ -7,8 +7,9 @@ Estadísticas por colegio, fix del filtro de puerta en Monitor Externo,
 agrupación por grado/sección y buscadores inteligentes en Alumnos y Staff,
 fotos de alumnos importadas desde Google Drive para TCS Albrook secundaria,
 Ajustes responsive para teléfono, alumno vinculado visible en cada solicitud
-de reemplazo, y fix del lector QR de Check-In que no detectaba nada y de las
-recogidas por reemplazo que se anunciaban como si hubiera llegado el papá/mamá).
+de reemplazo, fix del lector QR de Check-In que no detectaba nada y de las
+recogidas por reemplazo que se anunciaban como si hubiera llegado el papá/mamá,
+y fix del reconocimiento facial de Check-In, que nunca había funcionado).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -47,7 +48,9 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - Anunciar llegada / recogida de cada hijo, con geocerca automática en Android
   (llegada y salida del perímetro se detectan solas, sin botón).
 - Reconocimiento facial opcional en la puerta (`face-api.js`, corre en el
-  navegador/tablet, sin llamada a servidor).
+  navegador/tablet; solo pasa por el backend un proxy de imagen para las
+  fotos que sí viven en Supabase Storage, ver §3 2026-08-28 — nunca había
+  funcionado hasta esa fecha).
 - **Pool Day**: autorizar a otro padre a recoger a tu hijo un día fijo de la
   semana o como excepción de un solo día; búsqueda de padres por nombre
   (ignora tildes/mayúsculas), con sugerencia de compañeros del mismo salón.
@@ -670,6 +673,34 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   campo quedaba `null` pese a que el código ya la mandaba. Se agregó la
   columna real con una migración (`ALTER TABLE pickup_events ADD COLUMN
   notes text`) directamente sobre el proyecto de producción.
+
+### Check-In: reconocimiento facial nunca había funcionado (2026-08-28)
+- **`SmartCheckIn.tsx` compara la foto capturada contra la de cada padre
+  registrado usando `/api/proxy-image?url=...` para evitar que el `<canvas>`
+  quede "manchado" por CORS al leer la foto de otro origen — pero ese
+  endpoint nunca existió en el backend.** Cada comparación fallaba en
+  silencio (capturada por un `catch` por-padre dentro del loop), así que
+  `bestMatch` quedaba `null` siempre, sin importar quién estuviera frente a
+  la cámara — el reconocimiento facial jamás encontró una coincidencia desde
+  que existe. Se agregó el endpoint en `server/src/index.ts`, **sin**
+  `requireAuth` a propósito (`faceapi.fetchImage()` hace un `fetch()` plano,
+  no hay forma de mandarle la cabecera Authorization) pero restringido a
+  reenviar solo pedidos cuyo origen sea el propio proyecto de Supabase, para
+  no quedar como proxy abierto hacia cualquier URL.
+- Encontrados y corregidos de paso, en la misma función:
+  - La consulta de "padres con foto" no filtraba por `tenant_id` —
+    comparaba la cara contra los padres de **todos** los colegios, no solo
+    el del kiosco (mismo patrón de fuga que las demás pantallas, ver §4).
+  - El `audit_log` de éxito/fallo se insertaba sin `tenant_id` porque ese
+    campo nunca se había incluido en el `SELECT` de `bestMatch`.
+  - Muchas fotos de perfil (`profiles.photo_url`) no son URLs de Supabase
+    Storage sino **imágenes base64 embebidas** (`data:image/jpeg;base64,...`)
+    — el proxy recién agregado las rechazaba (un `data:` URL tiene
+    `origin` = `"null"`) o las mandaba como parámetro de query gigante. Los
+    `data:` URL no tienen problema de CORS con el canvas, así que ahora se
+    cargan directo con `faceapi.fetchImage()` sin pasar por el proxy; solo
+    las URLs `http(s)` reales lo usan. De paso se excluyen también los
+    `photo_url` en cadena vacía (`''`) de la consulta, no solo `null`.
 
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
