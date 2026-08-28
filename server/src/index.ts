@@ -19,6 +19,52 @@ const wrap =
 
 app.get('/api/health', (_req, res) => res.json({success: true, data: {status: 'ok'}}));
 
+/**
+ * Reproxea una foto de Supabase Storage para SmartCheckIn.tsx (reconocimiento
+ * facial vía face-api.js).
+ *
+ * face-api.js carga la foto de cada padre con `faceapi.fetchImage(url)` y
+ * después lee los píxeles de un <canvas> — si la imagen viene de otro origen
+ * sin cabeceras CORS que lo permitan, el canvas queda "tainted" y la lectura
+ * de píxeles falla en silencio. Pasarla por este mismo origen evita el
+ * problema sin depender de la configuración CORS del bucket de Storage.
+ *
+ * Sin `requireAuth` a propósito: `faceapi.fetchImage()` hace un `fetch()`
+ * plano, sin forma de mandarle la cabecera Authorization. No es una fuga —
+ * las fotos de `avatars` ya son públicas (se muestran sin auth en <img> por
+ * toda la app) — pero para no quedar como proxy abierto hacia cualquier URL,
+ * solo se permite reenviar pedidos cuyo origen sea el mismo proyecto de
+ * Supabase configurado en este servidor.
+ */
+app.get(
+  '/api/proxy-image',
+  wrap(async (req, res) => {
+    const rawUrl = req.query.url;
+    if (typeof rawUrl !== 'string' || !rawUrl) return fail(res, 400, 'Falta el parámetro url.');
+
+    let target: URL;
+    try {
+      target = new URL(rawUrl);
+    } catch {
+      return fail(res, 400, 'URL inválida.');
+    }
+
+    const allowedOrigin = new URL(process.env.SUPABASE_URL!).origin;
+    if (target.origin !== allowedOrigin) {
+      return fail(res, 400, 'Solo se permite reproxear imágenes del proyecto de Supabase.');
+    }
+
+    const upstream = await fetch(target.toString());
+    if (!upstream.ok || !upstream.body) {
+      return fail(res, upstream.status || 502, 'No se pudo obtener la imagen.');
+    }
+
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  }),
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // COLEGIOS
 // ════════════════════════════════════════════════════════════════════════════

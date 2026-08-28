@@ -362,9 +362,14 @@ export function SmartCheckIn() {
       }
 
       // Fetch parents with photos
+      // Sin filtrar por tenant_id, esto comparaba contra los padres de TODOS
+      // los colegios — fuga entre colegios (RLS no lo frena: is_staff_of()
+      // no filtra por sí sola, ver ESTADO-DEL-PROYECTO.md §4) y además hacía
+      // el reconocimiento mucho más lento de lo necesario.
       const { data: parents, error: fetchError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, photo_url')
+        .select('id, first_name, last_name, photo_url, tenant_id')
+        .eq('tenant_id', staffProfile.tenant_id)
         .not('photo_url', 'is', null);
 
       if (fetchError || !parents || parents.length === 0) {
@@ -434,7 +439,8 @@ export function SmartCheckIn() {
           event_type: 'SECURITY',
           description: 'VERIFICACIÓN FACIAL FALLIDA: Rostro no coincide con ningún padre registrado.',
           actor_name: 'Sistema Facial',
-          metadata: { method: 'facial_recognition', result: 'failure' }
+          metadata: { method: 'facial_recognition', result: 'failure' },
+          tenant_id: staffProfile?.tenant_id,
         });
       }
     } catch (error: any) {
