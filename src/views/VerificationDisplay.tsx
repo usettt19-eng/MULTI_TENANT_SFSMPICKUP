@@ -20,6 +20,16 @@ export function VerificationDisplay() {
   // Perímetro): la puerta que se elige acá se adopta automáticamente en
   // esas otras pantallas, sin tener que volver a elegirla en cada una.
   const [selectedDoorId, setSelectedDoorId] = useMonitoredDoor(profile?.tenant_id);
+  // fetchPickups se invoca desde el poll/la suscripción de realtime armados
+  // en el useEffect de abajo (deps: solo tenant_id) — sin esta referencia,
+  // ese cierre se quedaría con la puerta seleccionada al montar la pantalla
+  // y el anuncio de voz ignoraría cualquier cambio de puerta posterior
+  // hasta recargar la página (mismo motivo por el que doorGradesMapping ya
+  // era un ref y no un state).
+  const selectedDoorIdRef = useRef(selectedDoorId);
+  useEffect(() => {
+    selectedDoorIdRef.current = selectedDoorId;
+  }, [selectedDoorId]);
   // Deja atender a alguien de más atrás en la fila (ej. su papá ya está en la
   // puerta aunque haya anunciado después que otros) sin perder el orden real
   // de llegada de los demás — solo cambia a quién se muestra para verificar.
@@ -155,6 +165,21 @@ export function VerificationDisplay() {
     }
   };
 
+  // Un pickup "pertenece" a la puerta seleccionada si el padre eligió esa
+  // puerta explícitamente al anunciar (pickup.door_id manda sobre todo lo
+  // demás), o si no eligió ninguna pero su grado está mapeado a esa puerta
+  // en Horarios de Salida. Se usa tanto para filtrar la cola visible como
+  // para decidir si el anuncio de voz le corresponde a esta puerta — antes
+  // solo la cola respetaba el filtro y la voz anunciaba TODAS las puertas
+  // sin importar cuál estuviera seleccionada acá.
+  const pickupMatchesDoor = (pickup: any, doorId: string): boolean => {
+    if (!doorId) return true;
+    if (pickup.door_id) return pickup.door_id === doorId;
+    const allowedGrades = doorGradesMapping.current[doorId];
+    if (!allowedGrades) return true;
+    return allowedGrades.includes(pickup.students?.grade);
+  };
+
   const fetchPickups = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
@@ -179,15 +204,11 @@ export function VerificationDisplay() {
       } else {
         data.forEach(async (pickup) => {
           if (pickup.status === 'announced' && !announcedPickupIds.current.has(pickup.id)) {
-            // Check if this pickup should be announced on this door
-            let shouldAnnounce = true;
-            if (selectedDoorId && doorGradesMapping.current[selectedDoorId]) {
-              const allowedGrades = doorGradesMapping.current[selectedDoorId];
-              const studentGrade = pickup.students?.grade;
-              if (!allowedGrades.includes(studentGrade)) {
-                shouldAnnounce = false;
-              }
-            }
+            // Si el personal está ubicado en una puerta específica, solo se
+            // le anuncia por voz lo que le corresponde a esa puerta — los
+            // de otras puertas los atiende otro personal, no tiene sentido
+            // que suene acá también.
+            const shouldAnnounce = pickupMatchesDoor(pickup, selectedDoorIdRef.current);
 
             if (shouldAnnounce) {
               announcedPickupIds.current.add(pickup.id);
@@ -257,16 +278,7 @@ export function VerificationDisplay() {
     }
   };
 
-  const filteredPickups = pickups.filter(pickup => {
-    if (!selectedDoorId) return true;
-    // El padre eligió puerta al anunciar su llegada: eso manda sobre el
-    // mapeo grado→puerta (que no aplica, por ejemplo, a hermanos de
-    // distinto grado que salen juntos por la misma puerta).
-    if (pickup.door_id) return pickup.door_id === selectedDoorId;
-    const allowedGrades = doorGradesMapping.current[selectedDoorId];
-    if (!allowedGrades) return true;
-    return allowedGrades.includes(pickup.students?.grade);
-  });
+  const filteredPickups = pickups.filter(pickup => pickupMatchesDoor(pickup, selectedDoorId));
 
   const currentPickup =
     (selectedPickupId && pickups.find(p => p.id === selectedPickupId)) || filteredPickups[0];

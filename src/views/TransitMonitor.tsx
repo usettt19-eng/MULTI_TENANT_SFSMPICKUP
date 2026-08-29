@@ -36,6 +36,15 @@ export function TransitMonitor() {
   // de traer los nombres — sin la referencia, el anuncio de voz podría
   // salir sin nombre de puerta la primera vez.
   const doorsRef = useRef<any[]>([]);
+  // fetchTransit se invoca desde el poll/la suscripción de realtime, que se
+  // arman una sola vez en el useEffect de abajo (deps: solo tenant_id) — sin
+  // esta referencia, ese cierre se quedaría con la puerta seleccionada al
+  // montar la pantalla y el anuncio de voz ignoraría cualquier cambio de
+  // puerta posterior hasta recargar la página.
+  const selectedDoorIdRef = useRef(selectedDoorId);
+  useEffect(() => {
+    selectedDoorIdRef.current = selectedDoorId;
+  }, [selectedDoorId]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState(setAudioEnabled);
@@ -95,6 +104,13 @@ export function TransitMonitor() {
         data.forEach(pickup => {
           if (announcedTransitIds.current.has(pickup.id)) return;
           announcedTransitIds.current.add(pickup.id);
+
+          // Si el personal de esta pantalla está monitoreando una puerta
+          // específica, solo se le anuncia lo que sale por esa puerta — lo
+          // de otras puertas lo atiende otro personal. Se marca igual como
+          // "ya visto" arriba para que, si luego cambia el filtro, no se
+          // pongan a sonar de golpe los que ya habían entrado a la lista.
+          if (selectedDoorIdRef.current && pickup.door_id !== selectedDoorIdRef.current) return;
 
           const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
           const gradeName = pickup.students?.grade || '—';

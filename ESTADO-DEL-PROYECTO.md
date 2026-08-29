@@ -816,6 +816,38 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   asignada" es exclusiva de este panel (no existe en Monitor Externo/
   Tránsito) y se maneja como anulación local, sin propagarse.
 
+### Anuncios de voz por puerta: cada personal solo escucha su propia puerta (2026-08-29)
+- Con varias puertas de salida y una sola bocina por dispositivo, el
+  personal ubicado en (por ejemplo) la puerta trasera no debía escuchar los
+  anuncios de los alumnos que salen por otra puerta — eso lo atiende el
+  personal de esa otra puerta. Antes esto NO se cumplía del todo:
+  - En Monitor Externo (`VerificationDisplay.tsx`), la cola visible ya
+    filtraba por puerta, pero el anuncio de "Salida de X solicitada" solo
+    miraba el mapeo grado→puerta de Horarios de Salida, ignorando
+    `pickup_events.door_id` (la puerta que el padre elige directo al
+    anunciar) — se unificó en un solo helper `pickupMatchesDoor()` que usan
+    tanto la cola como el anuncio, con el mismo criterio: `door_id` manda si
+    existe, si no se usa el mapeo por grado.
+  - En En Tránsito (`TransitMonitor.tsx`), el anuncio de "Alumno en
+    tránsito" sonaba para **todas** las puertas sin importar cuál estuviera
+    seleccionada en el filtro — ahora solo anuncia si el `door_id` del
+    alumno coincide con la puerta elegida (o anuncia todas si no hay ninguna
+    puerta seleccionada, para el dispositivo que vigila el colegio entero).
+  - **Bug de cierre obsoleto (stale closure) corregido de paso**: en ambas
+    pantallas, el anuncio de voz se dispara desde un `setInterval`/
+    suscripción de Realtime armados una sola vez en un `useEffect` con
+    `[tenant_id]` como única dependencia — sin una referencia (`useRef`)
+    actualizada aparte, ese cierre se quedaba con la puerta seleccionada al
+    montar la pantalla, y cambiar de puerta en el selector no tenía efecto
+    en el anuncio hasta recargar la página (aunque la cola visible sí se
+    actualizaba bien, porque esa se recalcula en cada render). Se agregó
+    `selectedDoorIdRef` en ambas pantallas para que el anuncio siempre lea
+    la puerta actual.
+- Como la puerta seleccionada ahora es compartida entre Monitor Externo, En
+  Tránsito y el widget de "carritos" (ver entrada anterior), el personal
+  solo necesita elegir su puerta una vez en cualquiera de las tres pantallas
+  para que el filtro de voz aplique en las demás.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
