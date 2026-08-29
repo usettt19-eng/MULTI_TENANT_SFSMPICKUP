@@ -124,11 +124,16 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   verificado por QR (no el papá/mamá/tutor), la tarjeta, el toast y el
   anuncio de voz muestran su nombre real con la etiqueta "(autorizado)" en
   vez de asumir que llegó el titular (ver §3).
+- **En Tránsito**: pantalla de solo lectura (sin botones) que muestra a los
+  alumnos ya autorizados camino al vehículo, agrupada/filtrable por puerta
+  de salida, con prioridad por color calculada por puerta y anuncio de voz
+  bilingüe cuando entra un alumno nuevo (ver §3).
 - **Ajustes**, pantalla completa (pestañas, cabecera, Configuración General,
   Estructura y Puertas, Horarios de Salida) adaptada para verse bien en
   teléfono: pestañas con scroll horizontal, cabecera apilada, grillas y
   selects que se apilan en vez de comprimirse en pantallas angostas (ver §3).
-- **Panel de Estadísticas** por colegio (solo admin): tiempo promedio de
+- **Panel de Estadísticas** por colegio (admin siempre; staff solo si se le
+  otorga el permiso, ver §3): tiempo promedio de
   recogida, % de confirmación automática (GPS) vs. manual, puerta más usada,
   recogidas por hora del día y por día de la semana, reemplazos
   solicitados/aprobados/rechazados, avisos y autorizaciones enviados/
@@ -701,6 +706,62 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
     cargan directo con `faceapi.fetchImage()` sin pasar por el proxy; solo
     las URLs `http(s)` reales lo usan. De paso se excluyen también los
     `photo_url` en cadena vacía (`''`) de la consulta, no solo `null`.
+
+### Nuevo flujo de salida: pantalla "En Tránsito" y anuncios de voz (2026-08-28/29)
+- **Flujo completo**: el padre anuncia su llegada → el personal de puerta
+  (Monitor Externo) pulsa "Autorizar" como siempre (`status: 'released'`) →
+  el alumno aparece automáticamente en la nueva pantalla **En Tránsito**
+  (`TransitMonitor.tsx`), de solo lectura — no tiene botones, es solo guía
+  visual para el personal — con foto y nombre del alumno, grado, sección,
+  nombre/foto/PIN del padre o del reemplazo autorizado, y placa/descripción
+  del vehículo si el padre la cargó desde su app. Al confirmar el padre
+  desde su propia app que ya se reunió con el alumno, la tarjeta desaparece
+  de En Tránsito (`status: 'completed'`).
+- Agrupada y filtrable por puerta de salida. Dentro de cada puerta, las
+  tarjetas se ordenan por orden de llegada (`announced_at` ascendente, no
+  hay columna `released_at` en la base) y el color de prioridad (primeros 5
+  en rojo, siguientes 5 en naranja, resto en verde) se calcula **por
+  puerta**, no de forma global — cada puerta tiene su propia fila de espera.
+- Padres: nueva sección "Mi Vehículo" en su app para cargar placa y
+  descripción, que se refleja en la tarjeta de Monitor Externo y en la de En
+  Tránsito.
+- Anuncios de voz por las bocinas del salón (Monitor Externo / En Tránsito),
+  en español y luego en inglés, más despacio que antes: al anunciar la
+  salida solicitada (con grado y sección) y al entrar un alumno nuevo a En
+  Tránsito (para el personal de entrega final en la puerta).
+- **Aviso de autorización — dentro de la app del padre, no en las bocinas
+  del colegio**: cuando el maestro autoriza la salida, el propio teléfono
+  del padre reproduce (una sola vez, español y luego inglés) que el alumno
+  fue autorizado y va camino al vehículo, recordando pulsar el botón de
+  confirmación al tenerlo. Usa `speechSynthesis` del navegador del padre, no
+  el `audioManager` del kiosco (ese requiere activarse con un clic previo,
+  pensado para una bocina fija, no para el teléfono de cada padre).
+- **Panel de Dashboard**: salidas completadas de hoy, acumuladas en tiempo
+  real por grado/sección, con total del día.
+- **Cierre automático del ciclo tras 20 minutos sin confirmar**: además del
+  cierre automático ya existente cuando el padre sale del perímetro del
+  colegio (20s de margen para ruido de GPS), ahora un job en el backend
+  (`server/src/index.ts`, corre cada 60s) cierra solo cualquier recogida que
+  lleve más de 20 minutos en `released` sin que el padre confirme — se
+  asume que ya tiene al alumno. Corre en el servidor (siempre encendido en
+  Docker Compose), no en el navegador del padre, para no depender de que la
+  app siga abierta o el GPS esté activado. Deja registro en `audit_logs` y
+  notifica al padre.
+
+### Permisos de staff: todos los módulos del sidebar ahora configurables (2026-08-29)
+- Antes, cinco pantallas tenían reglas fijas fuera del sistema de permisos
+  por módulo: **Bitácora de Visitantes** (protegida en el código pero sin
+  checkbox para otorgarla — inalcanzable para cualquier staff), **En
+  Tránsito** y **Ajustes** (visibles para todo el staff sin poder
+  restringirlas), y **Gestión de Personal**/**Estadísticas** (bloqueadas
+  para todo el staff sin poder otorgarlas). Las cinco se agregaron a
+  `AVAILABLE_MODULES` en `StaffManagement.tsx` y quedan, como el resto, a
+  discreción del administrador vía checkbox. Los administradores reales (no
+  marcados como staff) siguen viendo todo sin restricción.
+- **Nota de seguridad**: "Gestión de Personal" le da a quien lo tenga la
+  capacidad de crear/editar otro staff y asignarle (o asignarse a sí mismo)
+  cualquier otro permiso, incluido ese mismo — no es solo acceso a una
+  pantalla operativa como el resto, así que conviene otorgarlo con cautela.
 
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
