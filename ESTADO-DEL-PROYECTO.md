@@ -937,6 +937,43 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   (`hover:bg-indigo-500`), el mismo acento que ya se usa en las pantallas
   más nuevas (En Tránsito, Padres en el Perímetro, Salida Autónoma).
 
+### Diseño responsive en toda la app: móvil, tablet, iPad, escritorio (2026-08-29)
+- El "shell" de la app (`Layout.tsx` + `Sidebar.tsx` + `TopNav.tsx`) ya
+  estaba bien resuelto de antes: el sidebar es un cajón (`drawer`) que se
+  esconde bajo `md` y se abre con el botón hamburguesa de `TopNav`, y el
+  contenido nunca desborda horizontalmente (`overflow-x-hidden`). La mayoría
+  de las pantallas (Ajustes, Familias, Bienestar, Cumplimiento, Formularios,
+  Estadísticas, Login, Check-In) también ya usaban breakpoints (`sm:`/`md:`/
+  `lg:`) de una pasada anterior de este mismo día.
+- Se auditaron las 23 pantallas de `src/views/` buscando patrones típicos
+  de ruptura en pantallas angostas — filas `flex justify-between` que no
+  envuelven, tablas sin `overflow-x-auto`, texto con tamaño fijo grande,
+  inputs con ancho fijo (`w-64`) — y se corrigieron los que sí rompían:
+  - `VisitorsLog.tsx`: la tabla no tenía `overflow-x-auto` (desbordaba en
+    móvil); el encabezado (fecha + buscador + exportar) no apilaba.
+  - `AuditLogs.tsx`: la fila de 5 filtros + exportar no envolvía ni
+    scrolleaba en pantallas angostas.
+  - `VerificationDisplay.tsx`: el selector de puerta no apilaba; el overlay
+    de Lockdown tenía texto `text-6xl` fijo que se salía en pantallas
+    chicas.
+  - `StaffManagement.tsx` / `RequestsCenter.tsx`: encabezados con
+    buscador de ancho fijo que no apilaban con los botones de acción.
+  - `OperationsDashboard.tsx`: la barra de "activar audio", el banner de
+    alerta de salud (con mensaje dinámico que puede ser largo) y cada
+    tarjeta de la cola en vivo (nombre + PIN + botón) no apilaban.
+  - `WellnessCenter.tsx`: las tarjetas de alertas críticas, medicación
+    crítica y horario de medicación (foto + nombre + detalles + botones)
+    tampoco apilaban.
+- El resto de patrones revisados (grids de 2-4 columnas dentro de tarjetas/
+  modales angostos, formularios de 2 campos por fila) ya funcionaban bien
+  en móvil sin cambios — se dejaron así para no tocar código que no estaba
+  roto.
+- **Pendiente**: esta auditoría se hizo por inspección de código (patrones
+  de Tailwind), no con pruebas visuales en dispositivos reales — si el
+  colegio encuentra alguna pantalla específica que se vea mal en un
+  celular/tablet/iPad en particular, conviene reportarla para corregirla
+  puntualmente.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
