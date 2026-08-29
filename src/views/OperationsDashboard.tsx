@@ -10,7 +10,7 @@ import {
   BriefcaseMedical, RefreshCw, Activity, Video, Monitor,
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
-  ChevronDown, MessageSquare, ClipboardList, FileEdit
+  ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
@@ -36,6 +36,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
   const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number }[]>([]);
+  // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
+  // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
+  // hay padre ni vehículo), así que se muestra en su propio panel para no
+  // mezclarla con las recogidas normales.
+  const [selfDismissalsToday, setSelfDismissalsToday] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -59,6 +64,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchStats();
     fetchSchoolSettings();
     fetchDailyDepartures();
+    fetchSelfDismissalsToday();
 
     const pickupChannel = supabase
       .channel('public:pickup_events')
@@ -66,6 +72,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         console.log('Pickup event change detected:', payload);
         fetchPickups();
         fetchDailyDepartures();
+      })
+      .subscribe();
+
+    const selfDismissalChannel = supabase
+      .channel('public:self_dismissal_events')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'self_dismissal_events' }, () => {
+        fetchSelfDismissalsToday();
       })
       .subscribe();
 
@@ -114,10 +127,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchPendingRequests();
       fetchStats();
       fetchDailyDepartures();
+      fetchSelfDismissalsToday();
     }, 10000);
 
     return () => {
       supabase.removeChannel(pickupChannel);
+      supabase.removeChannel(selfDismissalChannel);
       supabase.removeChannel(requestChannel);
       supabase.removeChannel(detectionChannel);
       supabase.removeChannel(auditChannel);
@@ -212,6 +227,26 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         a.grade.localeCompare(b.grade, 'es', { numeric: true }) || a.section.localeCompare(b.section, 'es', { numeric: true })
       )
     );
+  };
+
+  const fetchSelfDismissalsToday = async () => {
+    if (!profile?.tenant_id) return;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('self_dismissal_events')
+      .select('id, method, created_at, student:students(first_name, last_name, grade, section, photo_url)')
+      .eq('tenant_id', profile.tenant_id)
+      .gte('created_at', startOfDay.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando salidas autónomas del día:', error);
+      return;
+    }
+
+    setSelfDismissalsToday(data || []);
   };
 
   const fetchLatestDetections = async () => {
@@ -476,6 +511,63 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                         {d.grade}{d.section !== '—' ? ` · ${d.section}` : ''}
                       </p>
                       <p className="text-xl font-black text-[#1e293b] mt-1">{d.count}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Salidas Autónomas de Hoy */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Footprints className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">Salidas Autónomas de Hoy</h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-full border border-slate-200">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">{t('dashboard.realtimeSync')}</span>
+                </span>
+                <span className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-black">
+                  {selfDismissalsToday.length}
+                </span>
+              </div>
+            </div>
+            <div className="p-5">
+              {selfDismissalsToday.length === 0 ? (
+                <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest text-center py-6">
+                  Sin salidas autónomas hoy
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {selfDismissalsToday.map((ev) => (
+                    <div key={ev.id} className="flex items-center gap-3 bg-[#f8fafc] rounded-xl p-3 border border-slate-100">
+                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-slate-200 flex items-center justify-center">
+                        {ev.student?.photo_url ? (
+                          <img src={ev.student.photo_url} alt={ev.student.first_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Footprints className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-[#1e293b] truncate">
+                          {ev.student?.first_name} {ev.student?.last_name}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
+                          {ev.student?.grade || '—'}{ev.student?.section ? ` · ${ev.student.section}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                          {ev.method === 'qr' ? <QrCode className="w-3 h-3" /> : <Fingerprint className="w-3 h-3" />}
+                          {ev.method === 'qr' ? 'QR' : 'Facial'}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                          {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>

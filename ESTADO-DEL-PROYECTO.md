@@ -888,6 +888,13 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   'PICKUP'`, descripción con el prefijo "SALIDA AUTÓNOMA:") para que
   aparezca en la Bitácora normal, claramente distinguido de una recogida
   real.
+- **Panel en el Dashboard**: nueva sección "Salidas Autónomas de Hoy"
+  (`OperationsDashboard.tsx`), junto al panel de Salidas del Día por Grado/
+  Sección pero separado de él (no se suman entre sí, son conceptos
+  distintos). Lista en tiempo real cada salida autónoma de hoy con foto,
+  nombre, grado/sección, método (QR o Facial) y hora — con contador total
+  del día, actualizado vía suscripción a `self_dismissal_events` + el mismo
+  poll de 10s del resto del Dashboard.
 
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
