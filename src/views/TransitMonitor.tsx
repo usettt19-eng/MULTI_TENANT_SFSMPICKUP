@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
+import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
@@ -207,6 +208,8 @@ export function TransitMonitor() {
             </select>
           </div>
         </header>
+
+        <ParentPerimeterPanel />
 
         {loading ? (
           <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>
