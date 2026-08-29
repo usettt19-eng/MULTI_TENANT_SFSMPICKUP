@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Search, Filter, X,
   GraduationCap, BookOpen, Layers, Camera,
   Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon, Footprints,
-  Printer, Maximize2
+  Printer, Maximize2, Copy
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -41,6 +41,7 @@ export function Students() {
   const [selfDismissalAllowed, setSelfDismissalAllowed] = useState(false);
   const [selfDismissalQrToken, setSelfDismissalQrToken] = useState<string | null>(null);
   const [showQrPreviewModal, setShowQrPreviewModal] = useState(false);
+  const [qrCopyFeedback, setQrCopyFeedback] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const csvRef = useRef<HTMLInputElement>(null);
@@ -325,6 +326,25 @@ export function Students() {
     link.click();
   };
 
+  const copyQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !navigator.clipboard || !(window as any).ClipboardItem) {
+      alert('Tu navegador no permite copiar imágenes al portapapeles. Usa Descargar o Imprimir.');
+      return;
+    }
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new (window as any).ClipboardItem({ 'image/png': blob })]);
+        setQrCopyFeedback(true);
+        setTimeout(() => setQrCopyFeedback(false), 2000);
+      } catch (e) {
+        console.error('Error copiando el QR:', e);
+        alert('No se pudo copiar el código. Usa Descargar o Imprimir.');
+      }
+    }, 'image/png');
+  };
+
   const printQrCode = () => {
     const canvas = qrCanvasRef.current;
     if (!canvas) return;
@@ -361,6 +381,7 @@ export function Students() {
     setSelfDismissalAllowed(false);
     setSelfDismissalQrToken(null);
     setShowQrPreviewModal(false);
+    setQrCopyFeedback(false);
     setCurrentStudentId(null);
     stopCamera();
   };
@@ -910,7 +931,7 @@ export function Students() {
 
       {/* QR Preview / Export / Print Modal */}
       {showQrPreviewModal && selfDismissalQrToken && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
             <div className="p-8 text-center border-b border-slate-100 space-y-4">
               <h3 className="text-lg font-black text-primary flex items-center justify-center gap-2">
@@ -925,16 +946,23 @@ export function Students() {
                 />
               </div>
             </div>
-            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3">
+            <div className="p-6 bg-slate-50 grid grid-cols-3 gap-3">
               <button
                 onClick={downloadQrCode}
-                className="flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
               >
                 <Download className="w-4 h-4" /> Descargar
               </button>
               <button
+                onClick={copyQrCode}
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
+              >
+                {qrCopyFeedback ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                {qrCopyFeedback ? '¡Copiado!' : 'Copiar'}
+              </button>
+              <button
                 onClick={printQrCode}
-                className="flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white bg-primary hover:bg-primary-container transition-colors"
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-white bg-primary hover:bg-primary-container transition-colors text-xs"
               >
                 <Printer className="w-4 h-4" /> Imprimir
               </button>
