@@ -10,7 +10,7 @@ import {
   BriefcaseMedical, RefreshCw, Activity, Video, Monitor,
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
-  ChevronDown, MessageSquare, ClipboardList
+  ChevronDown, MessageSquare, ClipboardList, FileEdit
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
@@ -581,6 +581,10 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               <button onClick={() => setCurrentView('visitors')} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <ClipboardList className="w-5 h-5 text-white/80" />
                 <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.visitorLog')}</span>
+              </button>
+              <button onClick={() => setCurrentView('forms')} className="bg-[#1e293b] hover:bg-[#334155] p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
+                <FileEdit className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.forms')}</span>
               </button>
             </div>
           </section>
