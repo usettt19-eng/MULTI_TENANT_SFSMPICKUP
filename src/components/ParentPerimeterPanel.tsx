@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Car, MapPin, DoorOpen } from 'lucide-react';
 import type { ParentPresence } from '../types/database';
+import { useMonitoredDoor } from '../lib/monitoredDoor';
 
 // No se guarda ni se muestra ninguna coordenada GPS real: esto es una
 // representación estilizada (tarjetas de vehículo), no un mapa. Solo usamos
@@ -30,7 +31,32 @@ export function ParentPerimeterPanel() {
   const { profile } = useAuth() as any;
   const [cards, setCards] = useState<PerimeterCard[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
-  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // Adopta la puerta que se esté monitoreando en Monitor Externo o En
+  // Tránsito, sin importar en cuál de las tres pantallas se esté viendo el
+  // "carritos" — es un valor compartido (ver lib/monitoredDoor.ts), no un
+  // filtro independiente de este panel.
+  const [sharedDoorId, setSharedDoorId] = useMonitoredDoor(profile?.tenant_id);
+  // "Sin puerta asignada" es un filtro exclusivo de este panel (no existe
+  // como puerta real en Monitor Externo / Tránsito), así que se maneja como
+  // anulación local en vez de propagarse al valor compartido.
+  const [localDoorOverride, setLocalDoorOverride] = useState<string | null>(null);
+  const selectedDoorId = localDoorOverride !== null ? localDoorOverride : sharedDoorId;
+
+  useEffect(() => {
+    // Si la puerta compartida cambia desde Monitor Externo o Tránsito, se
+    // adopta automáticamente acá, descartando cualquier anulación local.
+    setLocalDoorOverride(null);
+  }, [sharedDoorId]);
+
+  const handleDoorChange = (value: string) => {
+    if (value === NO_DOOR_KEY) {
+      setLocalDoorOverride(value);
+    } else {
+      setLocalDoorOverride(null);
+      setSharedDoorId(value);
+    }
+  };
+
   const [, forceTick] = useState(0);
 
   const fetchDoors = async () => {
@@ -217,7 +243,7 @@ export function ParentPerimeterPanel() {
           <DoorOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <select
             value={selectedDoorId}
-            onChange={e => setSelectedDoorId(e.target.value)}
+            onChange={e => handleDoorChange(e.target.value)}
             className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none"
           >
             <option value="">Todas las puertas</option>

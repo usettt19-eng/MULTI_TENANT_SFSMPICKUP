@@ -801,6 +801,20 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   global): dentro de cada puerta, los 5 vehículos que llegaron primero en
   rojo, los 5 siguientes en naranja, el resto en verde — el ícono del
   vehículo cambia de borde/color según su posición en la fila de esa puerta.
+- **Alumno con grado/sección**: como puede haber más de un alumno con el
+  mismo nombre en el colegio, cada tarjeta muestra grado y sección debajo
+  del nombre para saber de qué salón es cada uno.
+- **Puerta compartida entre pantallas**: el filtro de puerta de este panel
+  ya no es independiente por pantalla. Se agregó `src/lib/monitoredDoor.ts`
+  — un valor guardado en `localStorage` (por dispositivo, con clave por
+  `tenant_id`) más un evento custom para sincronizar entre componentes
+  montados en la misma pestaña. Monitor Externo y En Tránsito escriben ahí
+  la puerta que eligen; el widget de "carritos" (sea en el Dashboard o
+  dentro de Monitor Externo) la adopta automáticamente, sin tener que
+  volver a elegirla — y si dentro del propio widget se elige una puerta
+  real, también se propaga a las otras dos pantallas. La opción "Sin puerta
+  asignada" es exclusiva de este panel (no existe en Monitor Externo/
+  Tránsito) y se maneja como anulación local, sin propagarse.
 
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría

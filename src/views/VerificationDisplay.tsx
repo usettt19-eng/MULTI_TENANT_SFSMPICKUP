@@ -9,13 +9,17 @@ import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
+import { useMonitoredDoor } from '../lib/monitoredDoor';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
-  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // Compartida con En Tránsito y con el widget de "carritos" (Padres en el
+  // Perímetro): la puerta que se elige acá se adopta automáticamente en
+  // esas otras pantallas, sin tener que volver a elegirla en cada una.
+  const [selectedDoorId, setSelectedDoorId] = useMonitoredDoor(profile?.tenant_id);
   // Deja atender a alguien de más atrás en la fila (ej. su papá ya está en la
   // puerta aunque haya anunciado después que otros) sin perder el orden real
   // de llegada de los demás — solo cambia a quién se muestra para verificar.

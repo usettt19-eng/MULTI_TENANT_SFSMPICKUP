@@ -6,6 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
+import { useMonitoredDoor } from '../lib/monitoredDoor';
 
 /**
  * Pantalla de solo lectura: alumnos ya aprobados por el profesor (status
@@ -19,7 +20,10 @@ export function TransitMonitor() {
   const { profile } = useAuth() as any;
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
-  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // Compartida con Monitor Externo y con el widget de "carritos" (Padres en
+  // el Perímetro): la puerta elegida en cualquiera de las tres se adopta
+  // automáticamente en las otras.
+  const [selectedDoorId, setSelectedDoorId] = useMonitoredDoor(profile?.tenant_id);
   const [loading, setLoading] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(false);
   // Para avisar al personal de entrega final (voz, en español e inglés) en
