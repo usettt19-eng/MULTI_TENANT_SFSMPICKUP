@@ -547,6 +547,14 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   momento) mediante un selector de fecha/hora. Ambas acciones quedan en
   `audit_logs`. La hora de salida también se agregó al PDF exportado.
 
+### Visitantes: elegir el día a ver/exportar (2026-08-29)
+- Antes la Bitácora traía **todo** el historial de visitantes sin filtro de
+  fecha (iba a crecer sin límite). Ahora hay un selector de fecha (por
+  defecto hoy, no permite elegir un día futuro) que filtra tanto la lista en
+  pantalla como el PDF exportado — el título y el nombre del archivo del PDF
+  también reflejan el día elegido (`visitantes_YYYY-MM-DD.pdf`). El filtro
+  usa los límites del día en hora local del navegador, no UTC.
+
 ### Idioma de la app de padres: default del colegio + selector propio del padre (2026-08-28)
 - Nueva columna `tenants.default_language` (`'es'`\|`'en'`, default `'es'`),
   editable por el admin desde Ajustes → Perfil Institucional (toggle

@@ -12,11 +12,21 @@ const toDatetimeLocalValue = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+// Formato que espera <input type="date">, en hora local.
+const toDateOnlyValue = (date: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
 export function VisitorsLog() {
   const { profile } = useAuth() as any;
   const [visitors, setVisitors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  // Día que se está viendo/exportando — por defecto hoy. Antes la bitácora
+  // traía TODO el historial sin filtro de fecha, lo que además de no dejar
+  // elegir un día para el PDF, iba a crecer sin límite en la pantalla.
+  const [selectedDate, setSelectedDate] = useState(() => toDateOnlyValue(new Date()));
   // Edición de la hora de salida: se puede registrar de un clic (hora
   // actual) o corregir a mano si el personal olvidó marcarla al momento.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -25,15 +35,23 @@ export function VisitorsLog() {
 
   useEffect(() => {
     fetchVisitors();
-  }, [profile?.tenant_id]);
+  }, [profile?.tenant_id, selectedDate]);
 
   const fetchVisitors = async () => {
-    if (!profile?.tenant_id) return;
+    if (!profile?.tenant_id || !selectedDate) return;
     setLoading(true);
+    // Límites del día elegido en hora LOCAL del navegador (no UTC), para que
+    // "el 13 de agosto" filtre por el día real que vivió el colegio.
+    const dayStart = new Date(`${selectedDate}T00:00:00`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
     const { data, error } = await supabase
       .from('daily_visitors')
       .select('*')
       .eq('tenant_id', profile.tenant_id)
+      .gte('check_in_time', dayStart.toISOString())
+      .lt('check_in_time', dayEnd.toISOString())
       .order('check_in_time', { ascending: false });
 
     if (error) console.error('Error fetching visitors:', error);
@@ -83,8 +101,9 @@ export function VisitorsLog() {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    doc.text('Resumen de Visitantes del Día', 14, 15);
-    
+    const dayLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString();
+    doc.text(`Resumen de Visitantes — ${dayLabel}`, 14, 15);
+
     const tableData = filteredVisitors.map(v => [
       v.visitor_name,
       v.id_number || '—',
@@ -101,7 +120,7 @@ export function VisitorsLog() {
       startY: 20,
     });
 
-    doc.save(`visitantes_${new Date().toLocaleDateString()}.pdf`);
+    doc.save(`visitantes_${selectedDate}.pdf`);
   };
 
   const filteredVisitors = visitors.filter(v =>
@@ -115,7 +134,14 @@ export function VisitorsLog() {
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-black text-slate-800">Bitácora de Visitantes</h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              max={toDateOnlyValue(new Date())}
+              onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none shadow-sm"
+            />
             <div className="relative">
               <input
                 type="text"
