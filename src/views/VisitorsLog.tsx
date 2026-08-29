@@ -132,7 +132,7 @@ export function VisitorsLog() {
     <>
       <TopNav title="SafePickup" subtitle="Registro de Visitantes" />
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <h1 className="text-2xl font-black text-slate-800">Bitácora de Visitantes</h1>
           <div className="flex flex-wrap gap-3">
             <input
@@ -142,17 +142,17 @@ export function VisitorsLog() {
               onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none shadow-sm"
             />
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-none min-w-[180px]">
               <input
                 type="text"
                 placeholder="Buscar visitante..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none w-64 shadow-sm"
+                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none w-full sm:w-64 shadow-sm"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             </div>
-            <button 
+            <button
               onClick={exportToPDF}
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-primary/90 transition-all"
             >
@@ -165,7 +165,8 @@ export function VisitorsLog() {
           <div className="py-20 text-center"><Loader2 className="w-10 h-10 text-primary animate-spin mx-auto" /></div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm min-w-[820px]">
               <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                 <tr>
                   <th className="p-4">Visitante</th>
@@ -237,6 +238,7 @@ export function VisitorsLog() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

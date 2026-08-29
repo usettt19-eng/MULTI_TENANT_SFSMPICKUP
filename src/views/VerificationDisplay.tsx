@@ -454,9 +454,9 @@ export function VerificationDisplay() {
 
       <div className="p-4 md:p-8 flex-1 animate-in fade-in duration-500 relative overflow-y-auto">
         {/* Door Selector */}
-        <div className="mb-6 bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex items-center justify-between">
+        <div className="mb-6 bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="bg-indigo-50 p-2 rounded-xl">
+            <div className="bg-indigo-50 p-2 rounded-xl shrink-0">
               <ShieldCheck className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
@@ -467,7 +467,7 @@ export function VerificationDisplay() {
           <select
             value={selectedDoorId}
             onChange={(e) => setSelectedDoorId(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 font-medium outline-none"
+            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 font-medium outline-none w-full sm:w-auto"
           >
             <option value="">{t('monitor.allDoors')}</option>
             {doors.map((door) => (
@@ -486,10 +486,10 @@ export function VerificationDisplay() {
                 <Lock className="w-32 h-32 text-red-600 animate-bounce" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-6xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white uppercase tracking-tighter drop-shadow-2xl px-4">
                   {t('monitor.restrictedExit')}
                 </h1>
-                <p className="text-xl font-bold text-white/90 uppercase tracking-[0.3em] bg-black/20 px-6 py-3 rounded-xl backdrop-blur-sm">
+                <p className="text-sm sm:text-lg lg:text-xl font-bold text-white/90 uppercase tracking-[0.2em] sm:tracking-[0.3em] bg-black/20 px-4 sm:px-6 py-3 rounded-xl backdrop-blur-sm">
                   {t('monitor.emergencyProtocolActive')}
                 </p>
               </div>

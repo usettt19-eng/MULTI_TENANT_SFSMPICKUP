@@ -105,21 +105,21 @@ export function AuditLogs() {
             </h1>
             <p className="text-sm text-slate-500 font-medium">Registro cronológico de cada acción realizada en la plataforma.</p>
           </div>
-          <div className="flex gap-4">
-             <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex gap-1">
+          <div className="flex gap-4 w-full md:w-auto">
+             <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex gap-1 overflow-x-auto">
                 {['ALL', 'PICKUP', 'WELLNESS', 'SECURITY', 'FORM'].map(f => (
-                  <button 
+                  <button
                     key={f}
                     onClick={() => setFilter(f)}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all ${filter === f ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all shrink-0 ${filter === f ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
                   >
                     {f}
                   </button>
                 ))}
              </div>
-             <button 
+             <button
                 onClick={exportToCSV}
-                className="bg-primary text-white p-4 rounded-2xl hover:bg-primary-container transition-all shadow-xl active:scale-95"
+                className="bg-primary text-white p-4 rounded-2xl hover:bg-primary-container transition-all shadow-xl active:scale-95 shrink-0"
              >
                 <Download className="w-5 h-5" />
              </button>

@@ -215,14 +215,14 @@ export function RequestsCenter() {
       <TopNav title={t('requests.title')} subtitle={t('requests.subtitle')} />
 
       <div className="p-6 max-w-5xl mx-auto w-full space-y-8 animate-in slide-in-from-bottom-4">
-        <header className="flex justify-between items-center">
+        <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
               {t('requests.inbox')} <MessageSquare className="w-8 h-8 text-indigo-600" />
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">{t('requests.processDesc')}</p>
           </div>
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 self-start">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('requests.liveMonitoring')}</span>
           </div>

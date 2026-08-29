@@ -371,21 +371,21 @@ export function StaffManagement() {
       <TopNav title="SmartPickup" subtitle="Gestión de Staff y Permisos" />
 
       <div className="p-6 max-w-7xl mx-auto space-y-8 font-body animate-in slide-in-from-bottom-5">
-        <header className="flex justify-between items-center">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
               Personal Administrativo <Shield className="w-8 h-8 text-indigo-600" />
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">Crea usuarios para enfermeras, recepcionistas y guardias.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div className="relative flex-1 min-w-[200px] md:flex-none">
               <input
                 type="text"
                 placeholder="Buscar por nombre, correo o módulo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all w-64"
+                className="pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all w-full md:w-64"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
             </div>
