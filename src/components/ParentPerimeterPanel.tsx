@@ -60,8 +60,10 @@ export function ParentPerimeterPanel() {
     }
 
     const parentIds = presences.map((p: ParentPresence) => p.parent_id);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
-    const [{ data: pickups }, { data: vehicles }] = await Promise.all([
+    const [{ data: pickups }, { data: vehicles }, { data: completedToday }] = await Promise.all([
       supabase
         .from('pickup_events')
         .select('id, parent_id, door_id, students:student_id(first_name, last_name)')
@@ -72,6 +74,17 @@ export function ParentPerimeterPanel() {
         .from('vehicles')
         .select('parent_id, license_plate, description')
         .in('parent_id', parentIds),
+      // Un padre que ya completó el ciclo de recogida hoy (confirmó que ya
+      // tiene al alumno) sale del registro visual de vehículos aunque el
+      // GPS todavía lo marque "dentro" mientras se retira — ya fue
+      // atendido, no tiene sentido seguir mostrándolo en la cola.
+      supabase
+        .from('pickup_events')
+        .select('parent_id')
+        .eq('tenant_id', profile.tenant_id)
+        .in('parent_id', parentIds)
+        .eq('status', 'completed')
+        .gte('completed_at', startOfDay.toISOString()),
     ]);
 
     const vehicleByParent = new Map((vehicles || []).map((v: any) => [v.parent_id, v]));
@@ -80,6 +93,7 @@ export function ParentPerimeterPanel() {
       if (!pickupsByParent.has(pk.parent_id)) pickupsByParent.set(pk.parent_id, []);
       pickupsByParent.get(pk.parent_id)!.push(pk);
     });
+    const completedTodaySet = new Set((completedToday || []).map((r: any) => r.parent_id));
 
     const built: PerimeterCard[] = [];
     presences.forEach((p: ParentPresence) => {
@@ -88,6 +102,9 @@ export function ParentPerimeterPanel() {
       const activePickups = pickupsByParent.get(p.parent_id) || [];
 
       if (activePickups.length === 0) {
+        // Ya completó el ciclo hoy y no le queda ninguna recogida activa:
+        // se retira del visual de vehículos, ya fue atendido.
+        if (completedTodaySet.has(p.parent_id)) return;
         built.push({
           key: p.parent_id,
           parentId: p.parent_id,
@@ -148,6 +165,15 @@ export function ParentPerimeterPanel() {
       clearInterval(tickInterval);
     };
   }, [profile?.tenant_id]);
+
+  // Mismo tratamiento de prioridad que En Tránsito: dentro de cada puerta,
+  // los 5 que llegaron primero en rojo, los 5 siguientes en naranja, el
+  // resto en verde — banda por posición, no global entre puertas.
+  const priorityClass = (index: number) => {
+    if (index < 5) return { ring: 'border-rose-300 bg-rose-50', icon: 'text-rose-600' };
+    if (index < 10) return { ring: 'border-amber-300 bg-amber-50', icon: 'text-amber-600' };
+    return { ring: 'border-emerald-300 bg-emerald-50', icon: 'text-emerald-600' };
+  };
 
   const doorName = (doorId: string | null) => doors.find(d => d.id === doorId)?.name || 'Sin puerta asignada';
 
@@ -212,14 +238,15 @@ export function ParentPerimeterPanel() {
                 <div className="flex flex-wrap gap-4">
                   {group.items.map((c, i) => {
                     const mins = minutesAgo(c.enteredAt);
+                    const priority = priorityClass(i);
                     return (
                       <div
                         key={c.key}
                         className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-500 w-[92px]"
                         style={{ animationDelay: `${i * 60}ms` }}
                       >
-                        <div className="w-14 h-14 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center">
-                          <Car className="w-7 h-7 text-indigo-500" />
+                        <div className={`w-14 h-14 rounded-2xl shadow-md border-2 flex items-center justify-center ${priority.ring}`}>
+                          <Car className={`w-7 h-7 ${priority.icon}`} />
                         </div>
                         <p className="text-[10px] font-black text-slate-700 mt-1.5 max-w-[92px] truncate text-center">
                           {c.studentName || c.parentName}

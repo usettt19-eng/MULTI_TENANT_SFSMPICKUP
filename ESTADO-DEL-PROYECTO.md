@@ -792,6 +792,16 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   nombre del padre. Cruza `parent_presence` con `pickup_events` (para
   alumno/puerta) y `vehicles` (para la placa) por `parent_id`.
 
+### Padres en el Perímetro: sacar a los ya atendidos y colorear por prioridad (2026-08-29)
+- Un padre que ya completó el ciclo de recogida hoy (`pickup_events.status =
+  'completed'`, `completed_at` de hoy) ya no aparece en el registro visual de
+  vehículos, aunque el GPS todavía lo marque "dentro" mientras se retira —
+  se consulta aparte quién completó hoy y se excluye del listado.
+- Mismo color de prioridad que En Tránsito, calculado por puerta (no
+  global): dentro de cada puerta, los 5 vehículos que llegaron primero en
+  rojo, los 5 siguientes en naranja, el resto en verde — el ícono del
+  vehículo cambia de borde/color según su posición en la fila de esa puerta.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
