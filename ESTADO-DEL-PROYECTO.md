@@ -926,6 +926,17 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
     límites de ese día en hora local, y la lista de "Reportes Guardados" se
     filtra al día elegido (`daily_reports.report_date`).
 
+### Panel "Operational Speed" del Dashboard: más accesos y color (2026-08-29)
+- El panel de accesos rápidos del Dashboard pasó de 4 a 8 botones a lo
+  largo del día: se agregaron **Bitácora de Visitantes**, **Formularios**,
+  **Solicitudes** (de reemplazo) y **En Tránsito**, junto a los ya
+  existentes (Agregar Padre, Firma de Invitado, Registro Médico, Monitor
+  Externo).
+- A pedido del usuario, se cambió el color de fondo de los 8 botones —
+  antes `bg-[#1e293b]` (negro/gris muy oscuro) — a `bg-indigo-600`
+  (`hover:bg-indigo-500`), el mismo acento que ya se usa en las pantallas
+  más nuevas (En Tránsito, Padres en el Perímetro, Salida Autónoma).
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
