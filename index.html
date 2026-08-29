@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- La app es siempre clara — sin esto, cuando el celular está en modo
+    oscuro del sistema, algunos navegadores (Chrome/Firefox en Android)
+    "oscurecen" automáticamente el contenido de páginas que no declaran su
+    esquema de color, y ese re-coloreado automático puede fallar en
+    elementos con fondo oscuro propio (como los botones bg-primary),
+    dejando el texto ilegible aunque el CSS esté bien. -->
+    <meta name="color-scheme" content="light" />
     <title>Safe_Smart_Pickup</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

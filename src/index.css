@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* La app siempre es clara — refuerza el <meta name="color-scheme"> de
+   index.html para navegadores que priorizan la propiedad CSS. Sin esto,
+   con el celular en modo oscuro del sistema, Chrome/Firefox en Android
+   pueden "auto-oscurecer" botones de fondo propio (bg-primary) y dejar el
+   texto invisible aunque el CSS declare bien el color. */
+:root {
+  color-scheme: light;
+}
+
 @theme {
   --color-primary: #003d51;
   --color-primary-container: #005670;
