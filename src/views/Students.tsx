@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
-import { 
-  Users, UserPlus, Search, Filter, X, 
-  GraduationCap, BookOpen, Layers, Camera, 
-  Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon
+import {
+  Users, UserPlus, Search, Filter, X,
+  GraduationCap, BookOpen, Layers, Camera,
+  Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon, Footprints
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export function Students() {
@@ -31,6 +32,13 @@ export function Students() {
   const [photoMode, setPhotoMode] = useState<'url' | 'upload' | 'camera'>('url');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [schoolGrades, setSchoolGrades] = useState<any[]>([]);
+  // Alumnos que el staff autoriza a reportar su propia salida (ver
+  // Check-In → "Salida Autónoma") sin que nadie los busque — ej. alumnos
+  // mayores que se van caminando o en bici. El token del QR se regenera
+  // cada vez que se vuelve a activar el permiso, para que un QR impreso
+  // deje de servir si el staff lo desactivó en algún momento.
+  const [selfDismissalAllowed, setSelfDismissalAllowed] = useState(false);
+  const [selfDismissalQrToken, setSelfDismissalQrToken] = useState<string | null>(null);
 
   const csvRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -214,7 +222,14 @@ export function Students() {
       grade,
       section,
       photo_url: finalPhotoUrl,
-      tenant_id: profile?.tenant_id
+      tenant_id: profile?.tenant_id,
+      self_dismissal_allowed: selfDismissalAllowed,
+      // Se genera un token nuevo si se activa y no tenía uno (alta nueva, o
+      // se había desactivado antes) — null si está desactivado, así un QR
+      // impreso viejo deja de ser válido.
+      self_dismissal_qr_token: selfDismissalAllowed
+        ? (selfDismissalQrToken || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`))
+        : null,
     };
 
     if (isEditing && currentStudentId) {
@@ -266,6 +281,8 @@ export function Students() {
     setGrade(student.grade || '');
     setSection(student.section || '');
     setPhotoPayload(student.photo_url || '');
+    setSelfDismissalAllowed(!!student.self_dismissal_allowed);
+    setSelfDismissalQrToken(student.self_dismissal_qr_token || null);
     setCurrentStudentId(student.id);
     setIsEditing(true);
     setShowModal(true);
@@ -303,6 +320,8 @@ export function Students() {
     setPhotoPayload('');
     setPhotoFile(null);
     setPhotoMode('url');
+    setSelfDismissalAllowed(false);
+    setSelfDismissalQrToken(null);
     setCurrentStudentId(null);
     stopCamera();
   };
@@ -504,6 +523,14 @@ export function Students() {
                                     </div>
                                   )}
                                   <span className="font-bold text-primary">{student.first_name}</span>
+                                  {student.self_dismissal_allowed && (
+                                    <span
+                                      title="Salida Autónoma permitida"
+                                      className="flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full"
+                                    >
+                                      <Footprints className="w-3 h-3" /> Autónomo
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-6 py-4 font-medium text-slate-600">{student.last_name}</td>
@@ -768,6 +795,44 @@ export function Students() {
                       placeholder="Eje. A" 
                     />
                   </div>
+                </div>
+
+                <div className="bg-surface-container-low rounded-[1.5rem] p-6 space-y-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selfDismissalAllowed}
+                      onChange={e => setSelfDismissalAllowed(e.target.checked)}
+                      className="mt-1 w-5 h-5 rounded-md accent-primary"
+                    />
+                    <span>
+                      <span className="block font-bold text-primary text-sm flex items-center gap-2">
+                        <Footprints className="w-4 h-4" /> Permitir Salida Autónoma
+                      </span>
+                      <span className="block text-xs text-slate-500 font-medium mt-0.5">
+                        El alumno puede reportar su propia salida en Check-In (QR o reconocimiento
+                        facial), sin que un padre/tutor lo recoja. Pensado para alumnos mayores que
+                        se van caminando o en bici.
+                      </span>
+                    </span>
+                  </label>
+                  {selfDismissalAllowed && isEditing && selfDismissalQrToken && (
+                    <div className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100">
+                      <QRCodeSVG
+                        value={JSON.stringify({ type: 'self_dismissal', student_id: currentStudentId, token: selfDismissalQrToken })}
+                        size={72}
+                      />
+                      <p className="text-xs text-slate-500 font-medium">
+                        Código QR de {firstName || 'este alumno'} para Salida Autónoma. Imprímelo o
+                        entrégaselo — el personal lo escanea en Check-In para registrar la salida.
+                      </p>
+                    </div>
+                  )}
+                  {selfDismissalAllowed && !isEditing && (
+                    <p className="text-xs text-slate-400 font-medium italic">
+                      El código QR se genera al guardar — vuelve a abrir la ficha de este alumno para verlo.
+                    </p>
+                  )}
                 </div>
 
                 <div className="pt-10 flex border-t border-slate-100 justify-end gap-4">

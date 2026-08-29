@@ -2,16 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
-import { 
-  QrCode, 
-  Users, 
-  MapPin, 
-  CheckCircle2, 
-  Clock, 
+import {
+  QrCode,
+  Users,
+  MapPin,
+  CheckCircle2,
+  Clock,
   AlertTriangle,
   ChevronRight,
   ShieldCheck,
-  Camera
+  Camera,
+  Footprints,
+  X
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { GoogleGenAI, Modality } from "@google/genai";
@@ -36,6 +38,16 @@ export function SmartCheckIn() {
   const [showStudentModal, setShowStudentModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Salida Autónoma: alumnos que el staff marcó como autorizados a
+  // reportar su propia salida (ver Students.tsx), sin padre/tutor que los
+  // recoja. Usa la misma cámara/lector QR que ya existe acá, pero contra
+  // otro conjunto de candidatos (alumnos, no padres) y con un paso de
+  // confirmación explícito antes de registrar nada.
+  const [faceMode, setFaceMode] = useState<'parent' | 'student'>('parent');
+  const [selfDismissalCandidate, setSelfDismissalCandidate] = useState<any | null>(null);
+  const [selfDismissalMethod, setSelfDismissalMethod] = useState<'qr' | 'face' | null>(null);
+  const [isConfirmingSelfDismissal, setIsConfirmingSelfDismissal] = useState(false);
 
   const [isQrScannerActive, setIsQrScannerActive] = useState(false);
   const html5QrCode = useRef<any>(null);
@@ -250,11 +262,74 @@ export function SmartCheckIn() {
         } else {
           setStatusMsg('Código QR inválido.');
         }
+      } else if (data.type === 'self_dismissal') {
+        setStatusMsg('Verificando código de Salida Autónoma...');
+        await stopQrScanner();
+
+        const { data: student } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', data.student_id)
+          .eq('tenant_id', staffProfile.tenant_id)
+          .eq('self_dismissal_allowed', true)
+          .maybeSingle();
+
+        if (student && student.self_dismissal_qr_token === data.token) {
+          setStatusMsg(`Código válido: ${student.first_name}`);
+          setSelfDismissalCandidate(student);
+          setSelfDismissalMethod('qr');
+        } else {
+          setStatusMsg('Código de Salida Autónoma inválido o el alumno ya no está autorizado.');
+          await supabase.from('audit_logs').insert({
+            event_type: 'SECURITY',
+            description: 'SALIDA AUTÓNOMA — QR INVÁLIDO: intento de uso de un código que no corresponde a un alumno autorizado.',
+            actor_name: 'Sistema QR',
+            metadata: { method: 'qr_code', result: 'failure', context: 'self_dismissal' },
+            tenant_id: staffProfile.tenant_id,
+          });
+        }
       }
     } catch (e) {
       console.error("Invalid QR code format", e);
       setStatusMsg('Formato de código QR no reconocido.');
     }
+  };
+
+  // Registra la salida autónoma ya confirmada por el personal: renglón
+  // propio en self_dismissal_events (no un pickup_event — no hay padre ni
+  // vehículo) + un espejo en audit_logs, bien marcado como "SALIDA
+  // AUTÓNOMA" para que no se confunda con una recogida real en la
+  // Bitácora.
+  const confirmSelfDismissal = async () => {
+    if (!selfDismissalCandidate || !selfDismissalMethod || !staffProfile?.tenant_id) return;
+    setIsConfirmingSelfDismissal(true);
+    const student = selfDismissalCandidate;
+    try {
+      await supabase.from('self_dismissal_events').insert({
+        tenant_id: staffProfile.tenant_id,
+        student_id: student.id,
+        method: selfDismissalMethod,
+        verified_by: staffProfile.id,
+      });
+
+      await logActivity(
+        'PICKUP',
+        `SALIDA AUTÓNOMA: ${student.first_name} ${student.last_name} (${student.grade || '—'}${student.section ? ' · ' + student.section : ''}) salió del colegio por su cuenta, verificado por ${selfDismissalMethod === 'qr' ? 'código QR' : 'reconocimiento facial'}.`,
+        'Salida Autónoma',
+        { student_id: student.id, method: selfDismissalMethod },
+        staffProfile.tenant_id,
+      );
+
+      playVoiceMessage(`Salida autónoma registrada para ${student.first_name}.`);
+      setStatusMsg(`Salida registrada: ${student.first_name}`);
+    } catch (e) {
+      console.error('Error registrando salida autónoma:', e);
+      setStatusMsg('Error al registrar la salida autónoma.');
+    }
+    setIsConfirmingSelfDismissal(false);
+    setSelfDismissalCandidate(null);
+    setSelfDismissalMethod(null);
+    setTimeout(() => setStatusMsg(''), 4000);
   };
 
   const handleKeyPress = (num: number | string) => {
@@ -325,6 +400,48 @@ export function SmartCheckIn() {
     setIsCameraActive(false);
   };
 
+  // Compara un rostro capturado contra una lista de candidatos con foto
+  // (padres o alumnos, según el modo) y devuelve el más parecido dentro del
+  // umbral. Compartido entre el flujo normal (padre que recoge) y el de
+  // Salida Autónoma (alumno que se identifica solo) para no duplicar la
+  // lógica de comparación en dos lugares.
+  const matchFaceAgainstPhotos = async (
+    faceapi: any,
+    detection: any,
+    candidates: { id: string; photo_url: string }[],
+  ) => {
+    let bestMatch: any = null;
+    let minDistance = 0.6; // Threshold for matching
+
+    for (const candidate of candidates) {
+      try {
+        // Muchas fotos de perfil quedaron guardadas como base64 inline
+        // (data:image/...) en vez de subirse a Storage — esas no tienen
+        // problema de CORS (no "manchan" el canvas) y no caben como query
+        // string en el proxy, así que se cargan directo. Solo las URLs
+        // http(s) reales (Supabase Storage) necesitan pasar por el proxy.
+        const isDataUrl = candidate.photo_url.startsWith('data:');
+        const imgSrc = isDataUrl
+          ? candidate.photo_url
+          : `/api/proxy-image?url=${encodeURIComponent(candidate.photo_url)}`;
+        const img = await faceapi.fetchImage(imgSrc);
+        const candidateDetection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+
+        if (candidateDetection) {
+          const distance = faceapi.euclideanDistance(detection.descriptor, candidateDetection.descriptor);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestMatch = candidate;
+          }
+        }
+      } catch (e) {
+        console.warn(`Error procesando foto de ${candidate.id}:`, e);
+      }
+    }
+
+    return bestMatch;
+  };
+
   const captureAndMatch = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     setIsProcessing(true);
@@ -334,10 +451,10 @@ export function SmartCheckIn() {
     setRecognizedParent(null);
     setRecognizedReplacementName(null);
     setLinkedStudents([]);
-    
+
     try {
       const faceapi = await import('face-api.js');
-      
+
       // Capture photo
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -345,19 +462,56 @@ export function SmartCheckIn() {
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      
+
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg');
       setCapturedPhoto(dataUrl);
 
       // Detect face in captured photo
       const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
-      
+
       if (!detection) {
         setIsProcessing(false);
         setRecognitionResult('failure');
         setStatusMsg('No se detectó ningún rostro. Intente de nuevo.');
         stopCamera();
+        return;
+      }
+
+      if (faceMode === 'student') {
+        // Alumnos autorizados a Salida Autónoma, no padres.
+        const { data: eligibleStudents, error: fetchError } = await supabase
+          .from('students')
+          .select('id, first_name, last_name, grade, section, photo_url, tenant_id')
+          .eq('tenant_id', staffProfile.tenant_id)
+          .eq('self_dismissal_allowed', true)
+          .not('photo_url', 'is', null)
+          .neq('photo_url', '');
+
+        if (fetchError || !eligibleStudents || eligibleStudents.length === 0) {
+          throw new Error('No hay alumnos con Salida Autónoma habilitada y foto para comparar.');
+        }
+
+        const bestMatch = await matchFaceAgainstPhotos(faceapi, detection, eligibleStudents);
+        setIsProcessing(false);
+        stopCamera();
+
+        if (bestMatch) {
+          setRecognitionResult('success');
+          setStatusMsg(`Alumno reconocido: ${bestMatch.first_name}`);
+          setSelfDismissalCandidate(bestMatch);
+          setSelfDismissalMethod('face');
+        } else {
+          setRecognitionResult('failure');
+          setStatusMsg('No se encontró coincidencia con alumnos de Salida Autónoma.');
+          await supabase.from('audit_logs').insert({
+            event_type: 'SECURITY',
+            description: 'SALIDA AUTÓNOMA — ROSTRO NO RECONOCIDO: no coincide con ningún alumno autorizado.',
+            actor_name: 'Sistema Facial',
+            metadata: { method: 'facial_recognition', result: 'failure', context: 'self_dismissal' },
+            tenant_id: staffProfile?.tenant_id,
+          });
+        }
         return;
       }
 
@@ -377,34 +531,7 @@ export function SmartCheckIn() {
         throw new Error("No hay padres registrados con foto para comparar.");
       }
 
-      let bestMatch = null;
-      let minDistance = 0.6; // Threshold for matching
-
-      for (const parent of parents) {
-        try {
-          // Muchas fotos de perfil quedaron guardadas como base64 inline
-          // (data:image/...) en vez de subirse a Storage — esas no tienen
-          // problema de CORS (no "manchan" el canvas) y no caben como query
-          // string en el proxy, así que se cargan directo. Solo las URLs
-          // http(s) reales (Supabase Storage) necesitan pasar por el proxy.
-          const isDataUrl = parent.photo_url.startsWith('data:');
-          const imgSrc = isDataUrl
-            ? parent.photo_url
-            : `/api/proxy-image?url=${encodeURIComponent(parent.photo_url)}`;
-          const img = await faceapi.fetchImage(imgSrc);
-          const parentDetection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-          
-          if (parentDetection) {
-            const distance = faceapi.euclideanDistance(detection.descriptor, parentDetection.descriptor);
-            if (distance < minDistance) {
-              minDistance = distance;
-              bestMatch = parent;
-            }
-          }
-        } catch (e) {
-          console.warn(`Error procesando foto del padre ${parent.id}:`, e);
-        }
-      }
+      const bestMatch = await matchFaceAgainstPhotos(faceapi, detection, parents);
 
       setIsProcessing(false);
       stopCamera();
@@ -413,7 +540,7 @@ export function SmartCheckIn() {
         setRecognitionResult('success');
         setRecognizedParent(bestMatch);
         setStatusMsg(`¡Reconocimiento exitoso: ${bestMatch.first_name}!`);
-        
+
         // Log success
         await supabase.from('audit_logs').insert({
           event_type: 'SECURITY',
@@ -431,7 +558,7 @@ export function SmartCheckIn() {
           .from('parent_students')
           .select('student_id, students(*)')
           .eq('parent_id', bestMatch.id);
-        
+
         if (studentLinks && studentLinks.length > 0) {
           setLinkedStudents(studentLinks.map(l => l.students));
           setShowStudentModal(true);
@@ -441,7 +568,7 @@ export function SmartCheckIn() {
       } else {
         setRecognitionResult('failure');
         setStatusMsg('No se encontró coincidencia con los padres registrados.');
-        
+
         // Log failure
         await supabase.from('audit_logs').insert({
           event_type: 'SECURITY',
@@ -521,7 +648,7 @@ export function SmartCheckIn() {
             </div>
             <h2 className="text-2xl font-bold text-primary mb-2">{t('checkin.scanQR')}</h2>
             <p className="text-slate-500 text-sm mb-8 max-w-xs">
-              {t('checkin.scanInstruction')}
+              {t('checkin.scanInstruction')} También acepta el código QR de Salida Autónoma del alumno.
             </p>
             
             <div className="w-full max-w-[240px] aspect-square bg-slate-100 rounded-2xl border-4 border-dashed border-slate-300 flex items-center justify-center relative overflow-hidden">
@@ -554,11 +681,30 @@ export function SmartCheckIn() {
             <div className="w-20 h-20 bg-primary/5 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
               <Camera className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold text-primary mb-2">Facial Recognition</h2>
-            <p className="text-slate-500 text-sm mb-8 max-w-xs">
-              Look at the camera to verify your identity.
+            <h2 className="text-2xl font-bold text-primary mb-2">Reconocimiento Facial</h2>
+            <p className="text-slate-500 text-sm mb-2 max-w-xs">
+              {faceMode === 'parent'
+                ? 'Mire a la cámara para verificar la identidad del padre/tutor.'
+                : 'Mire a la cámara para verificar al alumno de Salida Autónoma.'}
             </p>
-            
+
+            <div className="flex bg-slate-100 rounded-xl p-1 mb-6 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setFaceMode('parent')}
+                className={`px-4 py-2 rounded-lg transition-all ${faceMode === 'parent' ? 'bg-white shadow text-primary' : 'text-slate-500'}`}
+              >
+                Padre / Tutor
+              </button>
+              <button
+                type="button"
+                onClick={() => setFaceMode('student')}
+                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${faceMode === 'student' ? 'bg-white shadow text-primary' : 'text-slate-500'}`}
+              >
+                <Footprints className="w-3.5 h-3.5" /> Salida Autónoma
+              </button>
+            </div>
+
             <div className="w-full max-w-[240px] aspect-square bg-slate-900 rounded-2xl flex items-center justify-center relative overflow-hidden">
               {capturedPhoto ? (
                 <img src={capturedPhoto} alt="Captured" className="w-full h-full object-cover" />
@@ -660,6 +806,52 @@ export function SmartCheckIn() {
       </div>
       
       <canvas ref={canvasRef} className="hidden" />
+
+      {/* Self Dismissal Confirmation Modal */}
+      {selfDismissalCandidate && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="p-8 text-center border-b border-slate-100">
+              <div className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-4 border-4 border-indigo-100 bg-slate-100">
+                {selfDismissalCandidate.photo_url ? (
+                  <img src={selfDismissalCandidate.photo_url} alt={selfDismissalCandidate.first_name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">
+                    <Footprints className="w-10 h-10" />
+                  </div>
+                )}
+              </div>
+              <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+                <Footprints className="w-3 h-3" /> Salida Autónoma · {selfDismissalMethod === 'qr' ? 'Código QR' : 'Reconocimiento facial'}
+              </span>
+              <h3 className="text-2xl font-black text-primary">
+                {selfDismissalCandidate.first_name} {selfDismissalCandidate.last_name}
+              </h3>
+              <p className="text-slate-500 font-medium mt-1">
+                {selfDismissalCandidate.grade || '—'}{selfDismissalCandidate.section ? ` · ${selfDismissalCandidate.section}` : ''}
+              </p>
+              <p className="text-slate-400 text-sm mt-4">
+                Confirma que es {selfDismissalCandidate.first_name} quien se está retirando por su cuenta.
+              </p>
+            </div>
+            <div className="p-6 bg-slate-50 flex gap-3">
+              <button
+                onClick={() => { setSelfDismissalCandidate(null); setSelfDismissalMethod(null); }}
+                className="flex-1 py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" /> Cancelar
+              </button>
+              <button
+                onClick={confirmSelfDismissal}
+                disabled={isConfirmingSelfDismissal}
+                className="flex-1 py-4 rounded-2xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" /> {isConfirmingSelfDismissal ? 'Registrando...' : 'Confirmar Salida'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Student Selection Modal */}
       {showStudentModal && (

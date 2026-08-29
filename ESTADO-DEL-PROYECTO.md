@@ -848,6 +848,44 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   solo necesita elegir su puerta una vez en cualquiera de las tres pantallas
   para que el filtro de voz aplique en las demás.
 
+### Salida Autónoma: alumnos que reportan su propia salida (2026-08-29)
+- Nueva funcionalidad para alumnos que el colegio autoriza a irse solos
+  (ej. mayores que caminan o van en bici a casa), sin que un padre/tutor
+  los recoja — antes no había forma de registrar esa salida sin forzar un
+  `pickup_event` con un padre inventado.
+- **Designación (Students.tsx)**: el staff marca el checkbox "Permitir
+  Salida Autónoma" en la ficha del alumno (`students.self_dismissal_allowed`).
+  Al activarlo se genera un token único (`students.self_dismissal_qr_token`)
+  y se muestra su código QR (`qrcode.react`) para imprimir/entregar al
+  alumno. Al desactivarlo el token se borra, así un QR impreso viejo deja
+  de servir si se reactiva más adelante (se genera uno nuevo). La lista de
+  alumnos muestra una etiqueta "Autónomo" junto al nombre de quienes lo
+  tienen habilitado.
+- **Identificación (Check-In → `SmartCheckIn.tsx`)**: dos métodos, ambos
+  reusando la infraestructura de cámara que ya existía en esa pantalla —
+  - *Código QR*: el mismo lector QR de la pantalla (antes solo aceptaba QR
+    de reemplazo de padre) ahora también reconoce `{type: 'self_dismissal',
+    student_id, token}` y valida el token contra el alumno.
+  - *Reconocimiento facial*: se agregó un selector "Padre/Tutor" vs "Salida
+    Autónoma" en el panel de cámara — en modo alumno compara contra las
+    fotos de los alumnos con `self_dismissal_allowed = true` (no contra
+    padres). La lógica de comparación se extrajo a un helper compartido
+    (`matchFaceAgainstPhotos`) para no duplicarla entre los dos modos.
+  - Ambos métodos, antes de registrar nada, muestran un modal de
+    confirmación (foto, nombre, grado/sección) para que el personal
+    verifique visualmente que el QR/rostro corresponde al alumno correcto
+    antes de tocar "Confirmar Salida" — evita registrar una salida por un
+    mal escaneo o falso positivo facial.
+- **Registro**: se guarda en una tabla propia, `self_dismissal_events` (id,
+  tenant_id, student_id, method `'qr'`\|`'face'`, verified_by, created_at) —
+  deliberadamente **no** un `pickup_event` (no hay padre ni vehículo, y
+  mezclarlo ahí habría distorsionado las estadísticas de recogida por
+  padres). RLS: política `staff_only` igual que el resto de tablas
+  operativas. Además queda un espejo en `audit_logs` (`event_type:
+  'PICKUP'`, descripción con el prefijo "SALIDA AUTÓNOMA:") para que
+  aparezca en la Bitácora normal, claramente distinguido de una recogida
+  real.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
@@ -969,7 +1007,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `tenants` | `id, name, domain, status, subscription_plan, created_at, updated_at, default_language` | La tabla raíz del multi-tenant; `default_language` (`'es'`\|`'en'`, agregada 2026-08-28) fija el idioma de la app de padres para todo el colegio |
 | `profiles` | `id, role(user_role), first_name, last_name, phone, created_at, updated_at, pin_code, photo_url, email, additional_tutor_name, additional_tutor_phone, tenant_id` | `PRIMARY KEY (id)` — un padre con hijos en 2 colegios comparte una sola fila; `additional_tutor_name` guarda JSON con `{is_staff, permissions}` para el personal que no es `admin`/`teacher`/`guard` |
 | `staff_school_access` | `staff_id, tenant_id, role, permissions jsonb, granted_by, created_at` | `PRIMARY KEY (staff_id, tenant_id)` — acceso de un staff a un colegio ADEMÁS del suyo (`profiles.tenant_id`), sin duplicar su perfil |
-| `students` | `id, first_name, last_name, grade, section, created_at, photo_url, tenant_id` | |
+| `students` | `id, first_name, last_name, grade, section, created_at, photo_url, tenant_id, self_dismissal_allowed, self_dismissal_qr_token` | `self_dismissal_allowed`/`self_dismissal_qr_token` agregadas 2026-08-29 (ver Salida Autónoma en §3) |
 | `parent_students` | `parent_id, student_id` | Sin `id` propio, sin `tenant_id` — es la tabla puente |
 | `school_grades` | `id, name, level_order, created_at, updated_at, tenant_id, stage, exit_time, sections text[]` | `sections` agregada 2026-08-19 (antes no persistía) |
 | `exit_doors` | `id, name, description, created_at, updated_at, tenant_id` | |
@@ -994,6 +1032,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `form_responses` | `id, form_id, parent_id, student_id, answers jsonb, created_at, tenant_id` | |
 | `notifications` | `id, user_id, title, message, type, is_read, created_at, tenant_id, pickup_event_id` | `pickup_event_id` (agregada 2026-08-26, `ON DELETE SET NULL`) liga el aviso al personal con el pickup puntual que lo generó — usado por "quién fue avisado" en el Monitor Externo |
 | `audit_logs` | `id, event_type, description, actor_name, metadata jsonb, created_at, tenant_id` | Bitácora de todo evento sensible |
+| `self_dismissal_events` | `id, tenant_id, student_id, method('qr'\|'face'), verified_by, created_at` | Agregada 2026-08-29 — salidas autónomas de alumnos, separado de `pickup_events` (ver §3) |
 | `compliance_status` | `id, percentage, last_audit_at, warning_count, critical_violations, tenant_id` | |
 | `compliance_action_items` | `id, title, description, priority, status, created_at, tenant_id` | |
 | `compliance_resources` | `id, title, url, tenant_id` | |
