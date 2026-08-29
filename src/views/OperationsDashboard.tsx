@@ -390,14 +390,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     <div className="min-h-screen bg-[#f1f5f9] font-sans">
       {/* Audio Activation Banner */}
       {!audioEnabled && (
-        <div className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between animate-in slide-in-from-top duration-500">
+        <div className="bg-indigo-600 text-white px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top duration-500">
           <div className="flex items-center gap-3">
-            <Activity className="w-5 h-5 animate-pulse" />
+            <Activity className="w-5 h-5 animate-pulse shrink-0" />
             <p className="text-xs font-bold uppercase tracking-widest">El sistema de anuncios por voz requiere activación manual</p>
           </div>
-          <button 
+          <button
             onClick={enableAudio}
-            className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg"
+            className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg shrink-0"
           >
             Activar Altavoces
           </button>
@@ -405,17 +405,17 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       )}
       {/* Top Urgent Alert Banner */}
       {healthAlerts.length > 0 && (
-        <section className="bg-[#fee2e2] border-l-[6px] border-[#dc2626] p-3 mx-4 mt-4 rounded-lg flex items-center justify-between shadow-sm animate-bounce-short">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-[#dc2626]" />
-            <div className="flex items-center gap-2">
-              <span className="font-black text-[11px] text-[#dc2626] uppercase tracking-tighter">{healthAlerts.length} Urgent Health Alert{healthAlerts.length > 1 ? 's' : ''}</span>
+        <section className="bg-[#fee2e2] border-l-[6px] border-[#dc2626] p-3 mx-4 mt-4 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-bounce-short">
+          <div className="flex items-center gap-3 min-w-0">
+            <AlertTriangle className="w-5 h-5 text-[#dc2626] shrink-0" />
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="font-black text-[11px] text-[#dc2626] uppercase tracking-tighter shrink-0">{healthAlerts.length} Urgent Health Alert{healthAlerts.length > 1 ? 's' : ''}</span>
               <span className="text-[11px] text-[#7f1d1d] font-medium">{healthAlerts[0].message}</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => acknowledgeAlert(healthAlerts[0].id)}
-            className="bg-[#dc2626] text-white px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-[#b91c1c] transition-all"
+            className="bg-[#dc2626] text-white px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-[#b91c1c] transition-all shrink-0"
           >
             ACKNOWLEDGE
           </button>
@@ -463,24 +463,24 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               ) : (
                 <div className="space-y-3">
                   {pickups.map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-primary/30 transition-all group">
-                       <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center font-black text-primary border border-slate-200">
+                    <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-primary/30 transition-all group">
+                       <div className="flex items-center gap-4 min-w-0">
+                          <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center font-black text-primary border border-slate-200 shrink-0">
                             {item.student?.first_name?.[0]}
                           </div>
-                          <div>
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.student?.first_name} {item.student?.last_name}</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{item.student?.grade} • {t('dashboard.pickedUpBy')}: {item.parent?.first_name}</p>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{item.student?.grade} • {t('dashboard.pickedUpBy')}: {item.parent?.first_name}</p>
                           </div>
                        </div>
-                       <div className="flex items-center gap-6">
-                          <div className="text-right mr-4">
+                       <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">
+                          <div className="text-right sm:mr-4">
                             <span className="block text-[8px] font-black text-slate-400 uppercase">PIN</span>
                             <span className="text-lg font-black text-slate-900 tracking-widest">{item.parent?.pin_code}</span>
                           </div>
                           <button
                             onClick={() => updateStatus(item.id, 'released')}
-                            className="bg-[#1e293b] text-white px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95 shadow-lg"
+                            className="bg-[#1e293b] text-white px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95 shadow-lg shrink-0"
                           >
                             {t('dashboard.confirmRelease')}
                           </button>
