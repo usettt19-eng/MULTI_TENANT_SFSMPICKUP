@@ -113,7 +113,8 @@ export function TransitMonitor() {
   // Prioridad por orden de espera: sin released_at en la base, announced_at
   // es la mejor señal disponible de cuánto lleva esperando cada familia.
   // Los primeros 5 en rojo (más urgente), los siguientes 5 en naranja, el
-  // resto en verde — es una banda por posición, no por tiempo transcurrido.
+  // resto en verde — es una banda por posición DENTRO DE CADA PUERTA (no
+  // global), ya que cada puerta tiene su propia fila de espera.
   const priorityClass = (index: number) => {
     if (index < 5) return { badge: 'bg-rose-500', card: 'border-rose-200 bg-rose-50/40' };
     if (index < 10) return { badge: 'bg-amber-500', card: 'border-amber-200 bg-amber-50/40' };
@@ -208,8 +209,8 @@ export function TransitMonitor() {
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {group.items.map((pickup: any) => {
-                  const globalIndex = pickups.findIndex(p => p.id === pickup.id);
-                  const priority = priorityClass(globalIndex);
+                  const doorIndex = group.items.findIndex(p => p.id === pickup.id);
+                  const priority = priorityClass(doorIndex);
                   const replacementName = getReplacementNameFromNotes(pickup.notes);
                   const isReplacement = !!replacementName;
                   const adultName = isReplacement
