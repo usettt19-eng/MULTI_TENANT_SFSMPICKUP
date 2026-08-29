@@ -394,6 +394,9 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               <h1 className="text-xl font-black text-slate-800">{t('dashboard.title')}</h1>
             </div>
           )}
+
+          <ParentPerimeterPanel />
+
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
               <div className="flex items-center gap-2">
@@ -524,8 +527,6 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               </div>
             </div>
           </div>
-
-          <ParentPerimeterPanel />
         </div>
 
         {/* Right Column (Speed/Ratios/Activity) */}
