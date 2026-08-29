@@ -1495,8 +1495,75 @@ app.post(
 
 // ════════════════════════════════════════════════════════════════════════════
 
+// Cierre automático de recogidas "en tránsito": si pasan más de 20 minutos
+// desde que el padre anunció su llegada (announced_at) sin que confirme el
+// encuentro con el alumno, se asume que ya lo tiene en el vehículo y se
+// cierra el ciclo solo. Esto complementa el auto-cierre por geocerca que ya
+// existe en el cliente (ParentDashboard.tsx sale del perímetro → confirma a
+// los 20s) para el caso en que el padre no tenga la app abierta o el GPS
+// desactivado. Corre en el backend (siempre encendido en Docker Compose)
+// porque no puede depender de que el navegador/app del padre siga activo.
+const AUTO_COMPLETE_STALE_MS = 20 * 60 * 1000; // 20 min, igual al umbral de "obsoleto" del frontend (ver src/lib/pickupHelpers.ts)
+
+async function autoCompleteStalePickups() {
+  const cutoffIso = new Date(Date.now() - AUTO_COMPLETE_STALE_MS).toISOString();
+  const {data: stale, error} = await admin
+    .from('pickup_events')
+    .select('id, tenant_id, parent_id, students:student_id(first_name, last_name)')
+    .eq('status', 'released')
+    .lt('announced_at', cutoffIso);
+
+  if (error) {
+    console.error('Error buscando recogidas en tránsito vencidas:', error);
+    return;
+  }
+  if (!stale || stale.length === 0) return;
+
+  for (const pickup of stale as any[]) {
+    // El filtro por status: 'released' evita pisar una confirmación real
+    // del padre que haya llegado justo entre el select y este update.
+    const {error: updateError} = await admin
+      .from('pickup_events')
+      .update({status: 'completed', completed_at: new Date().toISOString()})
+      .eq('id', pickup.id)
+      .eq('status', 'released');
+
+    if (updateError) {
+      console.error(`Error auto-completando recogida ${pickup.id}:`, updateError);
+      continue;
+    }
+
+    const studentName = pickup.students
+      ? `${pickup.students.first_name ?? ''} ${pickup.students.last_name ?? ''}`.trim()
+      : 'el alumno';
+
+    await admin.from('audit_logs').insert({
+      event_type: 'PICKUP',
+      description: `CICLO COMPLETADO (automático por tiempo): pasaron más de 20 minutos desde que se anunció la llegada para ${studentName} sin confirmación del padre.`,
+      actor_name: 'Sistema',
+      metadata: {pickup_id: pickup.id, auto_confirmed: true, reason: 'stale_timeout'},
+      tenant_id: pickup.tenant_id,
+    });
+
+    if (pickup.parent_id) {
+      await admin.from('notifications').insert({
+        user_id: pickup.parent_id,
+        title: 'Recogida cerrada automáticamente',
+        message: `Se cerró automáticamente el ciclo de recogida de ${studentName} porque pasaron más de 20 minutos sin confirmar. Si aún no lo tienes contigo, contacta al colegio.`,
+        type: 'info',
+        tenant_id: pickup.tenant_id,
+      });
+    }
+  }
+}
+
+setInterval(() => {
+  autoCompleteStalePickups().catch((err) => console.error('Error en autoCompleteStalePickups:', err));
+}, 60_000);
+
 app.use('/api', (_req, res) => fail(res, 404, 'Endpoint no encontrado.'));
 
 app.listen(PORT, () => {
   console.log(`API de Safe Smart Pickup escuchando en el puerto ${PORT}`);
+  autoCompleteStalePickups().catch((err) => console.error('Error en autoCompleteStalePickups:', err));
 });
