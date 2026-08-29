@@ -1,16 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
-import { Loader2, Search, User, Printer } from 'lucide-react';
+import { Loader2, Search, User, Printer, LogOut, Pencil, Check, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// Formato que espera <input type="datetime-local">, en hora local (no UTC).
+const toDatetimeLocalValue = (date: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 export function VisitorsLog() {
   const { profile } = useAuth() as any;
   const [visitors, setVisitors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  // Edición de la hora de salida: se puede registrar de un clic (hora
+  // actual) o corregir a mano si el personal olvidó marcarla al momento.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchVisitors();
@@ -30,6 +41,46 @@ export function VisitorsLog() {
     setLoading(false);
   };
 
+  const saveCheckOutTime = async (visitorId: string, isoValue: string, visitorName: string) => {
+    setSavingId(visitorId);
+    const { error } = await supabase
+      .from('daily_visitors')
+      .update({ check_out_time: isoValue })
+      .eq('id', visitorId);
+
+    if (error) {
+      console.error('Error registrando hora de salida:', error);
+      alert('No se pudo guardar la hora de salida.');
+    } else {
+      setVisitors(prev => prev.map(v => (v.id === visitorId ? { ...v, check_out_time: isoValue } : v)));
+      await logActivity(
+        'VISITOR',
+        `Hora de salida registrada para el visitante ${visitorName}.`,
+        profile?.first_name,
+        { visitor_id: visitorId },
+        profile?.tenant_id
+      );
+    }
+    setSavingId(null);
+    setEditingId(null);
+  };
+
+  // Un clic registra "ahora" como hora de salida — el caso normal, cuando el
+  // visitante se está retirando en ese momento.
+  const handleRegisterCheckoutNow = (v: any) => {
+    saveCheckOutTime(v.id, new Date().toISOString(), v.visitor_name);
+  };
+
+  const handleStartEdit = (v: any) => {
+    setEditingId(v.id);
+    setEditValue(toDatetimeLocalValue(v.check_out_time ? new Date(v.check_out_time) : new Date()));
+  };
+
+  const handleSaveEdit = (v: any) => {
+    if (!editValue) return;
+    saveCheckOutTime(v.id, new Date(editValue).toISOString(), v.visitor_name);
+  };
+
   const exportToPDF = () => {
     const doc = new jsPDF();
     doc.text('Resumen de Visitantes del Día', 14, 15);
@@ -40,11 +91,12 @@ export function VisitorsLog() {
       v.company || '—',
       v.visiting_whom,
       v.reason,
-      new Date(v.check_in_time).toLocaleString()
+      new Date(v.check_in_time).toLocaleString(),
+      v.check_out_time ? new Date(v.check_out_time).toLocaleString() : '—'
     ]);
 
     autoTable(doc, {
-      head: [['Visitante', 'Identificación', 'Empresa', 'Visita a', 'Motivo', 'Hora de Entrada']],
+      head: [['Visitante', 'Identificación', 'Empresa', 'Visita a', 'Motivo', 'Hora de Entrada', 'Hora de Salida']],
       body: tableData,
       startY: 20,
     });
@@ -96,6 +148,7 @@ export function VisitorsLog() {
                   <th className="p-4">Visita a</th>
                   <th className="p-4">Motivo</th>
                   <th className="p-4">Hora de Entrada</th>
+                  <th className="p-4">Hora de Salida</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -107,6 +160,53 @@ export function VisitorsLog() {
                     <td className="p-4 text-slate-600">{v.visiting_whom}</td>
                     <td className="p-4 text-slate-500">{v.reason}</td>
                     <td className="p-4 text-slate-500 font-mono">{new Date(v.check_in_time).toLocaleString()}</td>
+                    <td className="p-4 text-slate-500 font-mono">
+                      {editingId === v.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="datetime-local"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none"
+                          />
+                          <button
+                            onClick={() => handleSaveEdit(v)}
+                            disabled={savingId === v.id}
+                            className="p-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
+                            title="Guardar"
+                          >
+                            {savingId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            title="Cancelar"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : v.check_out_time ? (
+                        <div className="flex items-center gap-2">
+                          <span>{new Date(v.check_out_time).toLocaleString()}</span>
+                          <button
+                            onClick={() => handleStartEdit(v)}
+                            className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+                            title="Corregir hora de salida"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleRegisterCheckoutNow(v)}
+                          disabled={savingId === v.id}
+                          className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
+                        >
+                          {savingId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                          Registrar salida
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

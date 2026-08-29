@@ -539,6 +539,14 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   empresa de origen (`daily_visitors.id_number`, `daily_visitors.company`),
   visibles en la bitácora y en el PDF exportado.
 
+### Visitantes: hora de salida editable (2026-08-29)
+- Nueva columna `daily_visitors.check_out_time` (nullable). En la Bitácora,
+  cada visitante sin salida registrada muestra un botón "Registrar salida"
+  que guarda la hora actual con un clic; una vez registrada, se puede
+  corregir con el ícono de lápiz (por si el personal olvidó marcarla al
+  momento) mediante un selector de fecha/hora. Ambas acciones quedan en
+  `audit_logs`. La hora de salida también se agregó al PDF exportado.
+
 ### Idioma de la app de padres: default del colegio + selector propio del padre (2026-08-28)
 - Nueva columna `tenants.default_language` (`'es'`\|`'en'`, default `'es'`),
   editable por el admin desde Ajustes → Perfil Institucional (toggle
@@ -902,7 +910,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `medication_schedule` | `id, student_id, medication_name, dosage, scheduled_time, status, administered_by, administered_at, notes, created_at, frequency, is_critical, critical_reason, tenant_id` | Trigger `create_critical_alert_for_med_schedule` genera alerta automática |
 | `student_incidents` | `id, student_id, type, description, reported_by, created_at, tenant_id` | Sin columna `evolution` — se agrega al `description` con timestamp desde el backend |
 | `wellness_logs` | `id, student_id, type, value, logged_by, created_at, tenant_id` | |
-| `daily_visitors` | `id, visitor_name, id_number, company, visiting_whom, reason, check_in_time, tenant_id` | `id_number`/`company` agregadas 2026-08-26 |
+| `daily_visitors` | `id, visitor_name, id_number, company, visiting_whom, reason, check_in_time, check_out_time, tenant_id` | `id_number`/`company` agregadas 2026-08-26; `check_out_time` agregada 2026-08-29 |
 | `camera_detections` | `id, door_id, image_url, detected_at, tenant_id` | El `INSERT` anónimo se cerró; falta endpoint propio para el webhook de cámaras (pendiente, ver `DISENO-Y-AVANCE.md` §6) |
 | `forms` | `id, title, description, is_active, created_at, updated_at, target_grades text[], target_sections text[], form_type, tenant_id` | `form_type` (`'authorization'`\|`'announcement'`) y `target_sections` agregadas 2026-08-26 |
 | `form_questions` | `id, form_id, question_text, question_type, order, created_at, tenant_id` | |
