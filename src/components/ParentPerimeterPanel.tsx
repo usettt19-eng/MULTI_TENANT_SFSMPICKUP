@@ -21,6 +21,7 @@ interface PerimeterCard {
   doorId: string | null;
   parentName: string;
   studentName: string | null;
+  studentGradeSection: string | null;
   vehicle: { license_plate: string; description: string | null } | null;
   enteredAt: string | null;
 }
@@ -66,7 +67,7 @@ export function ParentPerimeterPanel() {
     const [{ data: pickups }, { data: vehicles }, { data: completedToday }] = await Promise.all([
       supabase
         .from('pickup_events')
-        .select('id, parent_id, door_id, students:student_id(first_name, last_name)')
+        .select('id, parent_id, door_id, students:student_id(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
         .in('parent_id', parentIds)
         .in('status', ['announced', 'in_queue', 'released']),
@@ -111,18 +112,26 @@ export function ParentPerimeterPanel() {
           doorId: null,
           parentName,
           studentName: null,
+          studentGradeSection: null,
           vehicle,
           enteredAt: p.entered_at,
         });
       } else {
         activePickups.forEach(pk => {
           const studentName = `${pk.students?.first_name || ''} ${pk.students?.last_name || ''}`.trim() || null;
+          // Puede haber más de un alumno con el mismo nombre en el colegio
+          // — el grado y la sección son los que dicen de qué salón es cada
+          // uno, para no confundirlos.
+          const grade = pk.students?.grade || '';
+          const section = pk.students?.section || '';
+          const studentGradeSection = grade || section ? `${grade}${grade && section ? ' · ' : ''}${section}` : null;
           built.push({
             key: pk.id,
             parentId: p.parent_id,
             doorId: pk.door_id,
             parentName,
             studentName,
+            studentGradeSection,
             vehicle,
             enteredAt: p.entered_at,
           });
@@ -251,6 +260,9 @@ export function ParentPerimeterPanel() {
                         <p className="text-[10px] font-black text-slate-700 mt-1.5 max-w-[92px] truncate text-center">
                           {c.studentName || c.parentName}
                         </p>
+                        {c.studentGradeSection && (
+                          <p className="text-[9px] font-black text-indigo-400 max-w-[92px] truncate text-center">{c.studentGradeSection}</p>
+                        )}
                         {c.studentName && (
                           <p className="text-[9px] font-bold text-slate-400 max-w-[92px] truncate text-center">{c.parentName}</p>
                         )}
