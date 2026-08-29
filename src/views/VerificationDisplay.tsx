@@ -364,17 +364,6 @@ export function VerificationDisplay() {
 
         if (updateError) throw updateError;
 
-        // 1b. Anuncio por voz: el alumno ya fue autorizado a salir del
-        // salón y va camino al vehículo — para que el padre lo escuche por
-        // las bocinas y esté atento. Recuerda que esto NO reemplaza el
-        // botón de confirmación del padre en su app cuando el niño ya está
-        // en el vehículo; ese paso sigue siendo obligatorio para cerrar el
-        // ciclo (status: 'completed').
-        const gradeName = currentPickup.students?.grade || '—';
-        const sectionName = currentPickup.students?.section || '—';
-        playGlobalVoiceMessage(`Atención, ${studentName || 'el alumno'}, grado ${gradeName}, sección ${sectionName}, ha sido autorizado para salir del salón y va en camino al vehículo.`, 'es');
-        playGlobalVoiceMessage(`Attention, ${studentName || 'the student'}, grade ${gradeName}, section ${sectionName}, has been authorized to leave the classroom and is on the way to the vehicle.`, 'en');
-
         // 2. Audit Log
         await supabase.from('audit_logs').insert({
           event_type: 'SECURITY',

@@ -53,6 +53,9 @@ export function ParentDashboard() {
   const [distance, setDistance] = useState<number | null>(null);
   const [isInside, setIsInside] = useState(false);
   const [status, setStatus] = useState<'idle' | 'announced' | 'pickup_active' | 'released'>('idle');
+  // Evita repetir el anuncio de voz de "autorizado" en cada poll/refresh —
+  // solo debe sonar una vez cuando el estado pasa a 'released'.
+  const releasedAnnouncedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
@@ -707,6 +710,31 @@ export function ParentDashboard() {
     setPendingForms(matchingForms.filter(f => !answeredIds.includes(f.id)));
   };
 
+  // Anuncio de voz DENTRO de la app del padre (no en el monitor externo del
+  // colegio): cuando el maestro autoriza la salida, se lee en voz alta que
+  // el alumno va camino al vehículo y se recuerda pulsar el botón de
+  // confirmación una vez que el padre ya lo tenga con él. Usa el
+  // speechSynthesis del propio navegador del padre — no el audioManager
+  // compartido del kiosco, que requiere activarlo con un clic previo.
+  const speakReleasedAnnouncement = (studentFirstName: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    try {
+      const name = studentFirstName || (language === 'en' ? 'your child' : 'tu hijo');
+      const esText = `Atención, ${name} fue autorizado para salir del salón y va en camino al vehículo. No olvides pulsar el botón de confirmación cuando ya lo tengas contigo.`;
+      const enText = `Attention, ${name} has been authorized to leave the classroom and is on the way to the vehicle. Don't forget to tap the confirmation button once you have them with you.`;
+      const esUtterance = new SpeechSynthesisUtterance(esText);
+      esUtterance.lang = 'es-ES';
+      esUtterance.rate = 0.9;
+      const enUtterance = new SpeechSynthesisUtterance(enText);
+      enUtterance.lang = 'en-US';
+      enUtterance.rate = 0.9;
+      esUtterance.onend = () => window.speechSynthesis.speak(enUtterance);
+      window.speechSynthesis.speak(esUtterance);
+    } catch (e) {
+      console.error('No se pudo anunciar la autorización por voz:', e);
+    }
+  };
+
   const checkActivePickups = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
@@ -718,13 +746,19 @@ export function ParentDashboard() {
 
     if (data && data.length > 0) {
       // Prioritize 'released' status: if any child is released, show the released UI
-      const hasReleased = data.some(event => event.status === 'released');
-      if (hasReleased) {
+      const releasedEvent = data.find(event => event.status === 'released');
+      if (releasedEvent) {
+        if (!releasedAnnouncedRef.current) {
+          releasedAnnouncedRef.current = true;
+          speakReleasedAnnouncement(releasedEvent.student?.first_name);
+        }
         setStatus('released');
       } else {
+        releasedAnnouncedRef.current = false;
         setStatus('pickup_active');
       }
     } else {
+      releasedAnnouncedRef.current = false;
       setStatus('idle');
     }
   };
