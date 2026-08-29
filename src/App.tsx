@@ -149,11 +149,10 @@ export default function App() {
 
   if (isStaff) {
     // If current view is not permitted, redirect to the first permitted view or a fallback.
-    // 'transit' es de solo lectura y visible para cualquier staff (ver
-    // Sidebar.tsx alwaysVisibleToStaff) — sin esta excepción, un staff sin
-    // ningún permiso relacionado quedaría rebotado de la pantalla al
-    // navegar ahí, igual que pasaba antes con 'settings'.
-    if (!permissions.includes(currentView) && currentView !== 'settings' && currentView !== 'transit') {
+    // 'settings', 'transit', 'staff' y 'statistics' ya no tienen excepción
+    // especial — quedan a discreción del administrador como cualquier otro
+    // módulo (ver AVAILABLE_MODULES en StaffManagement.tsx).
+    if (!permissions.includes(currentView)) {
       if (permissions.length > 0) {
         setCurrentView(permissions[0]);
       } else {

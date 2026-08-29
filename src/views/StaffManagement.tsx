@@ -17,7 +17,17 @@ const AVAILABLE_MODULES = [
   { id: 'requests', label: 'Solicitudes de Reemplazo' },
   { id: 'logs', label: 'Bitácora' },
   { id: 'compliance', label: 'Cumplimiento' },
-  { id: 'external', label: 'Monitor Externo' }
+  { id: 'external', label: 'Monitor Externo' },
+  { id: 'visitors', label: 'Bitácora de Visitantes' },
+  { id: 'transit', label: 'En Tránsito' },
+  { id: 'settings', label: 'Ajustes del Colegio' },
+  // Estos dos otorgan control sobre otros miembros del personal (incluida
+  // la asignación de permisos) y sobre las estadísticas del colegio — a
+  // diferencia del resto, no son solo acceso a una pantalla operativa.
+  // Quedan disponibles para que el administrador decida caso por caso, pero
+  // conviene otorgarlos con cautela.
+  { id: 'staff', label: 'Gestión de Personal' },
+  { id: 'statistics', label: 'Estadísticas' },
 ];
 
 export function StaffManagement() {

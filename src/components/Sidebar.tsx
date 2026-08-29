@@ -134,12 +134,12 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     { id: 'logs', label: t('nav.logs'), icon: History },
     { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
     { id: 'external', label: t('nav.external'), icon: Monitor },
-    // Pedido explícito: visible para cualquier miembro del personal, sin
-    // depender del permiso por módulo que sí exige el resto de pantallas de
-    // staff — es una pantalla de solo lectura, no expone ninguna acción.
-    { id: 'transit', label: t('nav.transit'), icon: Footprints, alwaysVisibleToStaff: true },
-    { id: 'staff', label: t('nav.staff'), icon: UserCog, adminOnly: true },
-    { id: 'statistics', label: t('nav.statistics'), icon: BarChart3, adminOnly: true },
+    { id: 'transit', label: t('nav.transit'), icon: Footprints },
+    // 'staff' y 'statistics' ya no son adminOnly: quedan a discreción del
+    // administrador, que decide desde Gestión de Personal si otorgárselos a
+    // cada miembro del staff, igual que cualquier otro módulo.
+    { id: 'staff', label: t('nav.staff'), icon: UserCog },
+    { id: 'statistics', label: t('nav.statistics'), icon: BarChart3 },
   ];
 
   let isStaff = false;
@@ -157,11 +157,15 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
 
   const navItems = allNavItems.filter(item => {
     if (profile?.role === 'admin' && !isStaff) return true;
-    if (item.adminOnly) return false;
-    if ((item as any).alwaysVisibleToStaff) return true;
     if (isStaff) return permissions.includes(item.id);
     return true; // Fallback
   });
+
+  // El botón de Ajustes vive fuera de allNavItems (es parte del pie del
+  // sidebar, no de la lista con ícono), pero sigue el mismo criterio: el
+  // administrador real siempre lo ve, y un miembro del staff solo si tiene
+  // el permiso 'settings' otorgado — igual que cualquier otro módulo.
+  const canSeeSettingsButton = profile?.role === 'admin' && (!isStaff || permissions.includes('settings'));
 
   return (
     <>
@@ -224,8 +228,8 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
           {lockdownActive ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
           {lockdownActive ? t('sidebar.lockdownActive') : t('sidebar.lockdownInactive')}
         </button>
-        {profile?.role === 'admin' && (
-          <button 
+        {canSeeSettingsButton && (
+          <button
             onClick={() => {
               setCurrentView('settings');
               onClose();
