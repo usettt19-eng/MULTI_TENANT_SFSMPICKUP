@@ -896,6 +896,31 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   del día, actualizado vía suscripción a `self_dismissal_events` + el mismo
   poll de 10s del resto del Dashboard.
 
+### Reporte del Día (2026-08-29)
+- Nuevo botón "Reporte del Día" en el encabezado del Dashboard
+  (`OperationsDashboard.tsx`) que abre `DailyReportModal.tsx`:
+  - **Vista preliminar**: cifras del día en cuadrícula (recogidas
+    anunciadas/completadas, confirmadas sin GPS, tiempo promedio de
+    recogida, Salidas Autónomas, visitantes, solicitudes de reemplazo por
+    estado, incidentes, alertas de salud, respuestas a formularios) antes
+    de generar nada.
+  - **PDF con anexos**: al confirmar, genera un PDF (`jsPDF` +
+    `jspdf-autotable`, mismo patrón que el PDF de Visitantes) con el
+    resumen y 5 anexos de detalle: recogidas, salidas autónomas,
+    visitantes, solicitudes de reemplazo e incidentes del día.
+  - **Se guarda en el sistema**: el PDF se sube a un bucket de Storage
+    privado nuevo, `daily-reports` (a diferencia de `avatars`/`logos`/
+    `downloads`, que son públicos — un reporte trae datos agregados de
+    todo el colegio, no algo que cualquier padre debería poder ver), en
+    `{tenant_id}/{fecha}/{uuid}.pdf`. Políticas de Storage con
+    `is_staff_of()` (no solo coincidencia de `tenant_id` como en
+    `avatars`/`detections`) para SELECT/INSERT/DELETE. Metadata + cifras
+    quedan en la tabla nueva `daily_reports` (RLS `staff_only`), para poder
+    listar y volver a descargar reportes ya generados sin regenerarlos
+    (URLs firmadas de 60s vía `createSignedUrl`, el bucket no es público).
+  - Además de guardarse, el PDF se descarga localmente al generarlo, y
+    queda un registro en `audit_logs`.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la
@@ -1043,6 +1068,7 @@ que deduce el colegio del alumno) y tienen RLS activado.
 | `notifications` | `id, user_id, title, message, type, is_read, created_at, tenant_id, pickup_event_id` | `pickup_event_id` (agregada 2026-08-26, `ON DELETE SET NULL`) liga el aviso al personal con el pickup puntual que lo generó — usado por "quién fue avisado" en el Monitor Externo |
 | `audit_logs` | `id, event_type, description, actor_name, metadata jsonb, created_at, tenant_id` | Bitácora de todo evento sensible |
 | `self_dismissal_events` | `id, tenant_id, student_id, method('qr'\|'face'), verified_by, created_at` | Agregada 2026-08-29 — salidas autónomas de alumnos, separado de `pickup_events` (ver §3) |
+| `daily_reports` | `id, tenant_id, report_date, generated_by, file_path, summary jsonb, created_at` | Agregada 2026-08-29 — metadata de los PDFs de Reporte del Día guardados en el bucket privado `daily-reports` (ver §3) |
 | `compliance_status` | `id, percentage, last_audit_at, warning_count, critical_violations, tenant_id` | |
 | `compliance_action_items` | `id, title, description, priority, status, created_at, tenant_id` | |
 | `compliance_resources` | `id, title, url, tenant_id` | |

@@ -10,11 +10,13 @@ import {
   BriefcaseMedical, RefreshCw, Activity, Video, Monitor,
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
-  ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode
+  ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode,
+  FileBarChart
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
+import { DailyReportModal } from '../components/DailyReportModal';
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
   const { t } = useLanguage();
@@ -41,6 +43,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // hay padre ni vehículo), así que se muestra en su propio panel para no
   // mezclarla con las recogidas normales.
   const [selfDismissalsToday, setSelfDismissalsToday] = useState<any[]>([]);
+  const [showDailyReportModal, setShowDailyReportModal] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -423,12 +426,20 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         
         {/* Left Column (Queue) */}
         <div className="col-span-12 lg:col-span-8 space-y-5">
-          {logoUrl && (
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-              <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {logoUrl && <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />}
               <h1 className="text-xl font-black text-slate-800">{t('dashboard.title')}</h1>
             </div>
-          )}
+            <button
+              onClick={() => setShowDailyReportModal(true)}
+              className="flex items-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shrink-0"
+            >
+              <FileBarChart className="w-4 h-4" /> Reporte del Día
+            </button>
+          </div>
+
+          {showDailyReportModal && <DailyReportModal onClose={() => setShowDailyReportModal(false)} />}
 
           <ParentPerimeterPanel />
 
