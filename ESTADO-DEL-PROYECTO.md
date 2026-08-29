@@ -856,11 +856,14 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 - **Designación (Students.tsx)**: el staff marca el checkbox "Permitir
   Salida Autónoma" en la ficha del alumno (`students.self_dismissal_allowed`).
   Al activarlo se genera un token único (`students.self_dismissal_qr_token`)
-  y se muestra su código QR (`qrcode.react`) para imprimir/entregar al
-  alumno. Al desactivarlo el token se borra, así un QR impreso viejo deja
-  de servir si se reactiva más adelante (se genera uno nuevo). La lista de
-  alumnos muestra una etiqueta "Autónomo" junto al nombre de quienes lo
-  tienen habilitado.
+  y se muestra su código QR (`qrcode.react`). Al desactivarlo el token se
+  borra, así un QR impreso viejo deja de servir si se reactiva más adelante
+  (se genera uno nuevo). La lista de alumnos muestra una etiqueta "Autónomo"
+  junto al nombre de quienes lo tienen habilitado. Al tocar el QR se abre un
+  modal con el código en grande (`QRCodeCanvas`, no el `<svg>` chico de la
+  vista previa — así se le puede sacar un PNG con `canvas.toDataURL()`) con
+  botones para **descargarlo** (PNG) o **imprimirlo** (abre una ventana
+  nueva solo con el código y dispara `window.print()`).
 - **Identificación (Check-In → `SmartCheckIn.tsx`)**: dos métodos, ambos
   reusando la infraestructura de cámara que ya existía en esa pantalla —
   - *Código QR*: el mismo lector QR de la pantalla (antes solo aceptaba QR

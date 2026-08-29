@@ -5,9 +5,10 @@ import { TopNav } from '../components/TopNav';
 import {
   Users, UserPlus, Search, Filter, X,
   GraduationCap, BookOpen, Layers, Camera,
-  Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon, Footprints
+  Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon, Footprints,
+  Printer, Maximize2
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export function Students() {
@@ -39,6 +40,8 @@ export function Students() {
   // deje de servir si el staff lo desactivó en algún momento.
   const [selfDismissalAllowed, setSelfDismissalAllowed] = useState(false);
   const [selfDismissalQrToken, setSelfDismissalQrToken] = useState<string | null>(null);
+  const [showQrPreviewModal, setShowQrPreviewModal] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const csvRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -310,6 +313,41 @@ export function Students() {
     }
   };
 
+  // Exportar/imprimir el QR de Salida Autónoma en grande: se renderiza en
+  // un <canvas> (QRCodeCanvas, no el <svg> chico de la vista previa) para
+  // poder sacarle un PNG con toDataURL — el SVG no da eso directo.
+  const downloadQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `qr-salida-autonoma-${firstName || 'alumno'}-${lastName || ''}`.trim().replace(/\s+/g, '-').toLowerCase() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  const printQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head><title>Código QR — ${firstName} ${lastName}</title></head>
+        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;">
+          <img src="${dataUrl}" style="width:320px;height:320px;" />
+          <p style="font-weight:bold;margin-top:16px;">${firstName} ${lastName}</p>
+          <p style="color:#666;">Código de Salida Autónoma</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+  };
+
   const closeAndResetModal = () => {
     setShowModal(false);
     setIsEditing(false);
@@ -322,6 +360,7 @@ export function Students() {
     setPhotoMode('url');
     setSelfDismissalAllowed(false);
     setSelfDismissalQrToken(null);
+    setShowQrPreviewModal(false);
     setCurrentStudentId(null);
     stopCamera();
   };
@@ -818,13 +857,24 @@ export function Students() {
                   </label>
                   {selfDismissalAllowed && isEditing && selfDismissalQrToken && (
                     <div className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100">
-                      <QRCodeSVG
-                        value={JSON.stringify({ type: 'self_dismissal', student_id: currentStudentId, token: selfDismissalQrToken })}
-                        size={72}
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowQrPreviewModal(true)}
+                        className="relative shrink-0 group/qr"
+                        title="Agrandar, exportar o imprimir"
+                      >
+                        <QRCodeSVG
+                          value={JSON.stringify({ type: 'self_dismissal', student_id: currentStudentId, token: selfDismissalQrToken })}
+                          size={72}
+                        />
+                        <span className="absolute inset-0 bg-black/0 group-hover/qr:bg-black/40 rounded-lg flex items-center justify-center transition-colors">
+                          <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover/qr:opacity-100 transition-opacity" />
+                        </span>
+                      </button>
                       <p className="text-xs text-slate-500 font-medium">
-                        Código QR de {firstName || 'este alumno'} para Salida Autónoma. Imprímelo o
-                        entrégaselo — el personal lo escanea en Check-In para registrar la salida.
+                        Código QR de {firstName || 'este alumno'} para Salida Autónoma. Toca el código
+                        para agrandarlo, imprimirlo o descargarlo — el personal lo escanea en Check-In
+                        para registrar la salida.
                       </p>
                     </div>
                   )}
@@ -854,6 +904,49 @@ export function Students() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Preview / Export / Print Modal */}
+      {showQrPreviewModal && selfDismissalQrToken && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="p-8 text-center border-b border-slate-100 space-y-4">
+              <h3 className="text-lg font-black text-primary flex items-center justify-center gap-2">
+                <Footprints className="w-5 h-5" /> Código de Salida Autónoma
+              </h3>
+              <p className="text-sm text-slate-500 font-medium">{firstName} {lastName}</p>
+              <div className="flex justify-center bg-slate-50 rounded-2xl p-6">
+                <QRCodeCanvas
+                  ref={qrCanvasRef}
+                  value={JSON.stringify({ type: 'self_dismissal', student_id: currentStudentId, token: selfDismissalQrToken })}
+                  size={240}
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 grid grid-cols-2 gap-3">
+              <button
+                onClick={downloadQrCode}
+                className="flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                <Download className="w-4 h-4" /> Descargar
+              </button>
+              <button
+                onClick={printQrCode}
+                className="flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white bg-primary hover:bg-primary-container transition-colors"
+              >
+                <Printer className="w-4 h-4" /> Imprimir
+              </button>
+            </div>
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => setShowQrPreviewModal(false)}
+                className="w-full text-center text-slate-400 font-bold text-sm hover:text-primary transition-colors py-2"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
