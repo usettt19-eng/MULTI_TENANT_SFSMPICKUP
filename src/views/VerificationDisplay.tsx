@@ -512,7 +512,7 @@ export function VerificationDisplay() {
                 <span className="text-sm font-medium text-secondary">{t('monitor.realtimeLinkActive')}</span>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => {
                   if (currentPickup) {

@@ -426,14 +426,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         
         {/* Left Column (Queue) */}
         <div className="col-span-12 lg:col-span-8 space-y-5">
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              {logoUrl && <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />}
-              <h1 className="text-xl font-black text-slate-800">{t('dashboard.title')}</h1>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-4 min-w-0">
+              {logoUrl && <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+              <h1 className="text-xl font-black text-slate-800 truncate">{t('dashboard.title')}</h1>
             </div>
             <button
               onClick={() => setShowDailyReportModal(true)}
-              className="flex items-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shrink-0"
+              className="flex items-center justify-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shrink-0 self-start sm:self-auto"
             >
               <FileBarChart className="w-4 h-4" /> Reporte del Día
             </button>
