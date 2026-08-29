@@ -920,6 +920,11 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
     (URLs firmadas de 60s vía `createSignedUrl`, el bucket no es público).
   - Además de guardarse, el PDF se descarga localmente al generarlo, y
     queda un registro en `audit_logs`.
+  - **Selector de fecha (2026-08-29)**: el reporte no está fijo a "hoy" —
+    hay un selector de fecha (no permite elegir un día futuro, mismo patrón
+    que el de VisitorsLog.tsx) que recalcula la vista preliminar con los
+    límites de ese día en hora local, y la lista de "Reportes Guardados" se
+    filtra al día elegido (`daily_reports.report_date`).
 
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría

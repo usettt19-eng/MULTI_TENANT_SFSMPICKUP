@@ -36,15 +36,17 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
   const [annexes, setAnnexes] = useState<any | null>(null);
   const [pastReports, setPastReports] = useState<any[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // Día que se está viendo/generando — por defecto hoy, pero se puede
+  // cambiar a cualquier día anterior para sacar el reporte de esa fecha.
+  const [selectedDate, setSelectedDate] = useState(() => toDateOnlyValue(new Date()));
 
-  const todayLabel = new Date().toLocaleDateString('es', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const todayDateOnly = toDateOnlyValue(new Date());
+  const dayLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('es', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   useEffect(() => {
-    if (!profile?.tenant_id) return;
+    if (!profile?.tenant_id || !selectedDate) return;
     loadData();
     fetchPastReports();
-  }, [profile?.tenant_id]);
+  }, [profile?.tenant_id, selectedDate]);
 
   const fetchPastReports = async () => {
     if (!profile?.tenant_id) return;
@@ -52,6 +54,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       .from('daily_reports')
       .select('id, report_date, file_path, summary, created_at')
       .eq('tenant_id', profile.tenant_id)
+      .eq('report_date', selectedDate)
       .order('created_at', { ascending: false })
       .limit(10);
     setPastReports(data || []);
@@ -60,9 +63,13 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
   const loadData = async () => {
     if (!profile?.tenant_id) return;
     setLoading(true);
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // Límites del día elegido en hora LOCAL del navegador (no UTC) — mismo
+    // patrón que el selector de fecha de VisitorsLog.tsx.
+    const startOfDay = new Date(`${selectedDate}T00:00:00`);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
     const startIso = startOfDay.toISOString();
+    const endIso = endOfDay.toISOString();
 
     const [
       { data: school },
@@ -80,43 +87,51 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .from('pickup_events')
         .select('id, announced_at, completed_at, location_verified, notes, student:students(first_name, last_name, grade, section), parent:profiles(first_name, last_name)')
         .eq('tenant_id', profile.tenant_id)
-        .gte('announced_at', startIso),
+        .gte('announced_at', startIso)
+        .lt('announced_at', endIso),
       supabase
         .from('pickup_events')
         .select('id, announced_at, completed_at, student:students(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
         .eq('status', 'completed')
-        .gte('completed_at', startIso),
+        .gte('completed_at', startIso)
+        .lt('completed_at', endIso),
       supabase
         .from('self_dismissal_events')
         .select('id, method, created_at, student:students(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startIso),
+        .gte('created_at', startIso)
+        .lt('created_at', endIso),
       supabase
         .from('daily_visitors')
         .select('id, visitor_name, company, visiting_whom, reason, check_in_time, check_out_time')
         .eq('tenant_id', profile.tenant_id)
-        .gte('check_in_time', startIso),
+        .gte('check_in_time', startIso)
+        .lt('check_in_time', endIso),
       supabase
         .from('replacement_requests')
         .select('id, replacement_name, status, created_at')
         .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startIso),
+        .gte('created_at', startIso)
+        .lt('created_at', endIso),
       supabase
         .from('student_incidents')
         .select('id, type, description, created_at, student:students(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startIso),
+        .gte('created_at', startIso)
+        .lt('created_at', endIso),
       supabase
         .from('health_alerts')
         .select('id, title, severity, created_at')
         .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startIso),
+        .gte('created_at', startIso)
+        .lt('created_at', endIso),
       supabase
         .from('form_responses')
         .select('id')
         .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startIso),
+        .gte('created_at', startIso)
+        .lt('created_at', endIso),
     ]);
 
     setSchoolName(school?.school_name || 'Colegio');
@@ -170,7 +185,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     doc.text(`Reporte del Día — ${schoolName}`, 14, 16);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1), 14, 23);
+    doc.text(dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1), 14, 23);
     doc.setTextColor(0);
 
     autoTable(doc, {
@@ -290,7 +305,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       const doc = buildPdf();
       const blob = doc.output('blob');
       const fileName = `${crypto.randomUUID ? crypto.randomUUID() : Date.now()}.pdf`;
-      const filePath = `${profile.tenant_id}/${todayDateOnly}/${fileName}`;
+      const filePath = `${profile.tenant_id}/${selectedDate}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage.from('daily-reports').upload(filePath, blob, {
         contentType: 'application/pdf',
@@ -299,7 +314,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
 
       const { error: insertError } = await supabase.from('daily_reports').insert({
         tenant_id: profile.tenant_id,
-        report_date: todayDateOnly,
+        report_date: selectedDate,
         generated_by: profile.id,
         file_path: filePath,
         summary,
@@ -308,13 +323,13 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
 
       await logActivity(
         'SECURITY',
-        `REPORTE DEL DÍA generado y guardado (${todayDateOnly}).`,
+        `REPORTE DEL DÍA generado y guardado (${selectedDate}).`,
         profile.first_name || 'Admin',
         { file_path: filePath, summary },
         profile.tenant_id,
       );
 
-      doc.save(`reporte-del-dia-${todayDateOnly}.pdf`);
+      doc.save(`reporte-del-dia-${selectedDate}.pdf`);
       await fetchPastReports();
     } catch (e: any) {
       console.error('Error generando el reporte del día:', e);
@@ -352,16 +367,25 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
       <div className="bg-white rounded-[2rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-300">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-start sticky top-0 bg-white z-10">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-start gap-4 sticky top-0 bg-white z-10">
           <div>
             <h2 className="text-xl font-black text-[#1e293b] flex items-center gap-2">
               <FileBarChart className="w-5 h-5 text-indigo-600" /> Reporte del Día
             </h2>
-            <p className="text-sm text-slate-500 font-medium capitalize">{todayLabel}</p>
+            <p className="text-sm text-slate-500 font-medium capitalize">{dayLabel}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="date"
+              value={selectedDate}
+              max={toDateOnlyValue(new Date())}
+              onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+              className="px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl text-sm outline-none"
+            />
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
