@@ -771,6 +771,19 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   cualquier otro permiso, incluido ese mismo — no es solo acceso a una
   pantalla operativa como el resto, así que conviene otorgarlo con cautela.
 
+### Panel "Padres en el Perímetro": mismo tratamiento que En Tránsito (2026-08-29)
+- El panel del Dashboard que muestra qué padres están dentro del perímetro
+  del colegio (`ParentPerimeterPanel.tsx`) solo mostraba el nombre del padre
+  en una sola fila, sin agrupar por puerta ni mostrar a qué alumno venían a
+  buscar o en qué vehículo. Se le dio el mismo tratamiento que a la pantalla
+  En Tránsito: agrupado/filtrable por puerta de salida (con un grupo aparte
+  "Sin puerta asignada" para quien esté en el perímetro sin recogida
+  anunciada todavía), ordenado por hora de llegada dentro de cada puerta, y
+  cada tarjeta ahora muestra el alumno que vienen a buscar, el nombre del
+  padre, y la placa del vehículo (si lo cargó desde su app) — no solo el
+  nombre del padre. Cruza `parent_presence` con `pickup_events` (para
+  alumno/puerta) y `vehicles` (para la placa) por `parent_id`.
+
 ### Dashboard / i18n
 - Corrección de etiquetas mal identificadas ("Quick Scan" en realidad abría
   alta de padres → "Add Parent"; "Handover" y "External Monitor" eran la

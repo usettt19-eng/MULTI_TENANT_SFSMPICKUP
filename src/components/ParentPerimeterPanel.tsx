@@ -1,43 +1,135 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Car, MapPin } from 'lucide-react';
+import { Car, MapPin, DoorOpen } from 'lucide-react';
 import type { ParentPresence } from '../types/database';
 
 // No se guarda ni se muestra ninguna coordenada GPS real: esto es una
-// representación estilizada (una "escena" del colegio con carritos), no un
-// mapa. Solo usamos el booleano dentro/fuera + hace cuánto entró.
+// representación estilizada (tarjetas de vehículo), no un mapa. Solo usamos
+// el booleano dentro/fuera + hace cuánto entró.
 const STALE_AFTER_MS = 5 * 60 * 1000; // si no se actualiza en 5 min, se considera que ya no está
+const NO_DOOR_KEY = '__none__';
 
 function minutesAgo(iso: string | null): number {
   if (!iso) return 0;
   return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
 }
 
+interface PerimeterCard {
+  key: string;
+  parentId: string;
+  doorId: string | null;
+  parentName: string;
+  studentName: string | null;
+  vehicle: { license_plate: string; description: string | null } | null;
+  enteredAt: string | null;
+}
+
 export function ParentPerimeterPanel() {
   const { profile } = useAuth() as any;
-  const [presences, setPresences] = useState<ParentPresence[]>([]);
+  const [cards, setCards] = useState<PerimeterCard[]>([]);
+  const [doors, setDoors] = useState<any[]>([]);
+  const [selectedDoorId, setSelectedDoorId] = useState<string>('');
   const [, forceTick] = useState(0);
 
+  const fetchDoors = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase.from('exit_doors').select('*').eq('tenant_id', profile.tenant_id).order('name');
+    if (data) setDoors(data);
+  };
+
+  // Mismo tratamiento que En Tránsito: se arma una tarjeta por cada
+  // vehículo/alumno esperado (no solo por padre), agrupable y filtrable por
+  // puerta de salida, ordenada por hora de llegada al perímetro. Un padre
+  // sin recogida anunciada todavía (o sin puerta asignada) igual aparece,
+  // en el grupo "Sin puerta asignada".
   const fetchPresences = async () => {
     if (!profile?.tenant_id) return;
     const staleThreshold = new Date(Date.now() - STALE_AFTER_MS).toISOString();
-    const { data, error } = await supabase
+    const { data: presences, error } = await supabase
       .from('parent_presence')
       .select('*, parent:profiles(first_name, last_name, photo_url)')
       .eq('tenant_id', profile.tenant_id)
       .eq('is_inside', true)
       .gte('updated_at', staleThreshold)
       .order('entered_at', { ascending: true });
-    if (!error) setPresences(data || []);
+
+    if (error || !presences || presences.length === 0) {
+      if (!error) setCards([]);
+      return;
+    }
+
+    const parentIds = presences.map((p: ParentPresence) => p.parent_id);
+
+    const [{ data: pickups }, { data: vehicles }] = await Promise.all([
+      supabase
+        .from('pickup_events')
+        .select('id, parent_id, door_id, students:student_id(first_name, last_name)')
+        .eq('tenant_id', profile.tenant_id)
+        .in('parent_id', parentIds)
+        .in('status', ['announced', 'in_queue', 'released']),
+      supabase
+        .from('vehicles')
+        .select('parent_id, license_plate, description')
+        .in('parent_id', parentIds),
+    ]);
+
+    const vehicleByParent = new Map((vehicles || []).map((v: any) => [v.parent_id, v]));
+    const pickupsByParent = new Map<string, any[]>();
+    (pickups || []).forEach((pk: any) => {
+      if (!pickupsByParent.has(pk.parent_id)) pickupsByParent.set(pk.parent_id, []);
+      pickupsByParent.get(pk.parent_id)!.push(pk);
+    });
+
+    const built: PerimeterCard[] = [];
+    presences.forEach((p: ParentPresence) => {
+      const parentName = `${p.parent?.first_name || ''} ${p.parent?.last_name || ''}`.trim() || 'Padre/Tutor';
+      const vehicle = (vehicleByParent.get(p.parent_id) as any) || null;
+      const activePickups = pickupsByParent.get(p.parent_id) || [];
+
+      if (activePickups.length === 0) {
+        built.push({
+          key: p.parent_id,
+          parentId: p.parent_id,
+          doorId: null,
+          parentName,
+          studentName: null,
+          vehicle,
+          enteredAt: p.entered_at,
+        });
+      } else {
+        activePickups.forEach(pk => {
+          const studentName = `${pk.students?.first_name || ''} ${pk.students?.last_name || ''}`.trim() || null;
+          built.push({
+            key: pk.id,
+            parentId: p.parent_id,
+            doorId: pk.door_id,
+            parentName,
+            studentName,
+            vehicle,
+            enteredAt: p.entered_at,
+          });
+        });
+      }
+    });
+
+    setCards(built);
   };
 
   useEffect(() => {
+    if (!profile?.tenant_id) return;
+    fetchDoors();
     fetchPresences();
 
-    const channel = supabase
+    const presenceChannel = supabase
       .channel('public:parent_presence_dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parent_presence' }, () => {
+        fetchPresences();
+      })
+      .subscribe();
+    const pickupChannel = supabase
+      .channel('public:pickup_events_perimeter')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, () => {
         fetchPresences();
       })
       .subscribe();
@@ -50,56 +142,103 @@ export function ParentPerimeterPanel() {
     const tickInterval = window.setInterval(() => forceTick(t => t + 1), 20000);
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(pickupChannel);
       clearInterval(pollInterval);
       clearInterval(tickInterval);
     };
   }, [profile?.tenant_id]);
 
+  const doorName = (doorId: string | null) => doors.find(d => d.id === doorId)?.name || 'Sin puerta asignada';
+
+  const filtered = selectedDoorId ? cards.filter(c => (c.doorId || NO_DOOR_KEY) === selectedDoorId) : cards;
+
+  const groups: { doorKey: string; doorLabel: string; items: PerimeterCard[] }[] = selectedDoorId
+    ? [{ doorKey: selectedDoorId, doorLabel: doorName(selectedDoorId === NO_DOOR_KEY ? null : selectedDoorId), items: filtered }]
+    : (() => {
+        const byDoor = new Map<string, PerimeterCard[]>();
+        filtered.forEach(c => {
+          const key = c.doorId || NO_DOOR_KEY;
+          if (!byDoor.has(key)) byDoor.set(key, []);
+          byDoor.get(key)!.push(c);
+        });
+        return Array.from(byDoor.entries()).map(([doorKey, items]) => ({
+          doorKey,
+          doorLabel: doorKey === NO_DOOR_KEY ? 'Sin puerta asignada' : doorName(doorKey),
+          items,
+        }));
+      })();
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-5 flex justify-between items-center border-b border-slate-100">
+      <div className="p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100">
         <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider flex items-center gap-2">
           <MapPin className="w-4 h-4 text-indigo-500" /> Padres en el Perímetro
+          <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full">
+            {cards.length}
+          </span>
         </h3>
-        <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full">
-          {presences.length}
-        </span>
+        <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 self-start sm:self-auto">
+          <DoorOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <select
+            value={selectedDoorId}
+            onChange={e => setSelectedDoorId(e.target.value)}
+            className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none"
+          >
+            <option value="">Todas las puertas</option>
+            {doors.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+            <option value={NO_DOOR_KEY}>Sin puerta asignada</option>
+          </select>
+        </div>
       </div>
 
-      <div className="relative bg-gradient-to-b from-emerald-50 to-slate-50 min-h-[160px] px-6 py-6 overflow-hidden">
-        {/* Escena estilizada del colegio -- no es un mapa real */}
-        <div className="absolute inset-x-0 bottom-0 h-10 bg-slate-300/40" />
-        <div className="absolute inset-x-0 bottom-4 border-t-2 border-dashed border-white/70" />
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-6 bg-slate-800 text-white text-[9px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg">
-          Entrada del Colegio
-        </div>
-
-        {presences.length === 0 ? (
-          <div className="relative flex items-center justify-center h-24 text-xs text-slate-400 font-medium">
+      <div className="bg-gradient-to-b from-emerald-50 to-slate-50 min-h-[160px] px-6 py-6">
+        {cards.length === 0 ? (
+          <div className="flex items-center justify-center h-24 text-xs text-slate-400 font-medium">
             No hay padres dentro del perímetro por ahora.
           </div>
         ) : (
-          <div className="relative flex flex-wrap gap-4 justify-center pt-2 pb-14">
-            {presences.map((p, i) => {
-              const name = `${p.parent?.first_name || ''} ${p.parent?.last_name || ''}`.trim() || 'Padre/Tutor';
-              const mins = minutesAgo(p.entered_at);
-              return (
-                <div
-                  key={p.parent_id}
-                  className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-500"
-                  style={{ animationDelay: `${i * 60}ms` }}
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center">
-                    <Car className="w-7 h-7 text-indigo-500" />
-                  </div>
-                  <p className="text-[10px] font-black text-slate-700 mt-1.5 max-w-[80px] truncate text-center">{name}</p>
-                  <p className="text-[9px] font-bold text-slate-400">
-                    {mins <= 0 ? 'recién llegó' : `hace ${mins} min`}
-                  </p>
+          <div className="space-y-5">
+            {groups.map(group => (
+              <div key={group.doorKey}>
+                {!selectedDoorId && (
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                    <DoorOpen className="w-3 h-3" /> {group.doorLabel}
+                    <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full">{group.items.length}</span>
+                  </h4>
+                )}
+                <div className="flex flex-wrap gap-4">
+                  {group.items.map((c, i) => {
+                    const mins = minutesAgo(c.enteredAt);
+                    return (
+                      <div
+                        key={c.key}
+                        className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-500 w-[92px]"
+                        style={{ animationDelay: `${i * 60}ms` }}
+                      >
+                        <div className="w-14 h-14 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center">
+                          <Car className="w-7 h-7 text-indigo-500" />
+                        </div>
+                        <p className="text-[10px] font-black text-slate-700 mt-1.5 max-w-[92px] truncate text-center">
+                          {c.studentName || c.parentName}
+                        </p>
+                        {c.studentName && (
+                          <p className="text-[9px] font-bold text-slate-400 max-w-[92px] truncate text-center">{c.parentName}</p>
+                        )}
+                        {c.vehicle?.license_plate && (
+                          <p className="text-[9px] font-black text-indigo-500 max-w-[92px] truncate text-center">{c.vehicle.license_plate}</p>
+                        )}
+                        <p className="text-[9px] font-bold text-slate-400">
+                          {mins <= 0 ? 'recién llegó' : `hace ${mins} min`}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
