@@ -1106,6 +1106,32 @@ la barra superior aparecían pero no hacían nada. Cambios en `TopNav.tsx`:
   `Layout.tsx`), no tenía forma de llegar al `setCurrentView` de `App.tsx`
   — se agregó `setCurrentView` a `LayoutContext.tsx` para resolverlo.
 
+### Más botones decorativos conectados (2026-08-30)
+Tras el arreglo del TopNav se hizo un barrido de toda la app buscando
+`<button>` sin `onClick`. Se conectaron los que sí tenían algo real detrás:
+- **Vigilancia de Accesos → "Abrir Monitor"**: navega al Monitor Externo
+  (misma pantalla del sidebar), vía `setCurrentView` de `LayoutContext`.
+- **Monitor Externo → "Alerta Discreta"**: nuevo endpoint
+  `POST /api/security/discrete-alert` — registra en `audit_logs` y notifica
+  a los administradores/staff del colegio (`notifyTenantAdmins`), sin
+  alterar visualmente la pantalla del monitor (a propósito: no debe delatar
+  al personal frente a quien esté mirando la pantalla).
+- **Check-In → "¿Necesitas ayuda?"**: mismo endpoint con
+  `kind: 'help_request'`, para pedir que se acerque personal al mostrador.
+- **Bienestar → "Ver Plan"** en cada alerta crítica: abre el modal de
+  Expediente ya existente con el alumno de esa alerta preseleccionado.
+- **Bienestar → "Ver todos los registros"**: abre ese mismo Expediente para
+  elegir cualquier alumno, en vez de quedarse solo con el resumen del día.
+
+**Pendiente a discreción del colegio** (quedaron sin tocar a propósito,
+confirmado con el usuario): los botones "Reporte Notas", "Asistencia",
+"Secciones" y "Filtros" en Estudiantes (Accesos Directos), y
+"View Full History" en Cumplimiento — no tienen tablas ni datos reales
+detrás en el sistema (no existe módulo de notas/calificaciones ni de
+asistencia); son botones de la plantilla original nunca conectados. Antes
+de darles función habría que decidir si se construyen de verdad o si se
+quitan.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
