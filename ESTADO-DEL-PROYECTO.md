@@ -1042,6 +1042,70 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   camino, el mensaje de error ahora informa cuántas filas se alcanzaron a
   crear antes del fallo, en vez de perder todo el progreso sin explicación.
 
+### Bugs reales de responsive encontrados en dispositivo (2026-08-29)
+Tras la auditoría de código de la sección "Diseño responsive" de más arriba,
+el colegio reportó con capturas de un celular real tres problemas que la
+auditoría por patrones no había detectado:
+- **Dashboard**: el encabezado (logo + título + botón "Reporte del Día") se
+  encimaba en pantallas angostas — la fila no apilaba. Corregido apilando en
+  `flex-col` bajo `sm:` con el botón `shrink-0`.
+- **Monitor Externo**: la fila de 3 botones (Probar Voz / Escanear Reemplazo
+  / Alerta Discreta) se cortaba en vez de envolver. Corregido agregando
+  `flex-wrap`.
+- **Bitácora de Visitantes — "Exportar PDF" invisible**: el botón
+  desaparecía (bloque de color sólido, sin texto visible) solo en
+  orientación vertical, reproducible tanto en Chrome como en Firefox del
+  mismo dispositivo. Resultó ser **tres bugs distintos apilados**:
+  1. Bug real de layout: el buscador tenía `flex-1` y absorbía todo el
+     ancho de la fila, empujando el botón de exportar fuera de la vista.
+     Corregido quitando el `flex-1` y dando ancho explícito
+     (`w-full sm:w-auto` / `sm:w-64`) a cada control.
+  2. **Bug de caché de Docker Compose Bake**: `docker compose build` estaba
+     marcando `COPY . .` y `RUN npm run build` como `CACHED` aunque ya
+     hubiera commits nuevos descargados — el contenedor seguía sirviendo el
+     JS/CSS viejo pese a un build "exitoso". Diagnosticado comparando la
+     salida de `docker compose build` (todo `CACHED`, 0.0s) contra un
+     rebuild forzado (build real de 15.5s). **Desde ahora, el procedimiento
+     estándar de redespliegue para este proyecto es**:
+     `docker compose build --no-cache sfsmpickup && docker compose up -d --force-recreate sfsmpickup`
+     — un `docker compose build && docker compose up -d` simple ya no es
+     confiable aquí.
+  3. Una vez desplegado el fix real, el botón seguía invisible en vertical.
+     Se descartó por captura del usuario que fueran los ajustes de
+     Accesibilidad de Android ("Mejoras de la visión" — fuentes, alto
+     contraste, inversión de color, corrección de color — todos
+     desactivados). Se verificó con una réplica aislada en Playwright (CSS
+     real compilado, 375×800 y 800×375) que el botón renderiza bien en
+     ambos casos, descartando el código. Diagnóstico final: auto-oscurecido
+     de contenido a nivel de navegador (Chrome/Firefox en Android oscurecen
+     automáticamente páginas que no declaran su esquema de color cuando el
+     celular está en modo oscuro del sistema), independiente de las
+     opciones de Accesibilidad. Corregido agregando
+     `<meta name="color-scheme" content="light">` en `index.html` más
+     `:root { color-scheme: light; }` en `index.css`, para que la app
+     siempre se declare clara sin importar el tema del sistema.
+
+### TopNav: candado, campana y engranaje ahora tienen función (2026-08-30)
+El colegio reportó que en la mayoría de las pantallas estos tres íconos de
+la barra superior aparecían pero no hacían nada. Cambios en `TopNav.tsx`:
+- **Candado**: pasa a ser un indicador de solo lectura del estado de
+  Bloqueo (Lockdown) — se suscribe al mismo canal Realtime
+  `system_state`/`lockdown` que ya usan `Sidebar.tsx` y
+  `VerificationDisplay.tsx`, más una lectura inicial de
+  `school_settings.lockdown_mode`. Se dejó deliberadamente como solo
+  lectura (no un segundo interruptor) para no duplicar un control sensible
+  en dos lugares — el popover aclara que el toggle real vive en el sidebar.
+- **Campana**: panel de notificaciones real (antes solo mostraba un punto
+  rojo fijo sin abrir nada) — trae `notifications` del usuario, marcar
+  leída individual/todas, eliminar, y actualización en tiempo real vía
+  `postgres_changes`, replicando el patrón ya usado en
+  `ParentDashboard.tsx`. El contador del badge solo aparece si hay no
+  leídas.
+- **Engranaje** (solo admin): navega a la vista de Configuración. Como
+  `TopNav` se instancia dentro de cada pantalla (no una sola vez en
+  `Layout.tsx`), no tenía forma de llegar al `setCurrentView` de `App.tsx`
+  — se agregó `setCurrentView` a `LayoutContext.tsx` para resolverlo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
