@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLayout } from '../contexts/LayoutContext';
 import { TopNav } from '../components/TopNav';
 import { 
   ShieldCheck, CheckCircle2, AlertTriangle, 
@@ -12,6 +13,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 export function GuardianVerification() {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
+  const { setCurrentView } = useLayout();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -240,7 +242,10 @@ export function GuardianVerification() {
                  <p className="text-indigo-200 text-xs font-medium mb-6 leading-relaxed">
                    Visualiza el flujo de tráfico y las zonas de entrega en la pantalla gigante de salida.
                  </p>
-                 <button className="w-full py-4 bg-white/10 hover:bg-white/20 text-white font-black rounded-3xl border border-white/10 transition-all flex items-center justify-center gap-3">
+                 <button
+                    onClick={() => setCurrentView('external')}
+                    className="w-full py-4 bg-white/10 hover:bg-white/20 text-white font-black rounded-3xl border border-white/10 transition-all flex items-center justify-center gap-3"
+                  >
                     <Monitor className="w-5 h-5" />
                     ABRIR MONITOR
                  </button>
