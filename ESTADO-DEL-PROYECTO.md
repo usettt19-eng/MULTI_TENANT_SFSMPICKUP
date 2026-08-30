@@ -1279,6 +1279,15 @@ si solo estaba en el slot 2 se vacía ese slot; y se intentan anonimizar
 `self_dismissal_events.verified_by` sin borrar esos registros (son
 historial de auditoría/salud del alumno).
 
+### Acceso directo al manual desde la app de padres (2026-08-30)
+El usuario pidió un atajo al manual de uso online desde la propia app de
+padres (`ParentDashboard.tsx`). Se agregó un botón con ícono `HelpCircle`
+en el header, junto al selector de idioma/campana/logout, que abre en una
+pestaña nueva `/guia-padres.html` o `/parent-guide.html` según el idioma
+activo (`language` de `useLanguage()`). Ambos archivos ya existían en
+`public/` (actualizados el mismo día) pero no estaban enlazados desde
+ningún lado de la app — solo accesibles escribiendo la URL a mano.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

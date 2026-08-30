@@ -345,6 +345,7 @@ export const translations = {
     'students.thisStudentFallback': 'this student',
 
     // Parent Dashboard
+    'parent.help.manualLabel': 'User guide',
     'parent.language.toggleLabel': 'Switch to Spanish',
     'parent.header.switchSchoolFallback': 'Switch School',
     'parent.header.brandFallback': 'Safe SmartPickUP',
@@ -1040,6 +1041,7 @@ export const translations = {
     'students.thisStudentFallback': 'este alumno',
 
     // Parent Dashboard
+    'parent.help.manualLabel': 'Manual de uso',
     'parent.language.toggleLabel': 'Cambiar a inglés',
     'parent.header.switchSchoolFallback': 'Cambiar Colegio',
     'parent.header.brandFallback': 'Safe SmartPickUP',

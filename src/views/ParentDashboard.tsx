@@ -14,7 +14,8 @@ import {
   MapPin, Navigation, CheckCircle2, AlertTriangle,
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
-  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil
+  UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
+  HelpCircle
 } from 'lucide-react';
 
 export function ParentDashboard() {
@@ -1150,6 +1151,15 @@ export function ParentDashboard() {
             >
               {language === 'es' ? 'ES' : 'EN'}
             </button>
+            <a
+              href={language === 'es' ? '/guia-padres.html' : '/parent-guide.html'}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t('parent.help.manualLabel')}
+              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
+            >
+              <HelpCircle className="w-5 h-5 text-white" />
+            </a>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 relative transition-all active:scale-95"
