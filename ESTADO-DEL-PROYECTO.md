@@ -1146,6 +1146,36 @@ back-office). Nuevo orden en `Sidebar.tsx` (`allNavItems`), en 4 grupos:
 No cambia qué ve cada staff (sigue dependiendo de sus permisos en
 `StaffManagement.tsx`), solo el orden dentro de esa lista.
 
+### Operational Speed del Dashboard, mismo orden (2026-08-30)
+El panel de accesos rápidos del Dashboard tenía el mismo problema que el
+sidebar: External Monitor e In Transit (el flujo real de salida) estaban
+al final, después incluso de Forms/Requests. Reordenado a: External
+Monitor, In Transit, Guest Sign, Visitor Log, Med Log, Add Parent, Forms,
+Requests.
+
+### Ajustes del Sistema traducido al inglés (2026-08-30)
+Se reportó que, aunque el idioma de la UI (selector del TopNav) estaba en
+inglés, la pantalla de **Ajustes** (`Settings.tsx` y sus 2 sub-pestañas
+`SchoolStructureSettings.tsx` y `DismissalScheduleSettings.tsx`) seguía
+en español. Causa: esos 3 archivos nunca llamaban a `useLanguage()`/`t()`
+— todo el texto estaba fijo en español desde que se escribieron,
+independiente del sistema de traducción que sí usa el resto de la app.
+Se agregaron ~100 claves nuevas (`settings.*`, `settingsStructure.*`,
+`settingsDismissal.*`) en `i18n/translations.ts` y se conectaron los 3
+archivos.
+
+Dos decisiones de alcance, documentadas en el commit:
+- Los mensajes que se guardan en la bitácora de actividad (`logActivity`)
+  se dejan siempre en español — son registros de auditoría, no texto de
+  UI en vivo; traducirlos mezclaría idiomas dentro de un mismo registro
+  según quién lo generó en cada momento. `staffLabel()`/`scheduleLabelEs`
+  siguen en español para eso; se agregaron `staffLabelUi()`/
+  `scheduleLabel` (sí traducidos) para lo que se ve en pantalla.
+- Los bloques de instrucciones SQL para configurar tablas/RLS faltantes
+  en `SchoolStructureSettings.tsx` (un error de configuración de base de
+  datos que nunca debería verse en producción) se dejan sin traducir —
+  son texto para el desarrollador, no para el usuario final.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
