@@ -121,23 +121,32 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     });
   };
 
+  // Orden agrupado por uso, no alfabético ni por fecha de creación del
+  // módulo (2026-08-30): 1) operación del día — el recorrido real de un
+  // alumno saliendo, de lo que más se consulta a lo que menos; 2) rosters
+  // (datos maestros que casi no cambian en el día); 3) comunicación con
+  // padres; 4) back-office, lo que el personal de puerta rara vez abre.
   const allNavItems = [
+    // 1. Operación del día
     { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
-    { id: 'security', label: t('nav.security'), icon: ShieldCheck },
-    { id: 'wellness', label: t('nav.wellness'), icon: Heart },
-    { id: 'students', label: t('nav.students'), icon: Users },
-    { id: 'guardians', label: t('nav.guardians'), icon: ShieldCheck },
     { id: 'checkin', label: t('nav.checkin'), icon: MapPin },
-    { id: 'forms', label: t('nav.forms'), icon: FileEdit },
-    { id: 'requests', label: t('nav.requests'), icon: MessageSquare },
-    { id: 'visitors', label: t('nav.visitors'), icon: Users },
-    { id: 'logs', label: t('nav.logs'), icon: History },
-    { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
+    { id: 'security', label: t('nav.security'), icon: ShieldCheck },
     { id: 'external', label: t('nav.external'), icon: Monitor },
     { id: 'transit', label: t('nav.transit'), icon: Footprints },
-    // 'staff' y 'statistics' ya no son adminOnly: quedan a discreción del
-    // administrador, que decide desde Gestión de Personal si otorgárselos a
-    // cada miembro del staff, igual que cualquier otro módulo.
+    { id: 'wellness', label: t('nav.wellness'), icon: Heart },
+    { id: 'visitors', label: t('nav.visitors'), icon: Users },
+    // 2. Rosters
+    { id: 'students', label: t('nav.students'), icon: Users },
+    { id: 'guardians', label: t('nav.guardians'), icon: ShieldCheck },
+    // 3. Comunicación
+    { id: 'forms', label: t('nav.forms'), icon: FileEdit },
+    { id: 'requests', label: t('nav.requests'), icon: MessageSquare },
+    // 4. Back-office — 'staff' y 'statistics' ya no son adminOnly: quedan a
+    // discreción del administrador, que decide desde Gestión de Personal si
+    // otorgárselos a cada miembro del staff, igual que cualquier otro
+    // módulo.
+    { id: 'logs', label: t('nav.logs'), icon: History },
+    { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
     { id: 'staff', label: t('nav.staff'), icon: UserCog },
     { id: 'statistics', label: t('nav.statistics'), icon: BarChart3 },
   ];
