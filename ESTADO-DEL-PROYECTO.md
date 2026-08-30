@@ -1236,6 +1236,21 @@ sí mismo (no solo el admin) — requeriría una pantalla nueva accesible
 para cualquier staff, no solo admin, y decidir qué campos puede tocar de
 su propio perfil.
 
+### Fix: "Database error deleting user" al borrar staff (2026-08-30)
+`DELETE /api/staff/:id` llamaba a `admin.auth.admin.deleteUser(id)` sin
+soltar antes las filas que referencian a ese usuario en otras tablas —
+cualquier FK bloqueando el borrado hacía que Supabase devolviera ese
+mensaje genérico sin decir cuál. Ahora, antes de borrar el usuario de
+Auth: se borran `notifications` y `staff_school_access` (como
+`staff_id`); se anonimizan a `NULL` `staff_school_access.granted_by` y
+`dismissal_overrides.created_by` (sin borrar el acceso/excepción de otra
+persona); en `dismissal_assignments`, si el staff estaba en el slot 1 y
+había alguien en el slot 2 se promueve, si no se borra la asignación, y
+si solo estaba en el slot 2 se vacía ese slot; y se intentan anonimizar
+`student_incidents.reported_by`, `daily_reports.generated_by` y
+`self_dismissal_events.verified_by` sin borrar esos registros (son
+historial de auditoría/salud del alumno).
+
 ---
 
 ## 4. Modelo de permisos (resumen)
