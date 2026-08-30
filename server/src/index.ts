@@ -707,6 +707,41 @@ app.delete(
     if (!target) return fail(res, 404, 'Usuario no encontrado.');
     if (!isAdminOf(req.caller, target.tenant_id)) return fail(res, 403, 'Sin permisos sobre ese usuario.');
 
+    // Antes de borrar el usuario de Auth hay que soltar todo lo que lo
+    // referencia — si no, Supabase devuelve el genérico "Database error
+    // deleting user" sin decir cuál fila fue. Se limpia explícitamente en
+    // vez de dejar que la FK bloquee el borrado.
+    await admin.from('notifications').delete().eq('user_id', id);
+    await admin.from('staff_school_access').delete().eq('staff_id', id);
+    await admin.from('staff_school_access').update({granted_by: null}).eq('granted_by', id);
+
+    // dismissal_assignments: si estaba en el slot 1, se promueve el slot 2
+    // (si había alguien) en vez de borrar la asignación entera — mismo
+    // criterio que ya usa el frontend al vaciar un slot manualmente.
+    const {data: assignmentsAsSlot1} = await admin
+      .from('dismissal_assignments')
+      .select('id, staff_id_2')
+      .eq('staff_id', id);
+    for (const row of assignmentsAsSlot1 || []) {
+      if (row.staff_id_2) {
+        await admin.from('dismissal_assignments').update({staff_id: row.staff_id_2, staff_id_2: null}).eq('id', row.id);
+      } else {
+        await admin.from('dismissal_assignments').delete().eq('id', row.id);
+      }
+    }
+    await admin.from('dismissal_assignments').update({staff_id_2: null}).eq('staff_id_2', id);
+
+    await admin.from('dismissal_overrides').delete().eq('staff_id', id);
+    await admin.from('dismissal_overrides').update({created_by: null}).eq('created_by', id);
+
+    // Registros históricos: se intenta anonimizar el autor sin borrar el
+    // registro (auditoría / salud del alumno). Si alguna de estas columnas
+    // no admite NULL, esa actualización puntual queda con error y se
+    // ignora — no interrumpe el resto de la limpieza.
+    await admin.from('student_incidents').update({reported_by: null}).eq('reported_by', id);
+    await admin.from('daily_reports').update({generated_by: null}).eq('generated_by', id);
+    await admin.from('self_dismissal_events').update({verified_by: null}).eq('verified_by', id);
+
     const {error} = await admin.auth.admin.deleteUser(id);
     if (error) return fail(res, 400, error.message);
 
