@@ -1132,6 +1132,20 @@ asistencia); son botones de la plantilla original nunca conectados. Antes
 de darles función habría que decidir si se construyen de verdad o si se
 quitan.
 
+### Sidebar reordenado por uso (2026-08-30)
+El orden anterior no seguía ninguna lógica (mezclaba operación diaria con
+back-office). Nuevo orden en `Sidebar.tsx` (`allNavItems`), en 4 grupos:
+1. **Operación del día**: Dashboard, Check-In, Security, External Monitor,
+   In Transit, Wellness, Visitors — el recorrido real de un alumno
+   saliendo, de lo que más se consulta a lo que menos.
+2. **Rosters**: Students, Parents/Guardians.
+3. **Comunicación**: Forms, Requests.
+4. **Back-office**: Logs, Compliance, Staff Management, Statistics — lo
+   que el personal de puerta rara vez abre.
+
+No cambia qué ve cada staff (sigue dependiendo de sus permisos en
+`StaffManagement.tsx`), solo el orden dentro de esa lista.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
