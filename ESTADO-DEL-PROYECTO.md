@@ -1246,6 +1246,24 @@ sí mismo (no solo el admin) — requeriría una pantalla nueva accesible
 para cualquier staff, no solo admin, y decidir qué campos puede tocar de
 su propio perfil.
 
+### Fix: "Escanear Reemplazo" era una simulación, no escaneaba nada (2026-08-30)
+El usuario reportó (con captura) que el modal de "Escanear Reemplazo" en
+Monitor Externo decía literalmente *"In a real environment, the camera
+would activate here. For this demo, paste the generated QR data"* — nunca
+activaba la cámara, solo pedía pegar el JSON a mano. Peor aún: revisando
+el código, tampoco validaba nada — aceptaba cualquier JSON con
+`type:"replacement_pickup"` y mostraba "QR VÁLIDO" sin comprobar el token
+contra los reemplazos reales del padre, justo en la pantalla que autoriza
+entregar a un alumno. Arreglado:
+- Cámara real vía `html5-qrcode` (mismo lector y configuración que ya usa
+  Check-In en `SmartCheckIn.tsx`, sin agregar dependencia nueva).
+- El código escaneado ahora se valida de verdad: se busca al padre por
+  `parent_id` y se comprueba que el token coincida con uno de sus
+  reemplazos autorizados (`additional_tutor_name.replacements`) — mismo
+  criterio que ya aplicaba Check-In, que Monitor Externo nunca tuvo.
+- Cada verificación (éxito o fallo) queda en `audit_logs`.
+- Se quitó el textarea de "pegar el QR a mano".
+
 ### Fix: "Database error deleting user" al borrar staff (2026-08-30)
 `DELETE /api/staff/:id` llamaba a `admin.auth.admin.deleteUser(id)` sin
 soltar antes las filas que referencian a ese usuario en otras tablas —
