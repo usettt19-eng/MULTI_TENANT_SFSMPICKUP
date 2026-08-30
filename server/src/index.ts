@@ -526,6 +526,7 @@ app.post(
         first_name: body.first_name ?? '',
         last_name: body.last_name ?? '',
         email: body.email,
+        photo_url: body.photo_url ?? null,
         role: 'admin',
         tenant_id: tenantId,
         additional_tutor_name: JSON.stringify({
@@ -664,16 +665,23 @@ app.put(
       current = {};
     }
 
+    const profileUpdate: Record<string, unknown> = {
+      additional_tutor_name: JSON.stringify({
+        ...current,
+        is_staff: true,
+        permissions: req.body?.permissions ?? [],
+        notify_all_arrivals: req.body?.notify_all_arrivals === true,
+      }),
+    };
+    // Nombre y foto son opcionales acá: si el modal solo tocó permisos (el
+    // caso más común), no vienen en el body y no se pisan con vacío.
+    if (req.body?.first_name !== undefined) profileUpdate.first_name = req.body.first_name;
+    if (req.body?.last_name !== undefined) profileUpdate.last_name = req.body.last_name;
+    if (req.body?.photo_url !== undefined) profileUpdate.photo_url = req.body.photo_url || null;
+
     const {data: profile, error} = await admin
       .from('profiles')
-      .update({
-        additional_tutor_name: JSON.stringify({
-          ...current,
-          is_staff: true,
-          permissions: req.body?.permissions ?? [],
-          notify_all_arrivals: req.body?.notify_all_arrivals === true,
-        }),
-      })
+      .update(profileUpdate)
       .eq('id', id)
       .select()
       .single();

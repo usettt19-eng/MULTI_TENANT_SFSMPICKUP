@@ -2,7 +2,7 @@ import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { TopNav } from '../components/TopNav';
-import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload, Search } from 'lucide-react';
+import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload, Search, Camera, Layers } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -67,6 +67,67 @@ export function StaffManagement() {
     permissions: [] as string[],
     notify_all_arrivals: false,
   });
+
+  // Foto del staff — mismo componente URL/Archivo/Cámara que ya existe en
+  // el alta de padres (GuardiansRegistry.tsx), reutilizado tal cual acá.
+  const [photoPayload, setPhotoPayload] = useState('');
+  const [photoMethod, setPhotoMethod] = useState<'url' | 'file' | 'camera'>('url');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const startCamera = async () => {
+    setPhotoPayload('');
+    setPhotoMethod('camera');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 400, height: 400, facingMode: 'user' }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      alert(t('guardiansPage.cameraError'));
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const takePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setPhotoPayload(canvas.toDataURL('image/jpeg'));
+        stopCamera();
+      }
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPhotoPayload(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const resetPhoto = () => {
+    stopCamera();
+    setPhotoPayload('');
+    setPhotoMethod('url');
+  };
 
   // Personal que ya tenía cuenta en OTRO colegio y al que se le dio acceso a
   // este también (ver /api/staff y tabla staff_school_access) — no aparece
@@ -145,11 +206,17 @@ export function StaffManagement() {
 
     try {
       if (editingId) {
-        // Update permissions via API to keep logic centralized
+        // Update via API to keep logic centralized
         const res = await apiFetch(`/api/staff/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ permissions: formData.permissions, notify_all_arrivals: formData.notify_all_arrivals })
+          body: JSON.stringify({
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            photo_url: photoPayload,
+            permissions: formData.permissions,
+            notify_all_arrivals: formData.notify_all_arrivals,
+          })
         });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'API Error');
@@ -162,6 +229,7 @@ export function StaffManagement() {
             email: formData.email,
             first_name: formData.first_name,
             last_name: formData.last_name,
+            photo_url: photoPayload,
             permissions: formData.permissions,
             notify_all_arrivals: formData.notify_all_arrivals,
             tenant_id: profile?.tenant_id
@@ -180,6 +248,7 @@ export function StaffManagement() {
       setIsModalOpen(false);
       fetchStaff();
       setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
+      resetPhoto();
       setEditingId(null);
     } catch (error: any) {
       alert("Error: " + error.message);
@@ -338,6 +407,9 @@ export function StaffManagement() {
       permissions: perms,
       notify_all_arrivals: notifyAllArrivals,
     });
+    stopCamera();
+    setPhotoPayload(user.photo_url || '');
+    setPhotoMethod('url');
     setEditingId(user.id);
     setIsModalOpen(true);
   };
@@ -428,6 +500,7 @@ export function StaffManagement() {
               onClick={() => {
                 setEditingId(null);
                 setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
+                resetPhoto();
                 setIsModalOpen(true);
               }}
               className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
@@ -458,8 +531,12 @@ export function StaffManagement() {
                     {isDeletingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
                   <div className="flex items-center gap-4 mb-4 pr-8">
-                    <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                      <Users className="w-6 h-6" />
+                    <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 overflow-hidden shrink-0">
+                      {user.photo_url ? (
+                        <img src={user.photo_url} alt={user.first_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Users className="w-6 h-6" />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-black text-slate-800">{user.first_name} {user.last_name}</h3>
@@ -580,47 +657,96 @@ export function StaffManagement() {
                   {editingId ? t('staffPage.editPermissionsModalTitle') : t('staffPage.createNewStaffModalTitle')}
                 </h2>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="p-2.5 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all">
+              <button onClick={() => { setIsModalOpen(false); stopCamera(); }} className="p-2.5 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-8 flex-1 overflow-y-auto">
               <form id="staff-form" onSubmit={handleSave} className="space-y-6">
-                {!editingId && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.firstNameLabel')}</label>
-                      <input
-                        required
-                        value={formData.first_name}
-                        onChange={e => setFormData({...formData, first_name: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                      />
+                <div className="grid grid-cols-1 sm:grid-cols-[7rem_1fr] gap-4 sm:gap-6 items-start">
+                  {/* Foto */}
+                  <div className="w-28 mx-auto sm:mx-0 space-y-2">
+                    <div className="w-24 h-24 mx-auto sm:mx-0 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center relative">
+                      {photoMethod === 'camera' ? (
+                        !photoPayload ? (
+                          <>
+                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={takePhoto}
+                              className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-white text-indigo-600 p-1.5 rounded-full shadow-lg"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <img src={photoPayload} alt="Preview" className="w-full h-full object-cover" />
+                        )
+                      ) : photoPayload ? (
+                        <img src={photoPayload} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <Users className="w-8 h-8 text-slate-300" />
+                      )}
+                      <canvas ref={canvasRef} className="hidden" />
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.lastNameLabel')}</label>
-                      <input
-                        required
-                        value={formData.last_name}
-                        onChange={e => setFormData({...formData, last_name: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                      />
+                    <div className="grid grid-cols-3 gap-1">
+                      <button type="button" onClick={() => { stopCamera(); setPhotoMethod('url'); }} className={`py-1.5 rounded-lg border text-[8px] font-black transition-all ${photoMethod === 'url' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>URL</button>
+                      <button type="button" onClick={() => { stopCamera(); document.getElementById('staffPhotoFileInput')?.click(); setPhotoMethod('file'); }} className={`py-1.5 rounded-lg border text-[8px] font-black transition-all ${photoMethod === 'file' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t('students.photoFileTab')}</button>
+                      <button type="button" onClick={startCamera} className={`py-1.5 rounded-lg border text-[8px] font-black transition-all ${photoMethod === 'camera' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t('students.photoCameraTab')}</button>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('staffPage.emailLabel')}</label>
+                    {photoMethod === 'url' && (
                       <input
-                        type="email" required
-                        value={formData.email}
-                        onChange={e => setFormData({...formData, email: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        value={photoPayload}
+                        onChange={e => setPhotoPayload(e.target.value)}
+                        type="url"
+                        placeholder={t('students.pasteLinkPlaceholder')}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] outline-none focus:border-indigo-500 transition-all"
                       />
-                    </div>
-                    <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
-                      {t('staffPage.inviteNotice')}
-                    </p>
+                    )}
+                    <input id="staffPhotoFileInput" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
                   </div>
-                )}
+
+                  {/* Nombre / Correo */}
+                  <div className="flex-1 w-full space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.firstNameLabel')}</label>
+                        <input
+                          required
+                          value={formData.first_name}
+                          onChange={e => setFormData({...formData, first_name: e.target.value})}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.lastNameLabel')}</label>
+                        <input
+                          required
+                          value={formData.last_name}
+                          onChange={e => setFormData({...formData, last_name: e.target.value})}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        />
+                      </div>
+                    </div>
+                    {!editingId && (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('staffPage.emailLabel')}</label>
+                          <input
+                            type="email" required
+                            value={formData.email}
+                            onChange={e => setFormData({...formData, email: e.target.value})}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                          />
+                        </div>
+                        <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
+                          {t('staffPage.inviteNotice')}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
 
                 <div>
                   <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">{t('staffPage.accessPermissionsTitle')}</h3>
