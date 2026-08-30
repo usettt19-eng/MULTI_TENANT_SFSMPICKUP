@@ -1209,6 +1209,33 @@ texto más específico en este contexto (ej. `security` → "Seguridad
 `staffPage.*`/`staffModule.*`, reutilizando además varias de
 `guardiansPage.*` ya existentes en vez de duplicarlas.
 
+### Editar staff (nombre y foto), no solo permisos (2026-08-30)
+El usuario notó que el modal de edición de staff ocultaba por completo
+Nombre/Apellido/Correo cuando se editaba un staff existente — solo dejaba
+tocar permisos y el aviso de llegadas, sin forma de corregir un nombre mal
+escrito ni de agregarle foto. Cambios:
+- **Frontend** (`StaffManagement.tsx`): Nombre y Apellido ahora son
+  editables tanto al crear como al editar (el correo sigue solo
+  disponible en alta — cambiarlo tocaría el login en Supabase Auth, fuera
+  de alcance por ahora). Se agregó selector de foto (URL/Archivo/Cámara),
+  el mismo componente ya usado en el alta de padres, con el mismo patrón
+  de guardar el payload directamente en `photo_url` sin subirlo a Storage
+  aparte. La tarjeta de cada staff en la lista ahora muestra su foto si
+  tiene una.
+- **Backend**: `POST /api/staff` ahora guarda `photo_url` en la creación;
+  `PUT /api/staff/:id` ahora también acepta `first_name`/`last_name`/
+  `photo_url` además de `permissions`/`notify_all_arrivals` — todos
+  opcionales, así que guardar solo permisos (el caso más común) no pisa
+  el resto con vacío.
+- Título del modal y del botón cambiados de "Editar Permisos" a "Editar
+  Staff" para reflejar el alcance nuevo.
+
+**Pendiente** (fuera de alcance de este cambio, discutido con el usuario):
+un perfil de staff que el propio miembro del personal pueda completar por
+sí mismo (no solo el admin) — requeriría una pantalla nueva accesible
+para cualquier staff, no solo admin, y decidir qué campos puede tocar de
+su propio perfil.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
