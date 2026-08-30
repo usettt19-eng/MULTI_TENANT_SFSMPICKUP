@@ -9,8 +9,10 @@ import {
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
 import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export function Settings() {
+  const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,7 +69,7 @@ export function Settings() {
       .upload(fileName, file, { upsert: true });
 
     if (uploadError) {
-      alert('Error uploading logo: ' + uploadError.message);
+      alert(t('settings.logoUploadErrorPrefix') + uploadError.message);
       return null;
     }
 
@@ -105,9 +107,9 @@ export function Settings() {
         : Promise.resolve({ error: null }),
     ]);
 
-    if (error || langError) alert("Error al guardar: " + (error?.message || langError?.message));
+    if (error || langError) alert(t('settings.saveErrorPrefix') + (error?.message || langError?.message));
     else {
-      alert("Ajustes guardados correctamente.");
+      alert(t('settings.saveSuccess'));
       setLogoFile(null); // Clear the selected file
       fetchSettings();
     }
@@ -125,15 +127,15 @@ export function Settings() {
 
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Configuración Global del Colegio" />
+      <TopNav title="SmartPickup" subtitle={t('settings.topnavSubtitle')} />
 
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 sm:space-y-8 w-full font-body animate-in slide-in-from-bottom-5 duration-700">
         <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Ajustes del Sistema <SettingsIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary animate-[spin_4s_linear_infinite]" />
+              {t('settings.title')} <SettingsIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary animate-[spin_4s_linear_infinite]" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium font-body mt-1">Control de georeferencia, perímetros y datos oficiales.</p>
+            <p className="text-sm text-slate-500 font-medium font-body mt-1">{t('settings.subtitle')}</p>
           </div>
           {activeTab === 'general' && (
             <button
@@ -143,7 +145,7 @@ export function Settings() {
               className="flex items-center justify-center gap-2 bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black text-xs hover:bg-primary-container transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50 w-full sm:w-auto"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              GUARDAR CAMBIOS
+              {t('settings.saveChanges')}
             </button>
           )}
         </header>
@@ -157,7 +159,7 @@ export function Settings() {
                 : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
-            Configuración General
+            {t('settings.tabGeneral')}
           </button>
           <button
             onClick={() => setActiveTab('structure')}
@@ -168,7 +170,7 @@ export function Settings() {
             }`}
           >
             <DoorOpen className="w-4 h-4 shrink-0" />
-            Estructura y Puertas
+            {t('settings.tabStructure')}
           </button>
           <button
             onClick={() => setActiveTab('dismissal')}
@@ -179,14 +181,14 @@ export function Settings() {
             }`}
           >
             <CalendarClock className="w-4 h-4 shrink-0" />
-            Horarios de Salida
+            {t('settings.tabDismissal')}
           </button>
         </div>
 
         {loading ? (
           <div className="h-[50vh] flex flex-col items-center justify-center">
             <Loader2 className="w-12 h-12 text-primary animate-spin" />
-            <p className="text-slate-400 font-bold mt-4 italic">Cargando parámetros de geolocalización...</p>
+            <p className="text-slate-400 font-bold mt-4 italic">{t('settings.loadingGeo')}</p>
           </div>
         ) : activeTab === 'general' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -198,13 +200,13 @@ export function Settings() {
                 {/* School Identity */}
                 <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-6">
                   <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
-                    <Building className="w-5 h-5 text-primary" /> Perfil Institucional
+                    <Building className="w-5 h-5 text-primary" /> {t('settings.institutionalProfile')}
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre Oficial del Colegio</label>
-                      <input 
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.officialSchoolName')}</label>
+                      <input
                         required
                         value={settings.school_name}
                         onChange={e => setSettings({...settings, school_name: e.target.value})}
@@ -212,7 +214,7 @@ export function Settings() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Logo del Colegio</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.schoolLogo')}</label>
                       <div className="flex items-center gap-4">
                         {settings.logo_url && (
                           <img src={settings.logo_url} alt="Logo" className="w-16 h-16 rounded-xl object-cover" />
@@ -227,7 +229,7 @@ export function Settings() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Dirección Física</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.physicalAddress')}</label>
                       <input
                         required
                         value={settings.address}
@@ -236,7 +238,7 @@ export function Settings() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Idioma de la app para padres</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.parentAppLanguage')}</label>
                       <div className="flex gap-3">
                         <button
                           type="button"
@@ -262,7 +264,7 @@ export function Settings() {
                         </button>
                       </div>
                       <p className="text-[10px] text-slate-400 font-medium italic mt-2">
-                        Todos los padres de este colegio verán su app en este idioma.
+                        {t('settings.parentAppLanguageHelp')}
                       </p>
                     </div>
                   </div>
@@ -271,12 +273,10 @@ export function Settings() {
                 {/* Primaria dismissal coordination mode */}
                 <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
                   <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
-                    <Users className="w-5 h-5 text-amber-500" /> Coordinación de Salida en Primaria
+                    <Users className="w-5 h-5 text-amber-500" /> {t('settings.primaryDismissalCoordTitle')}
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    En primaria, ¿quién es el encargado de la entrega de los alumnos: el profesor de cada sección,
-                    o un personal designado para esa tarea (recepción, coordinador, etc.)? Esto define el texto
-                    que verán al asignar encargados en la pestaña "Horarios de Salida".
+                    {t('settings.primaryDismissalCoordDesc')}
                   </p>
                   <div className="flex gap-3">
                     <button
@@ -288,7 +288,7 @@ export function Settings() {
                           : 'bg-slate-50 text-slate-400 border border-slate-200'
                       }`}
                     >
-                      El Profesor de la Sección
+                      {t('settings.sectionTeacher')}
                     </button>
                     <button
                       type="button"
@@ -299,7 +299,7 @@ export function Settings() {
                           : 'bg-slate-50 text-slate-400 border border-slate-200'
                       }`}
                     >
-                      Personal Asignado
+                      {t('settings.assignedStaff')}
                     </button>
                   </div>
                 </section>
@@ -307,13 +307,13 @@ export function Settings() {
                 {/* Geolocation Parameters */}
                 <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-6">
                   <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
-                    <Globe className="w-5 h-5 text-emerald-500" /> Parámetros de Geocerca (GPS)
+                    <Globe className="w-5 h-5 text-emerald-500" /> {t('settings.geofenceParamsTitle')}
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Latitud (Y)</label>
-                      <input 
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.latitude')}</label>
+                      <input
                         type="number" step="any" required
                         value={settings.latitude}
                         onChange={e => setSettings({...settings, latitude: parseFloat(e.target.value)})}
@@ -321,7 +321,7 @@ export function Settings() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Longitud (X)</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.longitude')}</label>
                       <input 
                         type="number" step="any" required
                         value={settings.longitude}
@@ -332,7 +332,7 @@ export function Settings() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Radio de Llegada (Metros)</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('settings.arrivalRadius')}</label>
                     <div className="flex items-center gap-4">
                       <input 
                         type="range" min="10" max="500" step="5"
@@ -345,7 +345,7 @@ export function Settings() {
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 font-medium italic mt-4 flex items-center gap-2">
-                       <Shield className="w-3 h-3" /> El sistema autorizará la recogida solo si el padre está a menos de esta distancia.
+                       <Shield className="w-3 h-3" /> {t('settings.arrivalRadiusHelp')}
                     </p>
                   </div>
                 </section>
@@ -358,7 +358,7 @@ export function Settings() {
                 {/* Header Overlay */}
                 <div className="absolute top-8 left-8 z-10">
                   <div className="bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-2xl text-[10px] font-black flex items-center gap-2 border border-white/10 uppercase tracking-tighter">
-                    <Navigation className="w-3 h-3 text-emerald-400 animate-pulse" /> Vista Satelital Activa
+                    <Navigation className="w-3 h-3 text-emerald-400 animate-pulse" /> {t('settings.satelliteViewActive')}
                   </div>
                 </div>
 
@@ -376,7 +376,7 @@ export function Settings() {
 
                 {/* Footer Data */}
                 <div className="p-6 flex flex-col items-center justify-center space-y-2">
-                   <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Punto Geodésico</p>
+                   <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">{t('settings.geodeticPoint')}</p>
                    <div className="flex items-center gap-4 text-emerald-400 font-mono text-sm font-black">
                      <span>{settings.latitude.toFixed(6)}</span>
                      <span className="text-white/20">|</span>

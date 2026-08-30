@@ -5,7 +5,13 @@ import { CalendarClock, Plus, Trash2, AlertCircle, X } from 'lucide-react';
 import type {
   SchoolGrade, DismissalAssignment, DismissalOverride, DismissalScheduleType, Profile,
 } from '../../types/database';
+import { useLanguage } from '../../contexts/LanguageContext';
+import type { TranslationKey } from '../../i18n/translations';
 
+// Días de la semana en español fijo: se usan tal cual en los mensajes de la
+// bitácora de actividad (logActivity), que se guardan siempre en español
+// independientemente del idioma de la UI — ver WEEKDAY_KEYS más abajo para
+// la versión sí traducida que se muestra en pantalla.
 const WEEKDAYS: { value: number; label: string }[] = [
   { value: 1, label: 'Lun' },
   { value: 2, label: 'Mar' },
@@ -14,10 +20,19 @@ const WEEKDAYS: { value: number; label: string }[] = [
   { value: 5, label: 'Vie' },
 ];
 
+const WEEKDAY_KEYS: Record<number, TranslationKey> = {
+  1: 'settingsDismissal.weekdayMon',
+  2: 'settingsDismissal.weekdayTue',
+  3: 'settingsDismissal.weekdayWed',
+  4: 'settingsDismissal.weekdayThu',
+  5: 'settingsDismissal.weekdayFri',
+};
+
 const ASSIGNMENT_SELECT =
   '*, staff:profiles!dismissal_assignments_staff_id_fkey(first_name, last_name), staff2:profiles!dismissal_assignments_staff_id_2_fkey(first_name, last_name)';
 
 export function DismissalScheduleSettings() {
+  const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [grades, setGrades] = useState<SchoolGrade[]>([]);
   const [staff, setStaff] = useState<Pick<Profile, 'id' | 'first_name' | 'last_name'>[]>([]);
@@ -85,8 +100,8 @@ export function DismissalScheduleSettings() {
       console.error(err);
       setError(
         err?.code === '42P01'
-          ? 'Las tablas de horarios de salida todavía no existen en esta base de datos.'
-          : (err.message || 'No se pudo cargar la configuración de horarios.')
+          ? t('settingsDismissal.tablesNotExist')
+          : (err.message || t('settingsDismissal.loadGenericError'))
       );
     } finally {
       setLoading(false);
@@ -111,12 +126,12 @@ export function DismissalScheduleSettings() {
       await saveSections(gradeId, next);
     } catch (err: any) {
       setSectionsByGrade(prev => ({ ...prev, [gradeId]: current }));
-      alert('Error al guardar la sección: ' + err.message);
+      alert(t('settingsDismissal.errorSaveSectionPrefix') + err.message);
     }
   };
 
   const removeSection = async (gradeId: string, section: string) => {
-    if (!confirm(`¿Quitar la sección "${section}"? Los encargados ya asignados a esa sección no se borran, solo deja de aparecer aquí.`)) return;
+    if (!confirm(`${t('settingsDismissal.removeSectionConfirmPrefix')}${section}${t('settingsDismissal.removeSectionConfirmSuffix')}`)) return;
     const current = sectionsByGrade[gradeId] || [];
     const next = current.filter(s => s !== section);
     setSectionsByGrade(prev => ({ ...prev, [gradeId]: next }));
@@ -124,20 +139,33 @@ export function DismissalScheduleSettings() {
       await saveSections(gradeId, next);
     } catch (err: any) {
       setSectionsByGrade(prev => ({ ...prev, [gradeId]: current }));
-      alert('Error al quitar la sección: ' + err.message);
+      alert(t('settingsDismissal.errorRemoveSectionPrefix') + err.message);
     }
   };
 
+  // Usado dentro de los mensajes de logActivity (bitácora, siempre en
+  // español) — para lo que se muestra en pantalla usar staffLabelUi.
   const staffLabel = (id: string | null | undefined) => {
     if (!id) return 'sin asignar';
     const s = staff.find(p => p.id === id);
     return s ? `${s.first_name || ''} ${s.last_name || ''}`.trim() : 'desconocido';
   };
 
+  const staffLabelUi = (id: string | null | undefined) => {
+    if (!id) return t('settingsDismissal.staffLabelUnassigned');
+    const s = staff.find(p => p.id === id);
+    return s ? `${s.first_name || ''} ${s.last_name || ''}`.trim() : t('settingsDismissal.staffLabelUnknown');
+  };
+
   const getAssignment = (gradeId: string, section: string, dayOfWeek: number) =>
     assignments.find(a => a.grade_id === gradeId && a.section === section && a.schedule_type === scheduleType && a.day_of_week === dayOfWeek);
 
-  const scheduleLabel = scheduleType === 'regular' ? 'salida regular' : 'post school';
+  // Para la bitácora (logActivity), siempre en español:
+  const scheduleLabelEs = scheduleType === 'regular' ? 'salida regular' : 'post school';
+  // Para lo que se muestra en pantalla, en el idioma activo:
+  const scheduleLabel = scheduleType === 'regular'
+    ? t('settingsDismissal.tabRegular').toLowerCase()
+    : t('settingsDismissal.tabPostSchool').toLowerCase();
 
   /**
    * Cada fila de dismissal_assignments guarda hasta 2 personas (staff_id y
@@ -184,7 +212,7 @@ export function DismissalScheduleSettings() {
         const dayLabel = WEEKDAYS.find(d => d.value === dayOfWeek)?.label || String(dayOfWeek);
         await logActivity(
           'DISMISSAL_SCHEDULE',
-          `Horario de ${scheduleLabel} actualizado (persona ${slot}): ${grade.name}${section ? ' - ' + section : ''}, ${dayLabel}. ` +
+          `Horario de ${scheduleLabelEs} actualizado (persona ${slot}): ${grade.name}${section ? ' - ' + section : ''}, ${dayLabel}. ` +
           `Antes: ${staffLabel(previousStaffId)}. Ahora: ${staffLabel(staffId)}.`,
           actorName(),
           { grade_id: grade.id, section, schedule_type: scheduleType, day_of_week: dayOfWeek, slot, previous_staff_id: previousStaffId, new_staff_id: staffId || null },
@@ -192,7 +220,7 @@ export function DismissalScheduleSettings() {
         );
       }
     } catch (err: any) {
-      alert('Error al guardar: ' + err.message);
+      alert(t('settingsDismissal.errorSavePrefix') + err.message);
     } finally {
       setSavingKey(null);
     }
@@ -241,13 +269,13 @@ export function DismissalScheduleSettings() {
       ]);
       await logActivity(
         'DISMISSAL_SCHEDULE',
-        `Encargado ${slot} de ${scheduleLabel} actualizado para toda la semana: ${grade.name}${section ? ' - ' + section : ''}. Ahora: ${staffLabel(staffId)}.`,
+        `Encargado ${slot} de ${scheduleLabelEs} actualizado para toda la semana: ${grade.name}${section ? ' - ' + section : ''}. Ahora: ${staffLabel(staffId)}.`,
         actorName(),
         { grade_id: grade.id, section, schedule_type: scheduleType, slot, new_staff_id: staffId || null },
         profile.tenant_id,
       );
     } catch (err: any) {
-      alert('Error al guardar: ' + err.message);
+      alert(t('settingsDismissal.errorSavePrefix') + err.message);
     } finally {
       setSavingKey(null);
     }
@@ -272,7 +300,7 @@ export function DismissalScheduleSettings() {
 
       await logActivity(
         'DISMISSAL_OVERRIDE',
-        `Reasignación de un solo día (persona ${ovSlot}): ${grade?.name || ''}${ovSection ? ' - ' + ovSection : ''}, ${ovDate} → ${staffLabel(ovStaffId)} (${scheduleLabel}).`,
+        `Reasignación de un solo día (persona ${ovSlot}): ${grade?.name || ''}${ovSection ? ' - ' + ovSection : ''}, ${ovDate} → ${staffLabel(ovStaffId)} (${scheduleLabelEs}).`,
         actorName(),
         { grade_id: ovGradeId, section: ovSection, schedule_type: scheduleType, override_date: ovDate, slot: ovSlot, staff_id: ovStaffId },
         profile.tenant_id,
@@ -280,14 +308,14 @@ export function DismissalScheduleSettings() {
 
       setOvGradeId(''); setOvSection(''); setOvDate(''); setOvSlot(1); setOvStaffId('');
     } catch (err: any) {
-      alert('Error al crear la excepción: ' + err.message);
+      alert(t('settingsDismissal.errorCreateExceptionPrefix') + err.message);
     } finally {
       setSavingOverride(false);
     }
   };
 
   const handleDeleteOverride = async (ov: DismissalOverride) => {
-    if (!confirm('¿Eliminar esta excepción? Ese día se vuelve a usar el horario regular para esa persona.')) return;
+    if (!confirm(t('settingsDismissal.deleteOverrideConfirm'))) return;
     try {
       const { error } = await supabase.from('dismissal_overrides').delete().eq('id', ov.id);
       if (error) throw error;
@@ -301,12 +329,12 @@ export function DismissalScheduleSettings() {
         profile.tenant_id,
       );
     } catch (err: any) {
-      alert('Error al eliminar: ' + err.message);
+      alert(t('settingsDismissal.errorDeletePrefix') + err.message);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-500">Cargando horarios de salida...</div>;
+    return <div className="p-8 text-center text-slate-500">{t('settingsDismissal.loading')}</div>;
   }
 
   if (error) {
@@ -314,7 +342,7 @@ export function DismissalScheduleSettings() {
       <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700 flex items-start gap-4">
         <AlertCircle className="w-6 h-6 flex-shrink-0 mt-1" />
         <div>
-          <h3 className="font-bold text-lg mb-2">No se pudo cargar</h3>
+          <h3 className="font-bold text-lg mb-2">{t('settingsDismissal.loadErrorTitle')}</h3>
           <p>{error}</p>
         </div>
       </div>
@@ -330,7 +358,7 @@ export function DismissalScheduleSettings() {
             scheduleType === 'regular' ? 'bg-primary text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-200'
           }`}
         >
-          Salida Regular
+          {t('settingsDismissal.tabRegular')}
         </button>
         <button
           onClick={() => setScheduleType('post_school')}
@@ -338,20 +366,20 @@ export function DismissalScheduleSettings() {
             scheduleType === 'post_school' ? 'bg-primary text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-200'
           }`}
         >
-          Post School
+          {t('settingsDismissal.tabPostSchool')}
         </button>
       </div>
 
       {grades.length === 0 ? (
         <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 text-center text-slate-500">
-          Primero crea los grados en la pestaña "Estructura y Puertas".
+          {t('settingsDismissal.noGradesMsg')}
         </div>
       ) : (
         grades.map(grade => {
           const sections = sectionsByGrade[grade.id] && sectionsByGrade[grade.id].length > 0 ? sectionsByGrade[grade.id] : [''];
           const staffModeLabel = grade.stage === 'primaria'
-            ? (primaryMode === 'teacher' ? 'Profesor Encargado' : 'Personal Asignado')
-            : 'Encargado';
+            ? (primaryMode === 'teacher' ? t('settingsDismissal.staffModeTeacher') : t('settingsDismissal.staffModeAssigned'))
+            : t('settingsDismissal.staffModeGeneric');
 
           return (
             <section key={grade.id} className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm space-y-4 sm:space-y-6">
@@ -359,11 +387,11 @@ export function DismissalScheduleSettings() {
                 <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2 sm:gap-3 flex-wrap">
                   <CalendarClock className="w-5 h-5 text-indigo-500 shrink-0" /> {grade.name}
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-                    {grade.stage === 'primaria' ? 'Primaria' : 'Secundaria'}
+                    {grade.stage === 'primaria' ? t('settingsStructure.stagePrimary') : t('settingsStructure.stageSecondary')}
                   </span>
                 </h3>
                 {grade.exit_time && (
-                  <span className="text-xs font-bold text-slate-500">Salida: {grade.exit_time.slice(0, 5)}</span>
+                  <span className="text-xs font-bold text-slate-500">{t('settingsDismissal.exitLabel')}: {grade.exit_time.slice(0, 5)}</span>
                 )}
               </div>
 
@@ -372,13 +400,13 @@ export function DismissalScheduleSettings() {
                   <div key={section || '__default__'} className="bg-slate-50 rounded-2xl p-3 sm:p-5 border border-slate-100">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-black text-slate-600 uppercase tracking-widest">
-                        Sección {section || '(todo el grado)'}
+                        {t('settingsDismissal.sectionLabel')} {section || t('settingsDismissal.wholeGrade')}
                       </p>
                       {section && (
                         <button
                           type="button"
                           onClick={() => removeSection(grade.id, section)}
-                          title="Quitar sección"
+                          title={t('settingsDismissal.removeSectionTooltip')}
                           className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -399,7 +427,7 @@ export function DismissalScheduleSettings() {
                               disabled={savingKey === `${grade.id}|${section}|all|${slot}`}
                               className="flex-1 w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500"
                             >
-                              <option value="">— Sin asignar —</option>
+                              <option value="">{t('settingsDismissal.unassignedOption')}</option>
                               {staff.map(s => (
                                 <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
                               ))}
@@ -412,14 +440,14 @@ export function DismissalScheduleSettings() {
                         <div className="grid grid-cols-5 gap-2 min-w-[440px]">
                           {WEEKDAYS.map(day => (
                             <div key={day.value} className="space-y-1">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">{day.label}</label>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">{t(WEEKDAY_KEYS[day.value])}</label>
                               {([1, 2] as const).map(slot => (
                                 <select
                                   key={slot}
                                   value={(slot === 1 ? getAssignment(grade.id, section, day.value)?.staff_id : getAssignment(grade.id, section, day.value)?.staff_id_2) || ''}
                                   onChange={e => handleAssignSlot(grade, section, day.value, slot, e.target.value)}
                                   disabled={savingKey === `${grade.id}|${section}|${day.value}|${slot}`}
-                                  title={`Persona ${slot}`}
+                                  title={`${t('settingsDismissal.personTooltipPrefix')} ${slot}`}
                                   className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-medium outline-none focus:border-indigo-500"
                                 >
                                   <option value="">—</option>
@@ -438,7 +466,7 @@ export function DismissalScheduleSettings() {
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <input
-                    placeholder="Nueva sección (ej. A, B)"
+                    placeholder={t('settingsDismissal.newSectionPlaceholder')}
                     value={newSectionInput[grade.id] || ''}
                     onChange={e => setNewSectionInput(prev => ({ ...prev, [grade.id]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(grade.id); } }}
@@ -449,7 +477,7 @@ export function DismissalScheduleSettings() {
                     onClick={() => addSection(grade.id)}
                     className="bg-indigo-50 text-indigo-600 px-4 py-2.5 sm:py-0 rounded-xl hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
                   >
-                    <Plus className="w-4 h-4" /> Sección
+                    <Plus className="w-4 h-4" /> {t('settingsDismissal.sectionButton')}
                   </button>
                 </div>
               </div>
@@ -461,52 +489,50 @@ export function DismissalScheduleSettings() {
       {/* Excepciones de un solo día */}
       <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm space-y-6">
         <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
-          <CalendarClock className="w-5 h-5 text-amber-500 shrink-0" /> Excepciones de un Día ({scheduleLabel})
+          <CalendarClock className="w-5 h-5 text-amber-500 shrink-0" /> {t('settingsDismissal.oneDayExceptionsTitle')} ({scheduleLabel})
         </h3>
         <p className="text-xs text-slate-500 font-medium leading-relaxed">
-          Para cuando una de las personas encargadas no está ese día — se reemplaza solo a esa, la otra sigue igual.
-          Se aplica solo en la fecha indicada — al día siguiente vuelve automáticamente al horario preprogramado.
-          Queda registrado en la bitácora de actividad.
+          {t('settingsDismissal.oneDayExceptionsDesc')}
         </p>
 
         <form onSubmit={handleCreateOverride} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-1">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Grado</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('settingsDismissal.formGradeLabel')}</label>
             <select required value={ovGradeId} onChange={e => setOvGradeId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500">
-              <option value="">Elegir...</option>
+              <option value="">{t('settingsDismissal.formChooseOption')}</option>
               {grades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Sección</label>
-            <input value={ovSection} onChange={e => setOvSection(e.target.value)} placeholder="(opcional)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500" />
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('settingsDismissal.formSectionLabel')}</label>
+            <input value={ovSection} onChange={e => setOvSection(e.target.value)} placeholder={t('settingsDismissal.formSectionPlaceholder')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500" />
           </div>
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fecha</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('settingsDismissal.formDateLabel')}</label>
             <input required type="date" value={ovDate} onChange={e => setOvDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500" />
           </div>
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Reemplaza a</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('settingsDismissal.formReplacesLabel')}</label>
             <select required value={ovSlot} onChange={e => setOvSlot(Number(e.target.value) as 1 | 2)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500">
-              <option value={1}>Persona 1</option>
-              <option value={2}>Persona 2</option>
+              <option value={1}>{t('settingsDismissal.formPerson1')}</option>
+              <option value={2}>{t('settingsDismissal.formPerson2')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Encargado ese día</label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('settingsDismissal.formStaffLabel')}</label>
             <select required value={ovStaffId} onChange={e => setOvStaffId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:border-amber-500">
-              <option value="">Elegir...</option>
+              <option value="">{t('settingsDismissal.formChooseOption')}</option>
               {staff.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
             </select>
           </div>
           <button type="submit" disabled={savingOverride} className="bg-amber-500 text-white py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 disabled:opacity-50">
-            Asignar Hoy
+            {t('settingsDismissal.assignTodayBtn')}
           </button>
         </form>
 
         <div className="space-y-2">
           {overrides.filter(o => o.schedule_type === scheduleType).length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">No hay excepciones próximas.</p>
+            <p className="text-sm text-slate-400 text-center py-4">{t('settingsDismissal.noOverrides')}</p>
           ) : (
             overrides.filter(o => o.schedule_type === scheduleType).map(ov => {
               const grade = grades.find(g => g.id === ov.grade_id);
@@ -514,8 +540,8 @@ export function DismissalScheduleSettings() {
                 <div key={ov.id} className="flex items-center justify-between gap-3 flex-wrap p-4 bg-amber-50 rounded-2xl border border-amber-100">
                   <div className="text-sm">
                     <span className="font-black text-slate-800">{ov.override_date}</span>
-                    <span className="text-slate-500"> — {grade?.name || 'Grado'}{ov.section ? ` - ${ov.section}` : ''} (persona {ov.slot}): </span>
-                    <span className="font-bold text-amber-700">{staffLabel(ov.staff_id)}</span>
+                    <span className="text-slate-500"> — {grade?.name || t('settingsDismissal.formGradeLabel')}{ov.section ? ` - ${ov.section}` : ''} ({t('settingsDismissal.personTooltipPrefix').toLowerCase()} {ov.slot}): </span>
+                    <span className="font-bold text-amber-700">{staffLabelUi(ov.staff_id)}</span>
                   </div>
                   <button onClick={() => handleDeleteOverride(ov)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
                     <X className="w-4 h-4" />

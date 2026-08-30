@@ -3,8 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { DoorOpen, GraduationCap, Plus, Trash2, Save, AlertCircle, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import type { ExitDoor, SchoolGrade, GradeDoor } from '../../types/database';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export function SchoolStructureSettings() {
+  const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [doors, setDoors] = useState<ExitDoor[]>([]);
   const [grades, setGrades] = useState<SchoolGrade[]>([]);
@@ -82,7 +84,7 @@ export function SchoolStructureSettings() {
       setNewDoorName('');
       setNewDoorDesc('');
     } catch (err: any) {
-      handleError(err, 'Error al añadir puerta');
+      handleError(err, t('settingsStructure.errorAddDoor'));
     } finally {
       setSaving(false);
     }
@@ -96,7 +98,7 @@ export function SchoolStructureSettings() {
       setDoors(doors.filter(d => d.id !== id));
       setGradeDoors(gradeDoors.filter(gd => gd.door_id !== id));
     } catch (err: any) {
-      handleError(err, 'Error al eliminar puerta');
+      handleError(err, t('settingsStructure.errorDeleteDoor'));
     }
   };
 
@@ -125,7 +127,7 @@ export function SchoolStructureSettings() {
       setNewGradeOrder(grades.length > 0 ? Math.max(...grades.map(g => g.level_order)) + 1 : 1);
       setNewGradeExitTime('');
     } catch (err: any) {
-      handleError(err, 'Error al añadir grado');
+      handleError(err, t('settingsStructure.errorAddGrade'));
     } finally {
       setSaving(false);
     }
@@ -150,7 +152,7 @@ export function SchoolStructureSettings() {
       if (error) throw error;
     } catch (err: any) {
       setGrades(prev);
-      handleError(err, 'Error al actualizar grado');
+      handleError(err, t('settingsStructure.errorUpdateGrade'));
     }
   };
 
@@ -169,7 +171,7 @@ export function SchoolStructureSettings() {
       setGrades(grades.filter(g => g.id !== id));
       setGradeDoors(gradeDoors.filter(gd => gd.grade_id !== id));
     } catch (err: any) {
-      handleError(err, 'Error al eliminar grado');
+      handleError(err, t('settingsStructure.errorDeleteGrade'));
     }
   };
 
@@ -197,12 +199,12 @@ export function SchoolStructureSettings() {
         setGradeDoors([...gradeDoors, data]);
       }
     } catch (err: any) {
-      handleError(err, 'Error al actualizar asignación');
+      handleError(err, t('settingsStructure.errorUpdateAssignment'));
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-500">Cargando configuración de estructura...</div>;
+    return <div className="p-8 text-center text-slate-500">{t('settingsStructure.loading')}</div>;
   }
 
   if (error) {
@@ -251,7 +253,7 @@ CREATE TABLE IF NOT EXISTS grade_doors (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700 flex items-start gap-4 animate-in fade-in slide-in-from-top-4">
           <AlertCircle className="w-6 h-6 flex-shrink-0 mt-1" />
           <div>
-            <h3 className="font-bold text-lg mb-2">Error al procesar la acción</h3>
+            <h3 className="font-bold text-lg mb-2">{t('settingsStructure.actionErrorTitle')}</h3>
             <p className="mb-4">{actionError.message}</p>
             {actionError.isRls && (
               <div className="bg-white p-4 rounded-xl border border-red-100 text-sm font-mono overflow-x-auto">
@@ -285,20 +287,20 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
         {/* Exit Doors Section */}
         <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
           <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <DoorOpen className="w-5 h-5 text-indigo-500 shrink-0" /> Puertas de Salida
+            <DoorOpen className="w-5 h-5 text-indigo-500 shrink-0" /> {t('settingsStructure.exitDoorsTitle')}
           </h3>
-          
+
           <form onSubmit={handleAddDoor} className="mb-6 flex gap-3">
             <div className="flex-1 space-y-3">
-              <input 
+              <input
                 required
-                placeholder="Nombre de la puerta (ej. Puerta Principal)"
+                placeholder={t('settingsStructure.doorNamePlaceholder')}
                 value={newDoorName}
                 onChange={e => setNewDoorName(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500 transition-all"
               />
-              <input 
-                placeholder="Descripción (opcional)"
+              <input
+                placeholder={t('settingsStructure.doorDescPlaceholder')}
                 value={newDoorDesc}
                 onChange={e => setNewDoorDesc(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-indigo-500 transition-all"
@@ -315,7 +317,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
 
           <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
             {doors.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-4">No hay puertas configuradas.</p>
+              <p className="text-sm text-slate-500 text-center py-4">{t('settingsStructure.noDoors')}</p>
             ) : (
               doors.map(door => (
                 <div key={door.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -338,14 +340,14 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
         {/* Grades Section */}
         <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
           <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <GraduationCap className="w-5 h-5 text-amber-500 shrink-0" /> Grados Escolares
+            <GraduationCap className="w-5 h-5 text-amber-500 shrink-0" /> {t('settingsStructure.schoolGradesTitle')}
           </h3>
-          
+
           <form onSubmit={handleAddGrade} className="mb-6 space-y-3">
             <div className="flex gap-3">
               <input
                 required
-                placeholder="Nombre (ej. 1er Grado)"
+                placeholder={t('settingsStructure.gradeNamePlaceholder')}
                 value={newGradeName}
                 onChange={e => setNewGradeName(e.target.value)}
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
@@ -354,11 +356,11 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                 type="number"
                 required
                 min="1"
-                placeholder="Orden"
+                placeholder={t('settingsStructure.orderPlaceholder')}
                 value={newGradeOrder}
                 onChange={e => setNewGradeOrder(parseInt(e.target.value) || 1)}
                 className="w-20 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all text-center"
-                title="Orden lógico (1 = Maternal, 2 = Pre-Kinder, etc.)"
+                title={t('settingsStructure.orderTooltip')}
               />
             </div>
             <div className="flex gap-3">
@@ -367,14 +369,14 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                 onChange={e => setNewGradeStage(e.target.value as 'primaria' | 'secundaria')}
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
               >
-                <option value="primaria">Primaria</option>
-                <option value="secundaria">Secundaria</option>
+                <option value="primaria">{t('settingsStructure.stagePrimary')}</option>
+                <option value="secundaria">{t('settingsStructure.stageSecondary')}</option>
               </select>
               <input
                 type="time"
                 value={newGradeExitTime}
                 onChange={e => setNewGradeExitTime(e.target.value)}
-                title="Hora de salida"
+                title={t('settingsStructure.exitTimeTooltip')}
                 className="w-36 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-500 transition-all"
               />
               <button
@@ -389,7 +391,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
             {grades.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-4">No hay grados configurados.</p>
+              <p className="text-sm text-slate-500 text-center py-4">{t('settingsStructure.noGrades')}</p>
             ) : (
               grades.map(grade => (
                 <div key={grade.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
@@ -401,7 +403,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                         value={grade.level_order ?? ''}
                         onChange={e => updateGradeFieldLocal(grade.id, 'level_order', e.target.value)}
                         onBlur={e => handleUpdateGradeField(grade.id, 'level_order', e.target.value)}
-                        title="Orden"
+                        title={t('settingsStructure.gradeOrderTooltip')}
                         className="w-11 h-9 rounded-full bg-slate-200 text-slate-600 text-center text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500 border-none"
                       />
                       <input
@@ -409,7 +411,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                         value={grade.name}
                         onChange={e => updateGradeFieldLocal(grade.id, 'name', e.target.value)}
                         onBlur={e => handleUpdateGradeField(grade.id, 'name', e.target.value)}
-                        title="Nombre del grado"
+                        title={t('settingsStructure.gradeNameTooltip')}
                         className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-800 text-sm outline-none focus:border-amber-500"
                       />
                     </div>
@@ -426,14 +428,14 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
                       onChange={e => handleUpdateGradeField(grade.id, 'stage', e.target.value)}
                       className="flex-1 min-w-[110px] bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
                     >
-                      <option value="primaria">Primaria</option>
-                      <option value="secundaria">Secundaria</option>
+                      <option value="primaria">{t('settingsStructure.stagePrimary')}</option>
+                      <option value="secundaria">{t('settingsStructure.stageSecondary')}</option>
                     </select>
                     <input
                       type="time"
                       value={grade.exit_time?.slice(0, 5) || ''}
                       onChange={e => handleUpdateGradeField(grade.id, 'exit_time', e.target.value)}
-                      title="Hora de salida"
+                      title={t('settingsStructure.exitTimeTooltip')}
                       className="flex-1 min-w-[110px] sm:w-32 sm:flex-none bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-amber-500"
                     />
                   </div>
@@ -448,10 +450,10 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
       {doors.length > 0 && grades.length > 0 && (
         <section className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm">
           <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4 mb-6">
-            <LinkIcon className="w-5 h-5 text-emerald-500 shrink-0" /> Asignación de Puertas por Grado
+            <LinkIcon className="w-5 h-5 text-emerald-500 shrink-0" /> {t('settingsStructure.assignDoorsTitle')}
           </h3>
           <p className="text-sm text-slate-500 mb-6">
-            Selecciona por qué puertas está permitida la salida para cada grado. Un grado puede tener múltiples puertas asignadas.
+            {t('settingsStructure.assignDoorsDesc')}
           </p>
 
           <div className="overflow-x-auto">
@@ -459,7 +461,7 @@ CREATE POLICY "Permitir escritura a usuarios autenticados" ON grade_doors FOR AL
               <thead>
                 <tr>
                   <th className="p-4 border-b border-slate-200 font-black text-slate-400 text-xs uppercase tracking-wider bg-slate-50 rounded-tl-2xl">
-                    Grado
+                    {t('settingsStructure.gradeColumnHeader')}
                   </th>
                   {doors.map((door, index) => (
                     <th key={door.id} className={`p-4 border-b border-slate-200 font-black text-slate-600 text-sm text-center bg-slate-50 ${index === doors.length - 1 ? 'rounded-tr-2xl' : ''}`}>
