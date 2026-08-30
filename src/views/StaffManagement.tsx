@@ -5,32 +5,45 @@ import { TopNav } from '../components/TopNav';
 import { Users, Shield, Plus, Edit2, Loader2, Check, X, Trash2, Download, Upload, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { useLanguage } from '../contexts/LanguageContext';
+import type { TranslationKey } from '../i18n/translations';
 
-const AVAILABLE_MODULES = [
-  { id: 'dashboard', label: 'Panel Principal' },
-  { id: 'security', label: 'Seguridad (Salidas)' },
-  { id: 'wellness', label: 'Centro de Bienestar' },
-  { id: 'students', label: 'Alumnos' },
-  { id: 'guardians', label: 'Padres / Tutores' },
-  { id: 'checkin', label: 'Check-In' },
-  { id: 'forms', label: 'Formularios' },
-  { id: 'requests', label: 'Solicitudes de Reemplazo' },
-  { id: 'logs', label: 'Bitácora' },
-  { id: 'compliance', label: 'Cumplimiento' },
-  { id: 'external', label: 'Monitor Externo' },
-  { id: 'visitors', label: 'Bitácora de Visitantes' },
-  { id: 'transit', label: 'En Tránsito' },
-  { id: 'settings', label: 'Ajustes del Colegio' },
+const AVAILABLE_MODULE_IDS = [
+  'dashboard', 'security', 'wellness', 'students', 'guardians', 'checkin',
+  'forms', 'requests', 'logs', 'compliance', 'external', 'visitors',
+  'transit', 'settings',
   // Estos dos otorgan control sobre otros miembros del personal (incluida
   // la asignación de permisos) y sobre las estadísticas del colegio — a
   // diferencia del resto, no son solo acceso a una pantalla operativa.
   // Quedan disponibles para que el administrador decida caso por caso, pero
   // conviene otorgarlos con cautela.
-  { id: 'staff', label: 'Gestión de Personal' },
-  { id: 'statistics', label: 'Estadísticas' },
-];
+  'staff', 'statistics',
+] as const;
+
+// La mayoría reutiliza la etiqueta que ya existe para el sidebar
+// (nav.*) — solo los módulos cuyo texto acá es más específico que en el
+// sidebar tienen su propia clave (staffModule.*).
+const MODULE_LABEL_KEYS: Record<string, TranslationKey> = {
+  dashboard: 'staffModule.dashboard',
+  security: 'staffModule.security',
+  wellness: 'staffModule.wellness',
+  students: 'nav.students',
+  guardians: 'nav.guardians',
+  checkin: 'nav.checkin',
+  forms: 'nav.forms',
+  requests: 'staffModule.requests',
+  logs: 'staffModule.logs',
+  compliance: 'nav.compliance',
+  external: 'nav.external',
+  visitors: 'staffModule.visitors',
+  transit: 'nav.transit',
+  settings: 'staffModule.settings',
+  staff: 'nav.staff',
+  statistics: 'nav.statistics',
+};
 
 export function StaffManagement() {
+  const { t } = useLanguage();
   const { profile } = useAuth();
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,7 +216,7 @@ export function StaffManagement() {
   const csvRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadTemplate = () => {
-    const moduleIds = AVAILABLE_MODULES.map(m => m.id).join('|');
+    const moduleIds = AVAILABLE_MODULE_IDS.join('|');
     const csvContent =
       "data:text/csv;charset=utf-8,first_name,last_name,email,permissions\n" +
       `Ana,Gomez,ana@correo.com,dashboard|checkin\n` +
@@ -240,13 +253,13 @@ export function StaffManagement() {
         const permissions = (cols[3] || '')
           .split('|')
           .map(p => p.trim())
-          .filter(p => AVAILABLE_MODULES.some(m => m.id === p));
+          .filter(p => (AVAILABLE_MODULE_IDS as readonly string[]).includes(p));
 
         rows.push({first_name, last_name, email, permissions});
       }
 
       if (rows.length === 0) {
-        alert('El archivo CSV no contiene filas válidas.');
+        alert(t('staffPage.csvNoValidRows'));
         setIsImporting(false);
         if (csvRef.current) csvRef.current.value = '';
         return;
@@ -347,7 +360,7 @@ export function StaffManagement() {
           user.first_name,
           user.last_name,
           user.email,
-          ...perms.map(p => AVAILABLE_MODULES.find(m => m.id === p)?.label || p),
+          ...perms.map(p => (MODULE_LABEL_KEYS[p] ? t(MODULE_LABEL_KEYS[p]) : p)),
         ].join(' ').toLowerCase();
         return haystack.includes(term);
       })
@@ -361,28 +374,28 @@ export function StaffManagement() {
   if (profile?.role !== 'admin') {
     return (
       <div className="p-8 text-center text-red-500 font-bold">
-        Acceso denegado. Solo administradores pueden ver esta sección.
+        {t('staffPage.accessDeniedMsg')}
       </div>
     );
   }
 
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Gestión de Staff y Permisos" />
+      <TopNav title="SmartPickup" subtitle={t('staffPage.topnavSubtitle')} />
 
       <div className="p-6 max-w-7xl mx-auto space-y-8 font-body animate-in slide-in-from-bottom-5">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Personal Administrativo <Shield className="w-8 h-8 text-indigo-600" />
+              {t('staffPage.pageTitle')} <Shield className="w-8 h-8 text-indigo-600" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Crea usuarios para enfermeras, recepcionistas y guardias.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1">{t('staffPage.pageSubtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <div className="relative flex-1 min-w-[200px] md:flex-none">
               <input
                 type="text"
-                placeholder="Buscar por nombre, correo o módulo..."
+                placeholder={t('staffPage.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all w-full md:w-64"
@@ -401,7 +414,7 @@ export function StaffManagement() {
               className="flex items-center gap-2 bg-white text-indigo-600 border border-indigo-100 px-4 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-50 transition-all shadow-sm"
             >
               <Download className="w-4 h-4" />
-              PLANTILLA
+              {t('staffPage.templateBtn')}
             </button>
             <button
               onClick={() => csvRef.current?.click()}
@@ -409,7 +422,7 @@ export function StaffManagement() {
               className="flex items-center gap-2 bg-slate-800 text-white px-4 py-4 rounded-[1.5rem] font-black text-xs hover:bg-slate-700 transition-all shadow-xl shadow-slate-200 active:scale-95 disabled:opacity-50"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              IMPORTAR
+              {t('staffPage.importBtn')}
             </button>
             <button
               onClick={() => {
@@ -420,7 +433,7 @@ export function StaffManagement() {
               className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-200 active:scale-95"
             >
               <Plus className="w-5 h-5" />
-              NUEVO STAFF
+              {t('staffPage.newStaffBtn')}
             </button>
           </div>
         </header>
@@ -429,7 +442,7 @@ export function StaffManagement() {
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
         ) : filteredStaff.length === 0 ? (
           <div className="text-center py-12 text-slate-400 font-bold text-sm">
-            {term ? 'Ningún miembro del staff coincide con la búsqueda.' : 'Todavía no hay staff creado.'}
+            {term ? t('staffPage.noMatchSearch') : t('staffPage.noStaffYet')}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -440,7 +453,7 @@ export function StaffManagement() {
                     onClick={() => requestDelete(user.id, `${user.first_name} ${user.last_name}`)}
                     disabled={isDeletingId === user.id}
                     className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                    title="Eliminar Staff"
+                    title={t('staffPage.deleteStaffTooltip')}
                   >
                     {isDeletingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
@@ -455,16 +468,16 @@ export function StaffManagement() {
                   </div>
                   
                   <div className="flex-1">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Módulos Permitidos</h4>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('staffPage.allowedModulesLabel')}</h4>
                     <div className="flex flex-wrap gap-2">
                       {perms.length === 0 ? (
-                        <span className="text-xs text-slate-400 italic">Sin accesos configurados</span>
+                        <span className="text-xs text-slate-400 italic">{t('staffPage.noAccessConfigured')}</span>
                       ) : (
                         perms.map(p => {
-                          const mod = AVAILABLE_MODULES.find(m => m.id === p);
+                          const labelKey = MODULE_LABEL_KEYS[p];
                           return (
                             <span key={p} className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-100">
-                              {mod ? mod.label : p}
+                              {labelKey ? t(labelKey) : p}
                             </span>
                           )
                         })
@@ -476,7 +489,7 @@ export function StaffManagement() {
                     onClick={() => openEditModal(user)}
                     className="mt-6 w-full py-3 bg-slate-50 text-indigo-600 font-black text-xs rounded-xl hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
                   >
-                    <Edit2 className="w-4 h-4" /> EDITAR PERMISOS
+                    <Edit2 className="w-4 h-4" /> {t('staffPage.editPermissionsBtn')}
                   </button>
                 </div>
               );
@@ -488,14 +501,14 @@ export function StaffManagement() {
           <section className="space-y-4">
             <div>
               <h2 className="text-lg font-black text-slate-800">
-                Acceso de otros colegios <span className="text-xs font-bold text-slate-400">({filteredGrantedAccess.length})</span>
+                {t('staffPage.otherSchoolsAccessTitle')} <span className="text-xs font-bold text-slate-400">({filteredGrantedAccess.length})</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Ya tienen cuenta en otro colegio de la organización y se les dio acceso a este también.
+                {t('staffPage.otherSchoolsAccessDesc')}
               </p>
             </div>
             {filteredGrantedAccess.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Ninguno coincide con la búsqueda.</p>
+              <p className="text-xs text-slate-400 italic">{t('staffPage.noneMatchSearch')}</p>
             ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredGrantedAccess.map((g: any) => (
@@ -513,7 +526,7 @@ export function StaffManagement() {
                     onClick={() => handleRevokeAccess(g.staff_id)}
                     disabled={revokingStaffId === g.staff_id}
                     className="shrink-0 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
-                    title="Revocar acceso a este colegio"
+                    title={t('staffPage.revokeAccessTooltip')}
                   >
                     {revokingStaffId === g.staff_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
@@ -527,20 +540,20 @@ export function StaffManagement() {
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}
-        title="Eliminar Staff"
-        message={`¿Estás seguro de que deseas eliminar a ${confirmModal.name}? Esta acción no se puede deshacer y revocará su acceso al sistema.`}
+        title={t('staffPage.deleteStaffTooltip')}
+        message={t('staffPage.deleteStaffConfirmMessageTemplate').replace('{name}', confirmModal.name)}
         onConfirm={executeDelete}
         onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
-        confirmText="Eliminar Staff"
+        confirmText={t('staffPage.deleteStaffTooltip')}
       />
 
       {importProgress && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95">
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
-            <h3 className="text-lg font-black text-slate-800 mb-1">Importando personal...</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-1">{t('staffPage.importingStaffTitle')}</h3>
             <p className="text-sm text-slate-500 mb-5">
-              {importProgress.done} de {importProgress.total}
+              {t('guardiansPage.progressOfTemplate').replace('{done}', String(importProgress.done)).replace('{total}', String(importProgress.total))}
             </p>
             <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
               <div
@@ -550,7 +563,7 @@ export function StaffManagement() {
                 }}
               />
             </div>
-            <p className="text-xs text-slate-400 mt-3">No cierres esta pestaña</p>
+            <p className="text-xs text-slate-400 mt-3">{t('guardiansPage.dontCloseTab')}</p>
           </div>
         </div>
       )}
@@ -564,7 +577,7 @@ export function StaffManagement() {
                   <Shield className="w-5 h-5 text-indigo-600" />
                 </div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                  {editingId ? 'Editar Permisos de Staff' : 'Crear Nuevo Staff'}
+                  {editingId ? t('staffPage.editPermissionsModalTitle') : t('staffPage.createNewStaffModalTitle')}
                 </h2>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2.5 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all">
@@ -577,8 +590,8 @@ export function StaffManagement() {
                 {!editingId && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre</label>
-                      <input 
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.firstNameLabel')}</label>
+                      <input
                         required
                         value={formData.first_name}
                         onChange={e => setFormData({...formData, first_name: e.target.value})}
@@ -586,8 +599,8 @@ export function StaffManagement() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Apellido</label>
-                      <input 
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('guardiansPage.lastNameLabel')}</label>
+                      <input
                         required
                         value={formData.last_name}
                         onChange={e => setFormData({...formData, last_name: e.target.value})}
@@ -595,8 +608,8 @@ export function StaffManagement() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Correo Electrónico</label>
-                      <input 
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('staffPage.emailLabel')}</label>
+                      <input
                         type="email" required
                         value={formData.email}
                         onChange={e => setFormData({...formData, email: e.target.value})}
@@ -604,24 +617,24 @@ export function StaffManagement() {
                       />
                     </div>
                     <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
-                      Se le enviará un correo de invitación a este correo para que active su acceso — no hace falta definir una contraseña aquí.
+                      {t('staffPage.inviteNotice')}
                     </p>
                   </div>
                 )}
 
                 <div>
-                  <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">Permisos de Acceso</h3>
+                  <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">{t('staffPage.accessPermissionsTitle')}</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    {AVAILABLE_MODULES.map(mod => {
-                      const isSelected = formData.permissions.includes(mod.id);
+                    {AVAILABLE_MODULE_IDS.map(id => {
+                      const isSelected = formData.permissions.includes(id);
                       return (
-                        <div 
-                          key={mod.id}
-                          onClick={() => handleTogglePermission(mod.id)}
+                        <div
+                          key={id}
+                          onClick={() => handleTogglePermission(id)}
                           className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-indigo-50 border-indigo-500' : 'bg-white border-slate-100 hover:border-indigo-200'}`}
                         >
                           <span className={`text-xs font-black uppercase tracking-widest ${isSelected ? 'text-indigo-700' : 'text-slate-500'}`}>
-                            {mod.label}
+                            {t(MODULE_LABEL_KEYS[id])}
                           </span>
                           <div className={`w-5 h-5 rounded-md flex items-center justify-center ${isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100'}`}>
                             {isSelected && <Check className="w-3 h-3" />}
@@ -638,10 +651,10 @@ export function StaffManagement() {
                 >
                   <div>
                     <span className={`block text-xs font-black uppercase tracking-widest ${formData.notify_all_arrivals ? 'text-emerald-700' : 'text-slate-500'}`}>
-                      Recibir todos los avisos de llegada de padres
+                      {t('staffPage.notifyAllArrivalsLabel')}
                     </span>
                     <span className="block text-[11px] text-slate-400 font-medium mt-1">
-                      Además de los encargados asignados por grado/sección en Ajustes de Salida (ej. recepción).
+                      {t('staffPage.notifyAllArrivalsDesc')}
                     </span>
                   </div>
                   <div className={`w-5 h-5 shrink-0 rounded-md flex items-center justify-center ml-3 ${formData.notify_all_arrivals ? 'bg-emerald-500 text-white' : 'bg-slate-100'}`}>
@@ -657,7 +670,7 @@ export function StaffManagement() {
                 disabled={isSaving}
                 className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-200 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
               >
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'GUARDAR STAFF'}
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : t('staffPage.saveStaffBtn')}
               </button>
             </div>
           </div>
