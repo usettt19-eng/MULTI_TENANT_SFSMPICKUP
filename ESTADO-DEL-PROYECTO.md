@@ -1000,6 +1000,16 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
   (`public/manual-*.html`, `public/guia-padres.html`, `public/parent-guide.html`,
   `public/reception-guide.html`), no solo como Artifacts de Claude —
   marcadas `noindex, nofollow`.
+- `public/manual-personal.html` (2026-08-30, nueva): guía general para
+  todo el staff involucrado en la salida (no solo recepción) — el flujo
+  completo de una recogida, roles y qué pantalla usa cada uno, cómo
+  configurar cada dispositivo el día de salida, casos especiales, Bloqueo
+  de Emergencia, y la red de seguridad del auto-completado. Complementa
+  `manual-recepcion.html`/`manual-enfermeria.html`, mismo estilo visual.
+  `manual-recepcion.html` se actualizó el mismo día con Salida Autónoma en
+  Check-In, el selector de idioma, y una nota sobre el contador de la
+  campana de notificaciones. También se generó una presentación (.pptx,
+  13 slides) del mismo contenido para capacitación presencial del staff.
 - Páginas de invitación a la prueba beta (`public/prueba-android.html`,
   `public/prueba-ios.html`) con los enlaces de unirse a TestFlight / Google
   Play, para compartir con los padres seleccionados (ver "Apps móviles" más
