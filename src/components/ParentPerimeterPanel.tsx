@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Car, MapPin, DoorOpen } from 'lucide-react';
 import type { ParentPresence } from '../types/database';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
+import { useLanguage } from '../contexts/LanguageContext';
 
 // No se guarda ni se muestra ninguna coordenada GPS real: esto es una
 // representación estilizada (tarjetas de vehículo), no un mapa. Solo usamos
@@ -28,6 +29,7 @@ interface PerimeterCard {
 }
 
 export function ParentPerimeterPanel() {
+  const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [cards, setCards] = useState<PerimeterCard[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
@@ -124,7 +126,7 @@ export function ParentPerimeterPanel() {
 
     const built: PerimeterCard[] = [];
     presences.forEach((p: ParentPresence) => {
-      const parentName = `${p.parent?.first_name || ''} ${p.parent?.last_name || ''}`.trim() || 'Padre/Tutor';
+      const parentName = `${p.parent?.first_name || ''} ${p.parent?.last_name || ''}`.trim() || t('perimeter.parentFallback');
       const vehicle = (vehicleByParent.get(p.parent_id) as any) || null;
       const activePickups = pickupsByParent.get(p.parent_id) || [];
 
@@ -210,7 +212,7 @@ export function ParentPerimeterPanel() {
     return { ring: 'border-emerald-300 bg-emerald-50', icon: 'text-emerald-600' };
   };
 
-  const doorName = (doorId: string | null) => doors.find(d => d.id === doorId)?.name || 'Sin puerta asignada';
+  const doorName = (doorId: string | null) => doors.find(d => d.id === doorId)?.name || t('transit.noDoor');
 
   const filtered = selectedDoorId ? cards.filter(c => (c.doorId || NO_DOOR_KEY) === selectedDoorId) : cards;
 
@@ -225,7 +227,7 @@ export function ParentPerimeterPanel() {
         });
         return Array.from(byDoor.entries()).map(([doorKey, items]) => ({
           doorKey,
-          doorLabel: doorKey === NO_DOOR_KEY ? 'Sin puerta asignada' : doorName(doorKey),
+          doorLabel: doorKey === NO_DOOR_KEY ? t('transit.noDoor') : doorName(doorKey),
           items,
         }));
       })();
@@ -234,7 +236,7 @@ export function ParentPerimeterPanel() {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100">
         <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-indigo-500" /> Padres en el Perímetro
+          <MapPin className="w-4 h-4 text-indigo-500" /> {t('perimeter.title')}
           <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full">
             {cards.length}
           </span>
@@ -246,11 +248,11 @@ export function ParentPerimeterPanel() {
             onChange={e => handleDoorChange(e.target.value)}
             className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none"
           >
-            <option value="">Todas las puertas</option>
+            <option value="">{t('transit.allDoors')}</option>
             {doors.map(d => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-            <option value={NO_DOOR_KEY}>Sin puerta asignada</option>
+            <option value={NO_DOOR_KEY}>{t('transit.noDoor')}</option>
           </select>
         </div>
       </div>
@@ -258,7 +260,7 @@ export function ParentPerimeterPanel() {
       <div className="bg-gradient-to-b from-emerald-50 to-slate-50 min-h-[160px] px-6 py-6">
         {cards.length === 0 ? (
           <div className="flex items-center justify-center h-24 text-xs text-slate-400 font-medium">
-            No hay padres dentro del perímetro por ahora.
+            {t('perimeter.empty')}
           </div>
         ) : (
           <div className="space-y-5">
@@ -296,7 +298,7 @@ export function ParentPerimeterPanel() {
                           <p className="text-[9px] font-black text-indigo-500 max-w-[92px] truncate text-center">{c.vehicle.license_plate}</p>
                         )}
                         <p className="text-[9px] font-bold text-slate-400">
-                          {mins <= 0 ? 'recién llegó' : `hace ${mins} min`}
+                          {mins <= 0 ? t('perimeter.justArrived') : t('perimeter.minutesAgoTemplate').replace('{min}', String(mins))}
                         </p>
                       </div>
                     );

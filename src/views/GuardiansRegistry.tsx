@@ -10,8 +10,10 @@ import {
   ExternalLink, Key, X, Camera, Upload, Link,
   Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download
 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export function GuardiansRegistry() {
+  const { t } = useLanguage();
   const { profile } = useAuth();
   const [guardians, setGuardians] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -99,7 +101,7 @@ export function GuardiansRegistry() {
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("No se pudo acceder a la cámara.");
+      alert(t('guardiansPage.cameraError'));
     }
   };
 
@@ -445,7 +447,7 @@ export function GuardiansRegistry() {
       resetForm();
       fetchGuardians();
     } catch (error: any) {
-      alert("Error: " + error.message);
+      alert(t('guardiansPage.genericErrorPrefix') + error.message);
     } finally {
       setProcessing(false);
     }
@@ -476,7 +478,7 @@ export function GuardiansRegistry() {
       
       fetchGuardians();
     } catch (error: any) {
-      alert("Error al eliminar: " + error.message);
+      alert(t('guardiansPage.deleteErrorPrefix') + error.message);
     } finally {
       setProcessing(false);
     }
@@ -499,13 +501,13 @@ export function GuardiansRegistry() {
 
   return (
     <>
-      <TopNav title="SafePickup" subtitle="Gestión de Familias" />
+      <TopNav title="SafePickup" subtitle={t('guardiansPage.topnavSubtitle')} />
 
       <div className="p-6 max-w-7xl mx-auto space-y-6 w-full font-body">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-black text-primary tracking-tight">Directorio de Padres</h1>
-            <p className="text-sm text-slate-500 font-medium">Control de accesos y vínculos familiares.</p>
+            <h1 className="text-2xl font-black text-primary tracking-tight">{t('guardiansPage.pageTitle')}</h1>
+            <p className="text-sm text-slate-500 font-medium">{t('guardiansPage.pageSubtitle')}</p>
           </div>
           <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 w-full lg:w-auto">
             <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
@@ -520,7 +522,7 @@ export function GuardiansRegistry() {
             <div className="relative group flex-1 md:flex-none">
               <input
                 type="text"
-                placeholder="Buscar padre..."
+                placeholder={t('guardiansPage.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none w-full md:w-64 shadow-sm"
@@ -541,23 +543,23 @@ export function GuardiansRegistry() {
               className="flex items-center gap-2 bg-surface-container-high text-primary px-4 py-2 rounded-xl font-bold text-sm hover:bg-surface-variant transition-colors shadow-sm"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              Exportar
+              {t('guardiansPage.exportBtn')}
             </button>
-            
-            <button 
-              onClick={handleDownloadTemplate} 
+
+            <button
+              onClick={handleDownloadTemplate}
               className="flex items-center gap-2 bg-surface-container-high text-primary px-4 py-2 rounded-xl font-bold text-sm hover:bg-surface-variant transition-colors shadow-sm"
             >
               <Download className="w-4 h-4" />
-              Plantilla
+              {t('guardiansPage.templateBtn')}
             </button>
-            
-            <button 
-              onClick={() => csvRef.current?.click()} 
+
+            <button
+              onClick={() => csvRef.current?.click()}
               className="flex items-center gap-2 bg-secondary text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-secondary/90 transition-colors shadow-md"
             >
               <Upload className="w-4 h-4" />
-              Importar
+              {t('guardiansPage.importBtn')}
             </button>
 
             <button
@@ -565,7 +567,7 @@ export function GuardiansRegistry() {
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-primary-container transition-all shadow-lg"
             >
               <UserPlus className="w-4 h-4" />
-              Nuevo
+              {t('guardiansPage.newBtn')}
             </button>
           </div>
         </div>
@@ -610,7 +612,7 @@ export function GuardiansRegistry() {
                 </div>
 
                 <div className="pt-4 border-t border-slate-50">
-                  <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-1.5">Alumnos Vinculados</span>
+                  <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-1.5">{t('guardiansPage.linkedStudentsLabel')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {guardian.parent_students?.map((ps: any) => (
                       <span key={ps.students.id} className="bg-slate-50 text-slate-600 px-2 py-1 rounded-lg text-[9px] font-bold border border-slate-100">
@@ -637,12 +639,12 @@ export function GuardiansRegistry() {
               <table className="w-full text-left text-sm min-w-[800px]">
               <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                 <tr>
-                  <th className="p-4">Nombre</th>
+                  <th className="p-4">{t('guardiansPage.tableName')}</th>
                   <th className="p-4">Email</th>
-                  <th className="p-4">Teléfono</th>
-                  <th className="p-4">PIN</th>
-                  <th className="p-4">Alumnos</th>
-                  <th className="p-4 text-right">Acciones</th>
+                  <th className="p-4">{t('guardiansPage.tablePhone')}</th>
+                  <th className="p-4">{t('guardiansPage.tablePin')}</th>
+                  <th className="p-4">{t('guardiansPage.tableStudents')}</th>
+                  <th className="p-4 text-right">{t('guardiansPage.tableActions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -677,11 +679,11 @@ export function GuardiansRegistry() {
 
         <ConfirmModal
           isOpen={confirmModal.isOpen}
-          title="Eliminar Tutor"
-          message={`¿Estás seguro de que deseas eliminar a ${confirmModal.name}? Esta acción eliminará su acceso y desvinculará a los alumnos asociados.`}
+          title={t('guardiansPage.deleteTitle')}
+          message={t('guardiansPage.deleteMessageTemplate').replace('{name}', confirmModal.name)}
           onConfirm={executeDelete}
           onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
-          confirmText="Eliminar Tutor"
+          confirmText={t('guardiansPage.deleteTitle')}
         />
 
         {/* Overlay de progreso de importación CSV */}
@@ -689,9 +691,9 @@ export function GuardiansRegistry() {
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-primary/30 backdrop-blur-md">
             <div className="bg-white rounded-3xl w-full max-w-sm p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95">
               <Loader2 className="w-10 h-10 text-secondary animate-spin mb-4" />
-              <h3 className="text-lg font-black text-primary mb-1">Importando padres...</h3>
+              <h3 className="text-lg font-black text-primary mb-1">{t('guardiansPage.importingTitle')}</h3>
               <p className="text-sm text-slate-500 mb-5">
-                {importProgress.done} de {importProgress.total}
+                {t('guardiansPage.progressOfTemplate').replace('{done}', String(importProgress.done)).replace('{total}', String(importProgress.total))}
               </p>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -701,7 +703,7 @@ export function GuardiansRegistry() {
                   }}
                 />
               </div>
-              <p className="text-xs text-slate-400 mt-3">No cierres esta pestaña</p>
+              <p className="text-xs text-slate-400 mt-3">{t('guardiansPage.dontCloseTab')}</p>
             </div>
           </div>
         )}
@@ -713,7 +715,7 @@ export function GuardiansRegistry() {
               {/* Sticky Header */}
               <div className="flex justify-between items-center p-5 sm:p-6 bg-slate-50 border-b border-slate-100 flex-shrink-0">
                 <h2 className="text-lg sm:text-xl font-black text-primary tracking-tight">
-                  {editingGuardianId ? 'Editar Padre' : 'Registro Familiar'}
+                  {editingGuardianId ? t('guardiansPage.editTitle') : t('guardiansPage.newTitle')}
                 </h2>
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="p-2 bg-white text-slate-400 hover:text-rose-500 rounded-xl shadow-sm transition-all hover:rotate-90">
                   <X className="w-5 h-5" />
@@ -736,13 +738,13 @@ export function GuardiansRegistry() {
                         <div className="relative w-full h-full group/cam">
                           <video ref={videoRef} autoPlay className="w-full h-full object-cover transform scale-x-[-1]" />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover/cam:opacity-100 transition-opacity">
-                            <button type="button" onClick={takePhoto} className="bg-white text-primary px-4 py-2 rounded-xl font-black text-[10px] shadow-xl">CAPTURAR</button>
+                            <button type="button" onClick={takePhoto} className="bg-white text-primary px-4 py-2 rounded-xl font-black text-[10px] shadow-xl">{t('guardiansPage.captureBtn')}</button>
                           </div>
                         </div>
                       ) : (
                         <div className="text-center">
                           <Camera className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                          <p className="text-[10px] font-black text-slate-300 uppercase">Foto</p>
+                          <p className="text-[10px] font-black text-slate-300 uppercase">{t('guardiansPage.photoLabel')}</p>
                         </div>
                       )}
                     </div>
@@ -758,11 +760,11 @@ export function GuardiansRegistry() {
                   <div className="flex-1 w-full space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nombre</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.firstNameLabel')}</label>
                         <input required value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Apellido</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.lastNameLabel')}</label>
                         <input required value={lastName} onChange={e => setLastName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                       </div>
                     </div>
@@ -772,22 +774,22 @@ export function GuardiansRegistry() {
                         <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+507..." className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">PIN Secreto</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.pinSecretLabel')}</label>
                         <input required maxLength={4} value={pinCode} onChange={e => setPinCode(e.target.value)} placeholder="0000" className="w-full bg-slate-50 border border-emerald-100 rounded-2xl px-4 py-2.5 text-sm font-black text-center tracking-widest outline-none focus:border-emerald-500 transition-all" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico (Acceso)</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.emailAccessLabel')}</label>
                       <input required readOnly={!!editingGuardianId} type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none read-only:bg-slate-100 transition-all" />
                     </div>
                     {editingGuardianId ? (
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Cambiar Contraseña <span className="text-[9px] text-slate-400 font-normal lowercase tracking-normal ml-2">(opcional, dejar en blanco para no cambiarla)</span></label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.changePasswordLabel')} <span className="text-[9px] text-slate-400 font-normal lowercase tracking-normal ml-2">{t('guardiansPage.changePasswordHint')}</span></label>
                         <input type="password" minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                       </div>
                     ) : (
                       <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-2xl px-4 py-3">
-                        Se le enviará un correo de invitación a este padre para que active su acceso — no hace falta definir una contraseña aquí.
+                        {t('guardiansPage.inviteNotice')}
                       </p>
                     )}
                   </div>
@@ -796,12 +798,12 @@ export function GuardiansRegistry() {
                 {/* Section: Student Linking */}
                 <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 flex flex-col">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                        <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest shrink-0">Vincular Estudiantes</h4>
+                        <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest shrink-0">{t('guardiansPage.linkStudentsTitle')}</h4>
                         <div className="relative w-full sm:w-64 shrink-0">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input 
-                        type="text" 
-                        placeholder="Buscar alumno..." 
+                      <input
+                        type="text"
+                        placeholder={t('guardiansPage.searchStudentPlaceholder')}
                         value={studentSearchTerm}
                         onChange={(e) => setStudentSearchTerm(e.target.value)}
                         className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
@@ -851,7 +853,7 @@ export function GuardiansRegistry() {
                 {/* Section: Additional Tutor */}
                 <div className="bg-emerald-50/20 p-6 rounded-3xl border border-emerald-100/30">
                   <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Reemplazos Autorizados (QR)</h4>
+                    <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{t('guardiansPage.replacementsTitle')}</h4>
                   </div>
                   
                   <div className="space-y-3 mb-4">
@@ -873,10 +875,10 @@ export function GuardiansRegistry() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input 
-                      value={newRepName} 
-                      onChange={e => setNewRepName(e.target.value)} 
-                      placeholder="Nombre del reemplazo" 
+                    <input
+                      value={newRepName}
+                      onChange={e => setNewRepName(e.target.value)}
+                      placeholder={t('guardiansPage.repNamePlaceholder')}
                       className="w-full bg-white border border-emerald-50 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-all font-medium" 
                     />
                     <div className="flex gap-2">
@@ -910,20 +912,20 @@ export function GuardiansRegistry() {
                 {/* Section: Vehicle */}
                 <div className="grid grid-cols-2 gap-4 pb-4">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Placa Vehículo</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.vehiclePlateLabel')}</label>
                     <input value={licensePlate} onChange={e => setLicensePlate(e.target.value)} placeholder="XXX-000" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm font-black uppercase outline-none focus:border-primary" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Descripción</label>
-                    <input value={vehicleDesc} onChange={e => setVehicleDesc(e.target.value)} placeholder="Ej. Sedan Blanco" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary" />
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.vehicleDescLabel')}</label>
+                    <input value={vehicleDesc} onChange={e => setVehicleDesc(e.target.value)} placeholder={t('guardiansPage.vehicleDescPlaceholder')} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary" />
                   </div>
                 </div>
 
                 {/* Sticky-ish Footer Buttons */}
                 <div className="flex gap-4 pt-4 border-t border-slate-100">
-                  <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-3xl hover:bg-slate-200 transition-all text-[11px] uppercase tracking-widest">Cancelar</button>
+                  <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-3xl hover:bg-slate-200 transition-all text-[11px] uppercase tracking-widest">{t('guardiansPage.cancelBtn')}</button>
                   <button type="submit" disabled={processing} className="flex-[2] bg-primary text-white font-black py-4 rounded-3xl hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-3 text-[11px] uppercase tracking-widest">
-                    {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingGuardianId ? 'GUARDAR CAMBIOS' : 'REGISTRAR FAMILIA')}
+                    {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingGuardianId ? t('settings.saveChanges') : t('guardiansPage.registerFamilyBtn'))}
                   </button>
                 </div>
               </form>

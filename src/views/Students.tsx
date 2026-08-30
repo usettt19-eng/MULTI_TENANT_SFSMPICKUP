@@ -696,9 +696,9 @@ export function Students() {
             <div className="p-10 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h2 className="text-3xl font-black text-primary tracking-tight">
-                  {isEditing ? 'Editar Alumno' : 'Nuevo Alumno'}
+                  {isEditing ? t('students.editStudentTitle') : t('students.newStudentTitle')}
                 </h2>
-                <p className="text-sm text-slate-500 font-medium mt-1">Completa el perfil académico</p>
+                <p className="text-sm text-slate-500 font-medium mt-1">{t('students.completeProfile')}</p>
               </div>
               <button type="button" onClick={closeAndResetModal} className="p-4 hover:bg-slate-200 rounded-full transition-colors group">
                 <X className="w-7 h-7 text-slate-400 group-hover:text-slate-600 transition-colors" />
@@ -709,17 +709,17 @@ export function Students() {
               
               {/* Photo Section */}
               <div className="w-full md:w-80 flex-shrink-0 space-y-4">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Fotografía</h3>
-                
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">{t('students.photography')}</h3>
+
                 <div className="p-1 bg-surface-container rounded-2xl flex gap-1">
                   <button type="button" onClick={() => { setPhotoMode('url'); stopCamera(); }} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${photoMode === 'url' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                     <Layers className="w-3 h-3" /> URL
                   </button>
                   <button type="button" onClick={() => { setPhotoMode('upload'); stopCamera(); }} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${photoMode === 'upload' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    <Upload className="w-3 h-3" /> Archivo
+                    <Upload className="w-3 h-3" /> {t('students.photoFileTab')}
                   </button>
                   <button type="button" onClick={startCamera} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${photoMode === 'camera' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    <Camera className="w-3 h-3" /> Cámara
+                    <Camera className="w-3 h-3" /> {t('students.photoCameraTab')}
                   </button>
                 </div>
 
@@ -733,8 +733,8 @@ export function Students() {
                         value={photoPayload} 
                         onChange={e => setPhotoPayload(e.target.value)} 
                         type="url" 
-                        className="w-full bg-white border border-outline-variant/20 rounded-xl px-4 py-3 text-xs outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all text-center" 
-                        placeholder="Pega el enlace aquí..." 
+                        className="w-full bg-white border border-outline-variant/20 rounded-xl px-4 py-3 text-xs outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all text-center"
+                        placeholder={t('students.pasteLinkPlaceholder')}
                       />
                       {photoPayload && <img src={photoPayload} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />}
                     </div>
@@ -752,7 +752,7 @@ export function Students() {
                       ) : (
                         <>
                           <Upload className="w-12 h-12 text-slate-300 mb-2" />
-                          <p className="text-xs text-slate-400 font-bold">Subir archivo</p>
+                          <p className="text-xs text-slate-400 font-bold">{t('students.uploadFile')}</p>
                         </>
                       )}
                       <input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
@@ -772,7 +772,7 @@ export function Students() {
                         <>
                           <img src={photoPayload} alt="Captured" className="w-full h-full object-cover" />
                           <button type="button" onClick={() => { setPhotoPayload(''); startCamera(); }} className="absolute bottom-6 bg-white text-primary px-6 py-3 rounded-2xl font-black text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all border-b-4 border-slate-200">
-                            REPETIR FOTO
+                            {t('students.retakePhoto')}
                           </button>
                         </>
                       )}
@@ -780,7 +780,7 @@ export function Students() {
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 font-medium text-center italic px-4">Utiliza una foto clara para facilitar la identificación.</p>
+                <p className="text-[10px] text-slate-400 font-medium text-center italic px-4">{t('students.photoHint')}</p>
               </div>
 
               <div className="flex-1 space-y-8">
@@ -818,7 +818,7 @@ export function Students() {
                       onChange={e => setGrade(e.target.value)}
                       className="w-full bg-surface-container-low border border-outline-variant/20 rounded-[1.25rem] px-6 py-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-primary appearance-none cursor-pointer"
                     >
-                      <option value="">Seleccionar grado</option>
+                      <option value="">{t('students.selectGradePlaceholder')}</option>
                       {schoolGrades.length > 0 ? (
                         schoolGrades.map(g => (
                           <option key={g.id} value={g.name}>{g.name}</option>
@@ -867,12 +867,10 @@ export function Students() {
                     />
                     <span>
                       <span className="block font-bold text-primary text-sm flex items-center gap-2">
-                        <Footprints className="w-4 h-4" /> Permitir Salida Autónoma
+                        <Footprints className="w-4 h-4" /> {t('students.selfDismissalTitle')}
                       </span>
                       <span className="block text-xs text-slate-500 font-medium mt-0.5">
-                        El alumno puede reportar su propia salida en Check-In (QR o reconocimiento
-                        facial), sin que un padre/tutor lo recoja. Pensado para alumnos mayores que
-                        se van caminando o en bici.
+                        {t('students.selfDismissalDesc')}
                       </span>
                     </span>
                   </label>
@@ -882,7 +880,7 @@ export function Students() {
                         type="button"
                         onClick={() => setShowQrPreviewModal(true)}
                         className="relative shrink-0 group/qr"
-                        title="Agrandar, exportar o imprimir"
+                        title={t('students.qrEnlargeTitle')}
                       >
                         <QRCodeSVG
                           value={JSON.stringify({ type: 'self_dismissal', student_id: currentStudentId, token: selfDismissalQrToken })}
@@ -893,15 +891,13 @@ export function Students() {
                         </span>
                       </button>
                       <p className="text-xs text-slate-500 font-medium">
-                        Código QR de {firstName || 'este alumno'} para Salida Autónoma. Toca el código
-                        para agrandarlo, imprimirlo o descargarlo — el personal lo escanea en Check-In
-                        para registrar la salida.
+                        {t('students.qrDescTemplate').replace('{name}', firstName || t('students.thisStudentFallback'))}
                       </p>
                     </div>
                   )}
                   {selfDismissalAllowed && !isEditing && (
                     <p className="text-xs text-slate-400 font-medium italic">
-                      El código QR se genera al guardar — vuelve a abrir la ficha de este alumno para verlo.
+                      {t('students.qrGeneratesOnSave')}
                     </p>
                   )}
                 </div>
@@ -912,15 +908,15 @@ export function Students() {
                     onClick={closeAndResetModal} 
                     className="px-8 py-4 text-slate-500 font-bold text-sm hover:bg-slate-100 rounded-2xl transition-colors"
                   >
-                    Descartar
+                    {t('students.discardBtn')}
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isSubmitting}
                     className="px-10 py-4 bg-primary text-white font-black text-sm hover:bg-primary-container rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center gap-3 disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-5 h-5" />
-                    {isSubmitting ? 'Subiendo...' : (isEditing ? 'Guardar Cambios' : t('students.save'))}
+                    {isSubmitting ? t('students.uploading') : (isEditing ? t('students.saveChangesBtn') : t('students.save'))}
                   </button>
                 </div>
               </div>
@@ -935,7 +931,7 @@ export function Students() {
           <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
             <div className="p-8 text-center border-b border-slate-100 space-y-4">
               <h3 className="text-lg font-black text-primary flex items-center justify-center gap-2">
-                <Footprints className="w-5 h-5" /> Código de Salida Autónoma
+                <Footprints className="w-5 h-5" /> {t('students.qrModalTitle')}
               </h3>
               <p className="text-sm text-slate-500 font-medium">{firstName} {lastName}</p>
               <div className="flex justify-center bg-slate-50 rounded-2xl p-6">
@@ -951,20 +947,20 @@ export function Students() {
                 onClick={downloadQrCode}
                 className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
               >
-                <Download className="w-4 h-4" /> Descargar
+                <Download className="w-4 h-4" /> {t('students.qrDownloadBtn')}
               </button>
               <button
                 onClick={copyQrCode}
                 className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-primary bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
               >
                 {qrCopyFeedback ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                {qrCopyFeedback ? '¡Copiado!' : 'Copiar'}
+                {qrCopyFeedback ? t('students.qrCopiedFeedback') : t('students.qrCopyBtn')}
               </button>
               <button
                 onClick={printQrCode}
                 className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-white bg-primary hover:bg-primary-container transition-colors text-xs"
               >
-                <Printer className="w-4 h-4" /> Imprimir
+                <Printer className="w-4 h-4" /> {t('students.qrPrintBtn')}
               </button>
             </div>
             <div className="px-6 pb-6">
@@ -972,7 +968,7 @@ export function Students() {
                 onClick={() => setShowQrPreviewModal(false)}
                 className="w-full text-center text-slate-400 font-bold text-sm hover:text-primary transition-colors py-2"
               >
-                Cerrar
+                {t('students.qrCloseBtn')}
               </button>
             </div>
           </div>
