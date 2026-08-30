@@ -215,7 +215,7 @@ export default function App() {
 
   return (
     <LanguageProvider>
-      <LayoutProvider>
+      <LayoutProvider setCurrentView={setCurrentView}>
         <Layout currentView={currentView} setCurrentView={setCurrentView}>
           {renderView()}
         </Layout>
