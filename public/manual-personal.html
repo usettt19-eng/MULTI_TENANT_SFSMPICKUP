@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Guía General de Personal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Guía general para todo el personal del colegio sobre el proceso de salida de alumnos en Safe Smart Pickup." />
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root {
+    --ink: #101a2c;
+    --ink-soft: #515f74;
+    --ink-faint: #8793a6;
+    --paper: #eef1f6;
+    --surface: #ffffff;
+    --surface-alt: #f4f6fa;
+    --line: #d7dee8;
+    --line-soft: #e5eaf1;
+    --accent: #362f97;
+    --accent-strong: #241f6b;
+    --accent-soft: #e9e7f9;
+    --good: #04785f;
+    --good-soft: #dff3ec;
+    --good-line: #b9e3d3;
+    --warn: #a9560a;
+    --warn-soft: #fbeed9;
+    --warn-line: #eecda0;
+    --chip-bg: #fbfbfd;
+    --shadow: 0 1px 2px rgba(16, 26, 44, 0.04), 0 8px 24px rgba(16, 26, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1f6;
+      --ink-soft: #aab4c8;
+      --ink-faint: #75809a;
+      --paper: #0c1120;
+      --surface: #131a2c;
+      --surface-alt: #171f34;
+      --line: #29324c;
+      --line-soft: #212a42;
+      --accent: #a29cf5;
+      --accent-strong: #c6c1ff;
+      --accent-soft: #211d47;
+      --good: #4fd3ab;
+      --good-soft: #10291f;
+      --good-line: #1c4536;
+      --warn: #eeb26c;
+      --warn-soft: #33230d;
+      --warn-line: #4d3714;
+      --chip-bg: #171f34;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #eef1f6;
+    --ink-soft: #aab4c8;
+    --ink-faint: #75809a;
+    --paper: #0c1120;
+    --surface: #131a2c;
+    --surface-alt: #171f34;
+    --line: #29324c;
+    --line-soft: #212a42;
+    --accent: #a29cf5;
+    --accent-strong: #c6c1ff;
+    --accent-soft: #211d47;
+    --good: #4fd3ab;
+    --good-soft: #10291f;
+    --good-line: #1c4536;
+    --warn: #eeb26c;
+    --warn-soft: #33230d;
+    --warn-line: #4d3714;
+    --chip-bg: #171f34;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  h1, h2, h3 {
+    font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding-bottom: 2.25rem;
+    border-bottom: 3px solid var(--ink);
+    margin-bottom: 2.5rem;
+  }
+
+  header.masthead h1 {
+    font-size: clamp(2rem, 4.5vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  .masthead-meta strong { color: var(--ink); font-weight: 600; }
+
+  nav.toc {
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 3rem;
+  }
+
+  nav.toc .eyebrow { display: block; margin-bottom: 0.9rem; }
+
+  nav.toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  nav.toc li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  nav.toc .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 1.4rem;
+  }
+
+  section.step {
+    padding: 2.75rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  section.step:last-of-type { border-bottom: none; }
+
+  .step-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .step-number {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.15rem 0.65rem;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .step-head h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .step p { margin: 0 0 1rem; max-width: 62ch; color: var(--ink); }
+  .step p.lede { color: var(--ink-soft); font-size: 1.02rem; }
+
+  .step ul, .step ol.sub {
+    margin: 0 0 1rem;
+    padding-left: 1.35rem;
+    max-width: 62ch;
+  }
+  .step ul li, .step ol.sub li { margin-bottom: 0.5rem; }
+  .step ol.sub { list-style: decimal; }
+
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.22rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    color: var(--ink);
+  }
+
+  .ui-chip.action-good {
+    background: var(--good);
+    color: #ffffff;
+    border-color: var(--good);
+  }
+  .ui-chip.action-accent {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 1.1rem 1.35rem;
+    margin: 1.25rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .callout-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-soft);
+    border-color: var(--warn-line);
+  }
+  .callout.warn .callout-label { color: var(--warn); }
+
+  .callout.good {
+    border-left-color: var(--good);
+    background: var(--good-soft);
+    border-color: var(--good-line);
+  }
+  .callout.good .callout-label { color: var(--good); }
+
+  .mock-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.4rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .mock-card .mock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .mock-card .mock-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .mock-card .mock-title {
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-top: 0.15rem;
+  }
+  .mock-card .mock-badges {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 5px;
+  }
+  .badge.ok { background: var(--good-soft); color: var(--good); border: 1px solid var(--good-line); }
+  .badge.tag { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--line); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+
+  .queue-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 1.4rem 0;
+    max-width: 62ch;
+  }
+  .queue-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+  }
+  .queue-row .pos {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+  .queue-row .who { flex: 1; }
+  .queue-row .who strong { display: block; font-size: 0.92rem; }
+  .queue-row .who span { color: var(--ink-faint); font-size: 0.78rem; }
+
+  table.ref {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.92rem;
+  }
+  table.ref th, table.ref td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  table.ref th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  .ref-wrap { overflow-x: auto; }
+
+  .role-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.9rem;
+    margin: 1.4rem 0;
+  }
+  @media (max-width: 620px) {
+    .role-grid { grid-template-columns: 1fr; }
+  }
+  .role-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 1.1rem 1.25rem;
+  }
+  .role-card .role-name {
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 0.98rem;
+    margin-bottom: 0.3rem;
+  }
+  .role-card .role-screen {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.55rem;
+    display: block;
+  }
+  .role-card p { margin: 0; font-size: 0.86rem; color: var(--ink-soft); max-width: none; }
+
+  .flow-track {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1.4rem 0;
+    counter-reset: flowstep;
+  }
+  .flow-step {
+    flex: 1 1 150px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 0.9rem 1rem;
+    position: relative;
+  }
+  .flow-step::before {
+    counter-increment: flowstep;
+    content: counter(flowstep);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 0.72rem;
+    color: #fff;
+    background: var(--accent);
+    border-radius: 999px;
+    width: 1.4rem;
+    height: 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+  }
+  .flow-step strong { display: block; font-family: "Archivo", sans-serif; font-size: 0.92rem; margin-bottom: 0.25rem; }
+  .flow-step span { font-size: 0.8rem; color: var(--ink-faint); }
+
+  .checklist {
+    list-style: none;
+    margin: 1.4rem 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+    max-width: 62ch;
+  }
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 0.7rem 0.9rem;
+    font-size: 0.92rem;
+  }
+  .checklist li::before {
+    content: "";
+    flex-shrink: 0;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-top: 0.1rem;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+  }
+
+  footer.manual-footer {
+    margin-top: 3rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section.step, nav.toc, header.masthead {
+      animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+    nav.toc { animation-delay: 0.05s; }
+    section.step:nth-of-type(1) { animation-delay: 0.1s; }
+    section.step:nth-of-type(2) { animation-delay: 0.15s; }
+    section.step:nth-of-type(3) { animation-delay: 0.2s; }
+    section.step:nth-of-type(4) { animation-delay: 0.25s; }
+    section.step:nth-of-type(5) { animation-delay: 0.3s; }
+    section.step:nth-of-type(6) { animation-delay: 0.32s; }
+    section.step:nth-of-type(7) { animation-delay: 0.34s; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+
+  @media print {
+    body { background: #ffffff; color: #101a2c; }
+    .page { max-width: 100%; padding: 0.3in 0.4in; }
+    .callout, .mock-card, .queue-row, .role-card, .flow-step, .checklist li { box-shadow: none; }
+    section.step { break-inside: avoid; padding: 1.4rem 0; }
+    nav.toc { break-inside: avoid; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <span class="eyebrow">Safe Smart Pickup · Personal</span>
+    <h1>Guía General de Personal</h1>
+    <div class="masthead-meta">
+      <span><strong>Para:</strong> Todo el personal involucrado en la salida</span>
+      <span><strong>Cubre:</strong> El proceso completo, de la llegada del padre a la entrega del alumno</span>
+      <span><strong>Actualizado:</strong> 30 de agosto de 2026</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contenido">
+    <span class="eyebrow">En esta guía</span>
+    <ol>
+      <li><span class="num">1</span> El flujo completo de una recogida</li>
+      <li><span class="num">2</span> Roles: quién hace qué y en qué pantalla</li>
+      <li><span class="num">3</span> Cómo configurar las pantallas el día de salida</li>
+      <li><span class="num">4</span> Casos especiales</li>
+      <li><span class="num">5</span> Bloqueo de Emergencia</li>
+      <li><span class="num">6</span> Si el padre no confirma: la red de seguridad</li>
+      <li><span class="num">7</span> Checklist antes de abrir la salida</li>
+    </ol>
+  </nav>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">01</span>
+      <h2>El flujo completo de una recogida</h2>
+    </div>
+    <p class="lede">Seis pasos, desde que el padre llega hasta que el ciclo queda cerrado en la bitácora.</p>
+    <div class="flow-track">
+      <div class="flow-step"><strong>Llegada</strong><span>El padre entra al perímetro GPS del colegio.</span></div>
+      <div class="flow-step"><strong>Autorización</strong><span>El encargado del grado/sección aprueba la salida.</span></div>
+      <div class="flow-step"><strong>En Tránsito</strong><span>El alumno camina a la puerta; se avisa al padre.</span></div>
+      <div class="flow-step"><strong>Entrega</strong><span>Personal de puerta verifica y confirma.</span></div>
+      <div class="flow-step"><strong>Confirmación</strong><span>El padre confirma en su app (o se autocompleta).</span></div>
+      <div class="flow-step"><strong>Bitácora</strong><span>Todo el ciclo queda registrado.</span></div>
+    </div>
+    <div class="callout">
+      <span class="callout-label">Importante</span>
+      <p>El aviso de voz de "tu hijo fue autorizado y va en camino al vehículo" suena en la <strong>app del padre</strong>, no en el salón ni en la puerta — el padre lo escucha en tiempo real sin que nadie tenga que avisarle por otro medio.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">02</span>
+      <h2>Roles: quién hace qué y en qué pantalla</h2>
+    </div>
+    <p class="lede">Cada persona necesita tener abierta solo la pantalla que le corresponde — no todos necesitan verlo todo.</p>
+    <div class="role-grid">
+      <div class="role-card">
+        <div class="role-name">Recepción / Entrada</div>
+        <span class="role-screen">Check-In</span>
+        <p>Verifica a los padres que llegan a pie y registra la Salida Autónoma de alumnos mayores.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Profesor / Encargado de sección</div>
+        <span class="role-screen">Panel Principal + Notificaciones</span>
+        <p>Recibe el aviso de llegada y autoriza que el alumno salga del aula.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Personal de Puerta</div>
+        <span class="role-screen">Monitor Externo</span>
+        <p>Verifica la identidad en la puerta física y confirma la entrega del alumno.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Coordinación / Administración</div>
+        <span class="role-screen">Panel + Gestión de Personal</span>
+        <p>Supervisa el flujo completo y tiene acceso al Bloqueo de Emergencia.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Enfermería</div>
+        <span class="role-screen">Centro de Bienestar</span>
+        <p>Atiende alertas médicas y medicación antes de que el alumno sea liberado.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Todo el personal</div>
+        <span class="role-screen">Barra superior</span>
+        <p>Notificaciones, idioma y estado del Bloqueo de Emergencia, siempre visibles arriba.</p>
+      </div>
+    </div>
+    <p>¿Quién es el encargado de autorizar la salida por grado/sección? Se configura en <span class="ui-chip">Ajustes → Horarios de Salida</span>: puede ser el Profesor de la Sección o un Personal Asignado (por ejemplo, recepción), según lo defina el colegio.</p>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">03</span>
+      <h2>Cómo configurar las pantallas el día de salida</h2>
+    </div>
+    <p class="lede">Esto es lo que debe quedar abierto en cada dispositivo antes de que empiece la salida.</p>
+    <div class="ref-wrap">
+      <table class="ref">
+        <thead>
+          <tr><th>Ubicación</th><th>Qué debe tener abierto</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Cada puerta física de salida</td><td>Un dispositivo con <span class="ui-chip">Monitor Externo</span>, con <strong>esa</strong> puerta seleccionada en el selector superior. Nunca dejarlo en "Todas las puertas" en un dispositivo de puerta.</td></tr>
+          <tr><td>Recepción / entrada principal</td><td><span class="ui-chip">Check-In</span>, para verificación a pie y Salida Autónoma.</td></tr>
+          <tr><td>Coordinación / Administración</td><td><span class="ui-chip">Panel Principal</span> con vista general, y acceso rápido al Bloqueo de Emergencia en el sidebar.</td></tr>
+          <tr><td>Punto de supervisión general (opcional)</td><td><span class="ui-chip">En Tránsito</span> sin filtrar por puerta, para ver el flujo completo de todos los alumnos caminando.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <span class="callout-label">Selector de puerta compartido</span>
+      <p>El selector de puerta se comparte entre Monitor Externo, En Tránsito y el panel "Padres en el Perímetro" — al elegirlo en una pantalla, las otras lo recuerdan automáticamente en ese mismo dispositivo.</p>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">04</span>
+      <h2>Casos especiales</h2>
+    </div>
+    <p class="lede">Cuatro excepciones que el sistema controla y registra, para que no dependan de la memoria de nadie.</p>
+    <div class="role-grid">
+      <div class="role-card">
+        <div class="role-name">Reemplazo autorizado</div>
+        <span class="role-screen">Código QR</span>
+        <p>Cuando quien recoge no es el padre titular, el personal de puerta escanea su código QR de reemplazo — queda registrado como excepción.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Pool Day / Carpool</div>
+        <span class="role-screen">Entre familias</span>
+        <p>Un padre autoriza a otro a recoger a su hijo ciertos días de la semana, o solo por un día puntual.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Salida Autónoma</div>
+        <span class="role-screen">Check-In</span>
+        <p>Alumnos mayores autorizados salen solos: escanean su QR o usan reconocimiento facial, sin necesidad de un padre presente.</p>
+      </div>
+      <div class="role-card">
+        <div class="role-name">Alerta Discreta</div>
+        <span class="role-screen">Monitor Externo / Check-In</span>
+        <p>Ante algo sospechoso, el personal avisa a administración sin alterar la pantalla visible al público.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">05</span>
+      <h2>Bloqueo de Emergencia</h2>
+    </div>
+    <p class="lede">Disponible en el sidebar para el personal autorizado. Detiene toda salida hasta que se desactive a mano.</p>
+    <ul>
+      <li>Al activarlo, todas las pantallas de Monitor Externo muestran de inmediato un aviso rojo de salida restringida — ninguna puerta puede confirmar entregas.</li>
+      <li>El estado se puede consultar (solo lectura) desde el candado en la barra superior, en cualquier pantalla del sistema.</li>
+      <li>Solo se desactiva desde el mismo botón del sidebar, para evitar que se levante por error desde otra pantalla.</li>
+    </ul>
+    <div class="mock-card">
+      <div class="mock-row">
+        <div>
+          <span class="mock-label">Estado del sistema</span>
+          <div class="mock-title">Salida Restringida</div>
+        </div>
+        <span class="badge warn">BLOQUEO ACTIVO</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">06</span>
+      <h2>Si el padre no confirma: la red de seguridad</h2>
+    </div>
+    <p class="lede">Ningún alumno queda "colgado" en el sistema, aunque el padre no toque el botón de confirmar en su app.</p>
+    <ul>
+      <li>Si pasan <strong>20 minutos</strong> desde que se anunció la llegada sin confirmación, el ciclo se cierra automáticamente.</li>
+      <li>Si el padre <strong>sale del perímetro</strong> del colegio sin confirmar, se da por hecho que el alumno ya está con él y el ciclo se cierra igual.</li>
+      <li>Ambos casos quedan igual de registrados en la Bitácora de Actividad que un cierre confirmado a mano.</li>
+    </ul>
+  </section>
+
+  <section class="step">
+    <div class="step-head">
+      <span class="step-number">07</span>
+      <h2>Checklist antes de abrir la salida</h2>
+    </div>
+    <p class="lede">Revisar esto cada día, antes de que empiecen a llegar los padres.</p>
+    <ul class="checklist">
+      <li>Cada puerta física tiene su dispositivo con Monitor Externo y SU puerta seleccionada.</li>
+      <li>Recepción tiene Check-In abierto para verificación a pie y Salida Autónoma.</li>
+      <li>Cada Profesor/Encargado de sección sabe que debe autorizar la salida desde el Panel al recibir el aviso.</li>
+      <li>Las notificaciones (campana, arriba a la derecha) están activas para todo el personal.</li>
+      <li>Hay alguien con acceso al Bloqueo de Emergencia disponible en el plantel.</li>
+      <li>Enfermería revisó las alertas médicas y la medicación pendiente del día.</li>
+    </ul>
+  </section>
+
+  <footer class="manual-footer">
+    <span>Safe Smart Pickup</span>
+    <span>Dudas del sistema: contacta al administrador del colegio.</span>
+  </footer>
+
+</div>
+</body>
+</html>
