@@ -343,6 +343,9 @@ export const translations = {
     'students.qrPrintBtn': 'Print',
     'students.qrCloseBtn': 'Close',
     'students.thisStudentFallback': 'this student',
+    'students.gradeDistribution': 'Grade Distribution',
+    'students.gradeDistributionSubtitle': 'Enrolled students per grade',
+    'students.gradeDistributionEmpty': 'No students assigned to a grade yet.',
 
     // Parent Dashboard
     'parent.help.manualLabel': 'User guide',
@@ -1039,6 +1042,9 @@ export const translations = {
     'students.qrPrintBtn': 'Imprimir',
     'students.qrCloseBtn': 'Cerrar',
     'students.thisStudentFallback': 'este alumno',
+    'students.gradeDistribution': 'Distribución Grados',
+    'students.gradeDistributionSubtitle': 'Alumnos matriculados por grado',
+    'students.gradeDistributionEmpty': 'Aún no hay alumnos con grado asignado.',
 
     // Parent Dashboard
     'parent.help.manualLabel': 'Manual de uso',

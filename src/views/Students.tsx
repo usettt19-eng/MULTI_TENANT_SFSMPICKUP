@@ -109,6 +109,14 @@ export function Students() {
   const noGradeList = filteredStudents.filter(s => !s.grade);
   if (noGradeList.length > 0) groupedStudents.push({ grade: '', list: noGradeList, sections: bySection(noGradeList) });
 
+  // Distribución real de alumnos matriculados por grado (sin filtro de
+  // búsqueda, para que la tarjeta de insights siempre refleje el total del
+  // colegio) — usada en la mini-gráfica de barras de "Distribución Grados".
+  const gradeDistribution = orderedGrades
+    .map(g => ({ grade: g, count: students.filter(s => s.grade === g).length }))
+    .filter(g => g.count > 0);
+  const maxGradeCount = Math.max(0, ...gradeDistribution.map(g => g.count));
+
   const fetchStudents = async () => {
     if (!profile?.tenant_id) return;
     const { data, error } = await supabase
@@ -650,19 +658,23 @@ export function Students() {
 
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-outline-variant/10 flex flex-col justify-between">
             <div>
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Distribución Grados</h3>
-              <p className="text-sm font-bold text-primary">Análisis de capacidad por nivel</p>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('students.gradeDistribution')}</h3>
+              <p className="text-sm font-bold text-primary">{t('students.gradeDistributionSubtitle')}</p>
             </div>
-            <div className="mt-6 flex items-end gap-2 h-16">
-              {[40, 70, 45, 90, 60, 80].map((h, i) => (
-                <div key={i} className="flex-1 bg-secondary/10 rounded-t-lg relative group">
-                  <div 
-                    className="absolute bottom-0 w-full bg-secondary/40 rounded-t-lg transition-all duration-700 group-hover:bg-secondary" 
-                    style={{ height: `${h}%` }}
-                  ></div>
-                </div>
-              ))}
-            </div>
+            {gradeDistribution.length > 0 ? (
+              <div className="mt-6 flex items-end gap-2 h-16">
+                {gradeDistribution.map(({ grade, count }) => (
+                  <div key={grade} className="flex-1 bg-secondary/10 rounded-t-lg relative group" title={`${grade}: ${count}`}>
+                    <div
+                      className="absolute bottom-0 w-full bg-secondary/40 rounded-t-lg transition-all duration-700 group-hover:bg-secondary"
+                      style={{ height: `${maxGradeCount > 0 ? Math.max((count / maxGradeCount) * 100, count > 0 ? 6 : 0) : 0}%` }}
+                    ></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-6 text-xs text-slate-400 font-semibold">{t('students.gradeDistributionEmpty')}</p>
+            )}
           </div>
 
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-outline-variant/10">

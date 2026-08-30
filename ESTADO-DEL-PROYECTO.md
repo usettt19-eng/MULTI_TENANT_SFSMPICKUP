@@ -1288,6 +1288,20 @@ activo (`language` de `useLanguage()`). Ambos archivos ya existían en
 `public/` (actualizados el mismo día) pero no estaban enlazados desde
 ningún lado de la app — solo accesibles escribiendo la URL a mano.
 
+### Fix: mini-gráfica "Distribución Grados" en Estudiantes era falsa (2026-08-30)
+El usuario mandó una captura de la tarjeta "Distribución Grados / Análisis
+de capacidad por nivel" en `Students.tsx`, vacía. Al revisar el código, las
+barras usaban alturas fijas hardcodeadas (`[40, 70, 45, 90, 60, 80]`), sin
+relación con los alumnos reales — y "capacidad por nivel" no corresponde a
+nada real: `school_grades` no tiene ningún campo de cupo/capacidad máxima.
+Se reemplazó por una distribución real: cuenta de alumnos por grado
+(`gradeDistribution`, sobre `orderedGrades`/`students`, sin aplicar el
+filtro de búsqueda activo para que la tarjeta siempre refleje el total del
+colegio), barras con altura proporcional al grado con más alumnos, tooltip
+con el nombre del grado y su cuenta al pasar el mouse, y estado vacío si
+aún no hay alumnos con grado asignado. Título y subtítulo ahora traducidos
+(`students.gradeDistribution*`) en vez del texto engañoso anterior.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
