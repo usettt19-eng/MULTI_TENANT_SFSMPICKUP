@@ -664,26 +664,33 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             </div>
             <h3 className="text-white text-[15px] font-black uppercase tracking-wider mb-6">{t('dashboard.operationalSpeed')}</h3>
 
+            {/* Orden por uso, misma lógica que el sidebar (2026-08-30):
+                flujo de salida primero, luego frente de recepción, bienestar,
+                registro puntual, y comunicación al final. */}
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={handleQuickScan} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <UserPlus className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.addParent')}</span>
+              <button onClick={() => setCurrentView('external')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
+                <Monitor className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.externalMonitor')}</span>
+              </button>
+              <button onClick={() => setCurrentView('transit')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
+                <Footprints className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('nav.transit')}</span>
               </button>
               <button onClick={() => setActiveModal('GUEST_SIGN')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <Users className="w-5 h-5 text-white/80" />
                 <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.guestSign')}</span>
               </button>
+              <button onClick={() => setCurrentView('visitors')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
+                <ClipboardList className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.visitorLog')}</span>
+              </button>
               <button onClick={() => setCurrentView('wellness')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <BriefcaseMedical className="w-5 h-5 text-white/80" />
                 <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.medLog')}</span>
               </button>
-              <button onClick={() => setCurrentView('external')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <Monitor className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.externalMonitor')}</span>
-              </button>
-              <button onClick={() => setCurrentView('visitors')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <ClipboardList className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.visitorLog')}</span>
+              <button onClick={handleQuickScan} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
+                <UserPlus className="w-5 h-5 text-white/80" />
+                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('dashboard.addParent')}</span>
               </button>
               <button onClick={() => setCurrentView('forms')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <FileEdit className="w-5 h-5 text-white/80" />
@@ -692,10 +699,6 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               <button onClick={() => setCurrentView('requests')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
                 <MessageSquare className="w-5 h-5 text-white/80" />
                 <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('nav.requests')}</span>
-              </button>
-              <button onClick={() => setCurrentView('transit')} className="bg-indigo-600 hover:bg-indigo-500 p-5 rounded-lg flex flex-col items-center gap-2 transition-all border border-white/5">
-                <Footprints className="w-5 h-5 text-white/80" />
-                <span className="text-[9px] font-black text-white/80 uppercase tracking-widest">{t('nav.transit')}</span>
               </button>
             </div>
           </section>
