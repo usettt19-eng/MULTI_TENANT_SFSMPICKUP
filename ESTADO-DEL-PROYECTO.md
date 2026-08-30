@@ -1176,6 +1176,25 @@ Dos decisiones de alcance, documentadas en el commit:
   datos que nunca debería verse en producción) se dejan sin traducir —
   son texto para el desarrollador, no para el usuario final.
 
+### Más pantallas traducidas: formulario de padres, de estudiantes, y el panel de perímetro (2026-08-30)
+Mismo patrón que Ajustes — el usuario reportó que estas tres piezas
+tampoco cambiaban con el selector de idioma del TopNav:
+- **`ParentPerimeterPanel.tsx`** (el "box" de vehículos/padres dentro del
+  perímetro, usado en Vigilancia de Accesos y Monitor Externo).
+- **`GuardiansRegistry.tsx`**: encabezado, barra de herramientas, vista de
+  grilla/tabla, modal de confirmación de borrado, overlay de progreso de
+  importación CSV, y el formulario completo de alta/edición de padre. Se
+  dejan sin traducir a propósito los encabezados del CSV exportado
+  (contenido de archivo, no UI) y los mensajes de resultado de la
+  importación masiva (multilínea, generados en bucle, poco frecuentes).
+- **`Students.tsx`**: el modal de alta/edición de alumno ya usaba algunas
+  claves (`students.firstName`, etc.) pero el resto — título, sección de
+  foto, Salida Autónoma, botones del pie, y el modal de vista previa del
+  QR — seguía fijo en español.
+
+~70 claves nuevas en `i18n/translations.ts` (`perimeter.*`,
+`guardiansPage.*`, más ~26 nuevas bajo `students.*`).
+
 ---
 
 ## 4. Modelo de permisos (resumen)
