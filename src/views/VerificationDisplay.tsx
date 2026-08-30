@@ -43,7 +43,12 @@ export function VerificationDisplay() {
   const [lockdownActive, setLockdownActive] = useState(false);
   const [replacementData, setReplacementData] = useState<any | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [manualQRData, setManualQRData] = useState('');
+  // Lector real de cámara (mismo html5-qrcode que ya usa Check-In) — antes
+  // este modal era una simulación: solo pedía pegar a mano el JSON del QR,
+  // sin cámara ni validar el token contra los reemplazos reales del padre.
+  const [isQrCameraActive, setIsQrCameraActive] = useState(false);
+  const [qrScanMessage, setQrScanMessage] = useState('');
+  const html5QrCodeRef = useRef<any>(null);
   const [showArrivalToast, setShowArrivalToast] = useState<string | null>(null);
   const [notifiedStaff, setNotifiedStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   // 'idle' | 'sending' | 'sent' — deliberadamente sin diálogo de confirmación
@@ -266,20 +271,114 @@ export function VerificationDisplay() {
     }
   };
 
-  const handleProcessQR = () => {
+  const startQrScanner = async () => {
+    setQrScanMessage('');
+    setIsQrCameraActive(true);
     try {
-      const data = JSON.parse(manualQRData);
-      if (data.type === 'replacement_pickup') {
-        setReplacementData(data);
-        setShowQRScanner(false);
-        setManualQRData('');
-        // We could also trigger a pickup event here if needed, 
-        // but for now we'll just show the verification UI for this replacement.
-      } else {
-        alert(t('monitor.invalidQR'));
-      }
+      const { Html5Qrcode } = await import('html5-qrcode');
+      // Pequeña espera para que el div del lector ya esté en el DOM.
+      setTimeout(async () => {
+        try {
+          if (!html5QrCodeRef.current) {
+            html5QrCodeRef.current = new Html5Qrcode('qr-reader-monitor');
+          }
+          await html5QrCodeRef.current.start(
+            { facingMode: 'environment' },
+            {
+              fps: 10,
+              qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+                return { width: edge, height: edge };
+              },
+              videoConstraints: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+            },
+            (decodedText: string) => handleQrDecoded(decodedText),
+            () => {} // errores de "no encontrado todavía" por cuadro — se ignoran
+          );
+        } catch (err) {
+          console.error('Error starting QR camera', err);
+          setQrScanMessage(t('monitor.qrCameraError'));
+          setIsQrCameraActive(false);
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Error loading QR scanner', err);
+      setQrScanMessage(t('monitor.qrCameraError'));
+      setIsQrCameraActive(false);
+    }
+  };
+
+  const stopQrScanner = async () => {
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      await html5QrCodeRef.current.stop();
+      html5QrCodeRef.current.clear();
+    }
+    setIsQrCameraActive(false);
+  };
+
+  const closeQrScannerModal = async () => {
+    await stopQrScanner();
+    setQrScanMessage('');
+    setShowQRScanner(false);
+  };
+
+  // Valida el token contra los reemplazos reales guardados en el perfil del
+  // padre (additional_tutor_name.replacements) — antes esta pantalla
+  // aceptaba cualquier JSON con type:"replacement_pickup" sin comprobar
+  // nada, mostrando "QR VÁLIDO" aunque el código fuera inventado. Mismo
+  // criterio de validación que ya usa Check-In (SmartCheckIn.tsx).
+  const handleQrDecoded = async (decodedText: string) => {
+    let data: any;
+    try {
+      data = JSON.parse(decodedText);
     } catch (e) {
-      alert(t('monitor.qrProcessError'));
+      setQrScanMessage(t('monitor.qrProcessError'));
+      return;
+    }
+    if (data?.type !== 'replacement_pickup') {
+      setQrScanMessage(t('monitor.invalidQR'));
+      return;
+    }
+
+    await stopQrScanner();
+    setQrScanMessage(t('monitor.verifyingQr'));
+
+    const { data: parentProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.parent_id)
+      .maybeSingle();
+
+    const additionalData = (() => {
+      try { return JSON.parse(parentProfile?.additional_tutor_name || '{}'); } catch { return {}; }
+    })();
+    const replacements = additionalData.replacements || [];
+    const isValid = !!parentProfile && replacements.some((r: any) => r.token === data.token && r.name === data.replacement_name);
+
+    if (isValid) {
+      setReplacementData(data);
+      setShowQRScanner(false);
+      setQrScanMessage('');
+      await supabase.from('audit_logs').insert({
+        event_type: 'SECURITY',
+        description: `VERIFICACIÓN QR EXITOSA (Monitor Externo): reemplazo ${data.replacement_name} autorizado por ${parentProfile?.first_name || ''} ${parentProfile?.last_name || ''}.`.trim(),
+        actor_name: 'Sistema QR',
+        metadata: { method: 'qr_code', result: 'success', parent_id: data.parent_id, replacement_name: data.replacement_name },
+        tenant_id: parentProfile?.tenant_id ?? profile?.tenant_id,
+      });
+    } else {
+      setQrScanMessage(t('monitor.qrInvalidOrExpired'));
+      await supabase.from('audit_logs').insert({
+        event_type: 'SECURITY',
+        description: `VERIFICACIÓN QR FALLIDA (Monitor Externo): intento de uso de un código inválido para ${data.replacement_name || 'desconocido'}.`,
+        actor_name: 'Sistema QR',
+        metadata: { method: 'qr_code', result: 'failure' },
+        tenant_id: profile?.tenant_id,
+      });
     }
   };
 
@@ -846,33 +945,40 @@ export function VerificationDisplay() {
           )}
         </div>
       </div>
-      {/* QR SCANNER MODAL (SIMULATED) */}
+      {/* QR SCANNER MODAL — cámara real vía html5-qrcode */}
       {showQRScanner && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
              <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('monitor.scanReplacementQR')}</h3>
-               <button onClick={() => setShowQRScanner(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+               <button onClick={closeQrScannerModal} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
              <div className="p-8 space-y-6 text-center">
-                <div className="w-48 h-48 bg-slate-100 rounded-3xl mx-auto flex items-center justify-center border-4 border-dashed border-slate-200">
-                  <QrCode className="w-20 h-20 text-slate-300" />
+                <div className="w-full aspect-square bg-slate-900 rounded-3xl mx-auto overflow-hidden border-4 border-dashed border-slate-200 relative flex items-center justify-center">
+                  {isQrCameraActive ? (
+                    <div id="qr-reader-monitor" className="w-full h-full" />
+                  ) : (
+                    <QrCode className="w-20 h-20 text-slate-600" />
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  {t('monitor.demoQRNote')}
+                  {qrScanMessage || t('monitor.demoQRNote')}
                 </p>
-                <textarea
-                  value={manualQRData}
-                  onChange={e => setManualQRData(e.target.value)}
-                  placeholder='{"type":"replacement_pickup",...}'
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-mono outline-none focus:border-indigo-500 h-24"
-                />
-                <button
-                  onClick={handleProcessQR}
-                  className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
-                >
-                  {t('monitor.validateCode')}
-                </button>
+                {isQrCameraActive ? (
+                  <button
+                    onClick={stopQrScanner}
+                    className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
+                  >
+                    {t('monitor.stopCamera')}
+                  </button>
+                ) : (
+                  <button
+                    onClick={startQrScanner}
+                    className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
+                  >
+                    {t('monitor.activateCamera')}
+                  </button>
+                )}
              </div>
           </div>
         </div>
