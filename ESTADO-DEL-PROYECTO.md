@@ -1195,6 +1195,20 @@ tampoco cambiaban con el selector de idioma del TopNav:
 ~70 claves nuevas en `i18n/translations.ts` (`perimeter.*`,
 `guardiansPage.*`, más ~26 nuevas bajo `students.*`).
 
+### Gestión de Personal traducida, incluido el modal de permisos (2026-08-30)
+Mismo patrón, esta vez reportado con captura del modal "Editar Permisos de
+Staff" en español pese a tener el idioma en inglés. `StaffManagement.tsx`
+tampoco llamaba nunca a `useLanguage()`/`t()`. Cambio notable: el array
+`AVAILABLE_MODULES` (`{id, label}` con el label fijo en español) se separó
+en `AVAILABLE_MODULE_IDS` (solo ids, para iterar/filtrar) +
+`MODULE_LABEL_KEYS` (id → `TranslationKey`), reutilizando las claves
+`nav.*` del sidebar cuando el texto coincide exactamente (ej. `students`,
+`checkin`, `forms`) y agregando `staffModule.*` nuevas para los que tienen
+texto más específico en este contexto (ej. `security` → "Seguridad
+(Salidas)" en vez de solo "Seguridad"). ~35 claves nuevas bajo
+`staffPage.*`/`staffModule.*`, reutilizando además varias de
+`guardiansPage.*` ya existentes en vez de duplicarlas.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
