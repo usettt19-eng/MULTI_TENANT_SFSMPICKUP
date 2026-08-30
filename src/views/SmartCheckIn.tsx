@@ -17,11 +17,14 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { GoogleGenAI, Modality } from "@google/genai";
+import { apiJson } from '../lib/apiFetch';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
   const { profile: staffProfile } = useAuth() as any;
   const [pin, setPin] = useState('');
+  // 'idle' | 'sending' | 'sent'
+  const [helpRequestStatus, setHelpRequestStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -337,6 +340,23 @@ export function SmartCheckIn() {
   };
 
   const handleClear = () => setPin('');
+
+  const handleNeedHelp = async () => {
+    if (helpRequestStatus === 'sending') return;
+    setHelpRequestStatus('sending');
+    try {
+      await apiJson('/api/security/discrete-alert', {
+        method: 'POST',
+        body: JSON.stringify({ door_name: 'Check-In / Recepción', kind: 'help_request' }),
+      });
+      setHelpRequestStatus('sent');
+    } catch (error) {
+      console.error('Error al solicitar ayuda:', error);
+      setHelpRequestStatus('idle');
+      return;
+    }
+    setTimeout(() => setHelpRequestStatus('idle'), 4000);
+  };
 
   const handleEnter = async () => {
     if (pin.length !== 4 || !staffProfile?.tenant_id) return;
@@ -798,8 +818,12 @@ export function SmartCheckIn() {
               </p>
             </div>
             <div className="h-8 w-[1px] bg-white/20 hidden sm:block"></div>
-            <button className="text-sm font-bold text-secondary-fixed hover:text-white transition-colors flex items-center gap-1">
-              {t('checkin.needHelp')} <ChevronRight className="w-4 h-4" />
+            <button
+              onClick={handleNeedHelp}
+              disabled={helpRequestStatus === 'sending'}
+              className="text-sm font-bold text-secondary-fixed hover:text-white transition-colors flex items-center gap-1 disabled:opacity-60"
+            >
+              {helpRequestStatus === 'sent' ? 'Ayuda solicitada' : t('checkin.needHelp')} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

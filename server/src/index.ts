@@ -1251,6 +1251,52 @@ async function notifyTenantAdmins(tenantId: string, title: string, message: stri
   }
 }
 
+/**
+ * Alerta Discreta: el personal de puerta la activa desde el Monitor Externo
+ * sin alterar visualmente esa pantalla (a diferencia del Lockdown, que sí es
+ * público) — solo queda en la Bitácora y llega como notificación a los
+ * administradores/staff del colegio para que revisen la situación con
+ * cautela.
+ */
+app.post(
+  '/api/security/discrete-alert',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    if (!tenantId) return fail(res, 403, 'Sin colegio asociado.');
+
+    const doorName = typeof req.body?.door_name === 'string' ? req.body.door_name.slice(0, 120) : null;
+    // 'discrete_alert' = Monitor Externo (algo sospechoso, sin alertar al
+    // público que ve la pantalla); 'help_request' = Check-In (alguien en el
+    // mostrador necesita a un miembro del personal). Mismo mecanismo de
+    // aviso a administradores, distinto texto según el origen.
+    const kind = req.body?.kind === 'help_request' ? 'help_request' : 'discrete_alert';
+    const suffix = doorName ? ` (${doorName})` : '';
+
+    const description =
+      kind === 'help_request'
+        ? `SOLICITUD DE AYUDA activada desde Check-In${suffix}.`
+        : `ALERTA DISCRETA activada desde el Monitor Externo${suffix}.`;
+    const title = kind === 'help_request' ? 'Solicitud de ayuda en Check-In' : 'Alerta discreta en Monitor Externo';
+    const message =
+      kind === 'help_request'
+        ? `Alguien necesita ayuda en el mostrador de Check-In${suffix}. Acércate cuando puedas.`
+        : `Personal de puerta activó una alerta discreta${suffix}. Revisa la situación con cautela, sin alertar al público.`;
+
+    await admin.from('audit_logs').insert({
+      event_type: 'SECURITY',
+      description,
+      actor_name: req.caller!.email ?? 'Personal',
+      metadata: {door_name: doorName, kind},
+      tenant_id: tenantId,
+    });
+
+    await notifyTenantAdmins(tenantId, title, message);
+
+    return ok(res);
+  }),
+);
+
 app.post(
   '/api/forms/notify',
   requireAuth,

@@ -10,6 +10,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
+import { apiJson } from '../lib/apiFetch';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
@@ -45,6 +46,10 @@ export function VerificationDisplay() {
   const [manualQRData, setManualQRData] = useState('');
   const [showArrivalToast, setShowArrivalToast] = useState<string | null>(null);
   const [notifiedStaff, setNotifiedStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  // 'idle' | 'sending' | 'sent' — deliberadamente sin diálogo de confirmación
+  // ni cambio visual llamativo en pantalla: es una alerta DISCRETA, no debe
+  // delatar al personal de puerta frente a quien esté mirando el monitor.
+  const [discreteAlertStatus, setDiscreteAlertStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [latestDetections, setLatestDetections] = useState<any[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const channelRef = React.useRef<any>(null);
@@ -408,6 +413,24 @@ export function VerificationDisplay() {
     }
   };
 
+  const handleDiscreteAlert = async () => {
+    if (discreteAlertStatus === 'sending') return;
+    setDiscreteAlertStatus('sending');
+    try {
+      const doorName = doors.find((d) => d.id === selectedDoorId)?.name ?? null;
+      await apiJson('/api/security/discrete-alert', {
+        method: 'POST',
+        body: JSON.stringify({ door_name: doorName, kind: 'discrete_alert' }),
+      });
+      setDiscreteAlertStatus('sent');
+    } catch (error) {
+      console.error('Error al enviar alerta discreta:', error);
+      setDiscreteAlertStatus('idle');
+      return;
+    }
+    setTimeout(() => setDiscreteAlertStatus('idle'), 4000);
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Usamos el TopNav estándar en lugar del header embebido para mantener consistencia */}
@@ -534,9 +557,13 @@ export function VerificationDisplay() {
                 <QrCode className="w-5 h-5" />
                 {t('monitor.scanReplacement')}
               </button>
-              <button className="bg-error text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-error/20 active:scale-95 transition-all">
+              <button
+                onClick={handleDiscreteAlert}
+                disabled={discreteAlertStatus === 'sending'}
+                className="bg-error text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-error/20 active:scale-95 transition-all disabled:opacity-60"
+              >
                 <AlertTriangle className="w-5 h-5" />
-                {t('monitor.discreteAlert')}
+                {discreteAlertStatus === 'sent' ? 'Enviada' : t('monitor.discreteAlert')}
               </button>
             </div>
           </div>
