@@ -1302,6 +1302,19 @@ con el nombre del grado y su cuenta al pasar el mouse, y estado vacío si
 aún no hay alumnos con grado asignado. Título y subtítulo ahora traducidos
 (`students.gradeDistribution*`) en vez del texto engañoso anterior.
 
+**Seguía vacía tras el primer fix** — el usuario confirmó que los 320
+alumnos sí tienen grado asignado (se agrupan bien en la tabla de arriba),
+así que no era falta de datos: era un bug de CSS que ya existía desde
+antes de tocar la lógica. Cada barra es un `div` interno `absolute` con
+`height: X%`, dentro de un `div` "riel" con `flex-1` — pero `flex-1` en un
+flex-row solo reparte ancho, no da altura, así que el riel quedaba con
+altura `auto` (0, porque su único hijo es `absolute` y no cuenta en el
+flujo). Un `height: %` sin una altura de referencia concreta en el padre
+no tiene contra qué calcularse, así que la barra nunca se veía — con datos
+falsos o reales, daba igual. Fix: `h-full` en el riel para que herede los
+64px del contenedor (`h-16`), y ahí sí el `height: %` interno tiene algo
+real contra qué resolverse.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

@@ -664,7 +664,7 @@ export function Students() {
             {gradeDistribution.length > 0 ? (
               <div className="mt-6 flex items-end gap-2 h-16">
                 {gradeDistribution.map(({ grade, count }) => (
-                  <div key={grade} className="flex-1 bg-secondary/10 rounded-t-lg relative group" title={`${grade}: ${count}`}>
+                  <div key={grade} className="flex-1 h-full bg-secondary/10 rounded-t-lg relative group" title={`${grade}: ${count}`}>
                     <div
                       className="absolute bottom-0 w-full bg-secondary/40 rounded-t-lg transition-all duration-700 group-hover:bg-secondary"
                       style={{ height: `${maxGradeCount > 0 ? Math.max((count / maxGradeCount) * 100, count > 0 ? 6 : 0) : 0}%` }}
