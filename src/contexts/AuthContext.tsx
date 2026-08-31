@@ -24,6 +24,11 @@ interface AuthContextType {
   loading: boolean;
   signOut: () => Promise<void>;
   switchProfile: (tenantId: string) => void;
+  // Vuelve a traer las filas de `profiles` del usuario actual y actualiza el
+  // perfil activo — para cuando algo se edita fuera de este contexto (ej. el
+  // padre sube su propia foto desde ParentDashboard.tsx) y hace falta que se
+  // refleje sin recargar la página.
+  refreshProfile: () => Promise<void>;
   isImpersonating: boolean;
   enterTenantAsAdmin: (tenantId: string) => Promise<void>;
   exitImpersonation: () => void;
@@ -49,6 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   switchProfile: () => {},
+  refreshProfile: async () => {},
   isImpersonating: false,
   enterTenantAsAdmin: async () => {},
   exitImpersonation: () => {},
@@ -251,6 +257,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    await fetchProfiles(user.id);
+  };
+
   // Para el staff con acceso concedido a un segundo colegio: pasar `null` (o
   // el tenant_id de su colegio de casa) vuelve a su perfil real.
   const switchStaffSchool = (tenantId: string | null) => {
@@ -290,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signOut,
         switchProfile,
+        refreshProfile,
         isImpersonating: !!impersonatedTenant,
         enterTenantAsAdmin,
         exitImpersonation,

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export function ParentDashboard() {
-  const { profile, profiles, switchProfile, signOut } = useAuth();
+  const { profile, profiles, switchProfile, signOut, refreshProfile } = useAuth();
   const { language, t, setLanguage, hasManualLanguage } = useLanguage();
 
   // El idioma del colegio (Settings → default_language) es solo el punto de
@@ -85,6 +85,19 @@ export function ParentDashboard() {
   const [vehiclePlateInput, setVehiclePlateInput] = useState('');
   const [vehicleDescInput, setVehicleDescInput] = useState('');
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+
+  // Foto de perfil del propio padre — mismo patrón de URL/archivo/cámara que
+  // GuardiansRegistry.tsx usa para que el staff le cargue foto a un padre,
+  // pero para que el padre lo haga él mismo. Se guarda como base64 directo en
+  // profiles.photo_url (igual que GuardiansRegistry), no en Storage: el padre
+  // no es "staff_of" ningún tenant, así que las políticas del bucket
+  // `avatars` lo rechazarían.
+  const [isEditingPhoto, setIsEditingPhoto] = useState(false);
+  const [photoPayload, setPhotoPayload] = useState('');
+  const [photoMethod, setPhotoMethod] = useState<'url' | 'file' | 'camera'>('url');
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false);
+  const photoVideoRef = useRef<HTMLVideoElement>(null);
+  const photoCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // "Pool day": otro padre registrado recoge a mi hijo/a ciertos días (fijo
   // cada semana o solo un día puntual), con aviso al encargado y al admin.
@@ -302,6 +315,76 @@ export function ParentDashboard() {
       alert(t('parent.vehicle.saveErrorPrefix') + (err.message || String(err)));
     } finally {
       setIsSavingVehicle(false);
+    }
+  };
+
+  const startPhotoCamera = async () => {
+    setPhotoPayload('');
+    setPhotoMethod('camera');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 400, facingMode: 'user' } });
+      if (photoVideoRef.current) photoVideoRef.current.srcObject = stream;
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      alert(t('parent.photo.cameraError'));
+    }
+  };
+
+  const stopPhotoCamera = () => {
+    if (photoVideoRef.current && photoVideoRef.current.srcObject) {
+      const stream = photoVideoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      photoVideoRef.current.srcObject = null;
+    }
+  };
+
+  const takePhotoPicture = () => {
+    if (photoVideoRef.current && photoCanvasRef.current) {
+      const video = photoVideoRef.current;
+      const canvas = photoCanvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setPhotoPayload(canvas.toDataURL('image/jpeg'));
+        stopPhotoCamera();
+      }
+    }
+  };
+
+  const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPhotoPayload(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const openPhotoModal = () => {
+    setPhotoPayload(profile?.photo_url || '');
+    setPhotoMethod('url');
+    setIsEditingPhoto(true);
+  };
+
+  const closePhotoModal = () => {
+    stopPhotoCamera();
+    setIsEditingPhoto(false);
+  };
+
+  const handleSavePhoto = async () => {
+    if (!profile?.id) return;
+    setIsSavingPhoto(true);
+    try {
+      const { error } = await supabase.from('profiles').update({ photo_url: photoPayload || null }).eq('id', profile.id);
+      if (error) throw error;
+      await refreshProfile();
+      closePhotoModal();
+    } catch (err: any) {
+      alert(t('parent.photo.saveErrorPrefix') + (err.message || String(err)));
+    } finally {
+      setIsSavingPhoto(false);
     }
   };
 
@@ -1123,7 +1206,12 @@ export function ParentDashboard() {
       <div className="bg-gradient-to-br from-indigo-700 to-violet-800 text-white p-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
-            <img src={profile?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-16 h-16 rounded-[1.25rem] object-cover border-2 border-white" />
+            <button onClick={openPhotoModal} title={t('parent.photo.editTooltip')} className="relative shrink-0 group/avatar">
+              <img src={profile?.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100"} className="w-16 h-16 rounded-[1.25rem] object-cover border-2 border-white" />
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 bg-white text-indigo-700 rounded-lg flex items-center justify-center shadow-md border border-indigo-100 group-hover/avatar:bg-indigo-50 transition-all">
+                <Camera className="w-3 h-3" />
+              </span>
+            </button>
             <div>
               {profiles.length > 1 ? (
                 <button 
@@ -2067,6 +2155,76 @@ export function ParentDashboard() {
                  ))
                )}
              </div>
+          </div>
+        </div>
+      )}
+
+      {isEditingPhoto && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('parent.photo.modalTitle')}</h3>
+              <button onClick={closePhotoModal} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div
+                onClick={() => !photoPayload && photoMethod !== 'camera' && document.getElementById('parentPhotoFileInput')?.click()}
+                className={`w-full aspect-square rounded-[2rem] bg-slate-50 border-4 border-dashed border-slate-200 overflow-hidden flex items-center justify-center transition-all ${!photoPayload && photoMethod !== 'camera' ? 'hover:border-indigo-400 cursor-pointer' : ''}`}
+              >
+                {photoPayload ? (
+                  <img src={photoPayload} alt="Preview" className="w-full h-full object-cover" />
+                ) : photoMethod === 'camera' ? (
+                  <div className="relative w-full h-full">
+                    <video ref={photoVideoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+                    <button
+                      type="button"
+                      onClick={takePhotoPicture}
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white text-indigo-700 px-4 py-2 rounded-xl font-black text-[10px] shadow-xl"
+                    >
+                      {t('guardiansPage.captureBtn')}
+                    </button>
+                  </div>
+                ) : (
+                  <User className="w-14 h-14 text-slate-300" />
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => { stopPhotoCamera(); setPhotoMethod('url'); }} className={`py-2 rounded-xl border text-[9px] font-black transition-all ${photoMethod === 'url' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>URL</button>
+                <button type="button" onClick={() => { stopPhotoCamera(); document.getElementById('parentPhotoFileInput')?.click(); setPhotoMethod('file'); }} className={`py-2 rounded-xl border text-[9px] font-black transition-all ${photoMethod === 'file' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t('students.photoFileTab')}</button>
+                <button type="button" onClick={startPhotoCamera} className={`py-2 rounded-xl border text-[9px] font-black transition-all ${photoMethod === 'camera' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t('students.photoCameraTab')}</button>
+              </div>
+
+              {photoMethod === 'url' && (
+                <input
+                  value={photoPayload}
+                  onChange={e => setPhotoPayload(e.target.value)}
+                  type="url"
+                  placeholder={t('students.pasteLinkPlaceholder')}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                />
+              )}
+              <input id="parentPhotoFileInput" type="file" accept="image/*" className="hidden" onChange={handlePhotoFileUpload} />
+              <canvas ref={photoCanvasRef} className="hidden" />
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closePhotoModal}
+                  className="flex-1 py-3.5 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all"
+                >
+                  {t('parent.vehicle.cancelBtn')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSavePhoto}
+                  disabled={isSavingPhoto}
+                  className="flex-1 py-3.5 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSavingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.vehicle.saveBtn')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

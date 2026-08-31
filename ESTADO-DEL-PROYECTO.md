@@ -1379,6 +1379,19 @@ toca ni depende de la lógica del padre. Queda registrado en la Bitácora
 con el prefijo "CICLO COMPLETADO (personal)" para diferenciarlo del cierre
 hecho por el padre o del automático a los 20 minutos.
 
+### El padre ya puede subir su propia foto (2026-08-31)
+Antes solo el staff podía cargarle foto a un padre (`GuardiansRegistry.tsx`,
+desde el colegio). Se agregó el mismo selector de URL/archivo/cámara al
+header de `ParentDashboard.tsx` — tocar el avatar abre un modal para
+cambiar la foto. Se guarda como base64 directo en `profiles.photo_url`
+(mismo criterio que `GuardiansRegistry.tsx`, no vía Storage: el padre no
+es `is_staff_of()` de ningún tenant, así que las políticas del bucket
+`avatars` lo rechazarían). Como `AuthContext` nunca exponía una forma de
+refrescar el perfil activo sin recargar la página, se agregó
+`refreshProfile()` al contexto (reutiliza `fetchProfiles` internamente) —
+útil en general para cualquier edición futura del propio perfil, no solo
+la foto.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
