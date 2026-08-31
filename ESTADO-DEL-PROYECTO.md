@@ -1315,6 +1315,38 @@ falsos o reales, daba igual. Fix: `h-full` en el riel para que herede los
 64px del contenedor (`h-16`), y ahí sí el `height: %` interno tiene algo
 real contra qué resolverse.
 
+### Fotos de alumnos — TCS Costa del Este (2026-08-30)
+Mismo proceso que con TCS Albrook: el colegio compartió una carpeta de
+fotos en Supabase Storage (`avatars/f51150be-8d11-42e2-9d12-58fe9634b0eb/`),
+subdividida por clase (`NURSERY - TURTLES`, `RECEPTION - MONKEYS`,
+`YEAR 1 - FROGS`...`YEAR 6 - EAGLES`). **Hallazgo**: el nombre de esas
+subcarpetas va un grado corrido respecto al `grade` real en el sistema —
+`NURSERY` = grado `RC`, `RECEPTION` = grado `01`, `YEAR 1` = grado `02`,
+..., `YEAR 5` = grado `06`. Se confirmó cruzando cada nombre de archivo
+contra el alumno real de ese grado (varios con apodo o error de tipeo:
+"Bailey"→Yung-Pei Chen, "Sasha"→Alexander Halmos, "Mateo"→Matteo Masi,
+"Traad"→Tradd Mora Sanchez). De 85 fotos, 68 hicieron match y se
+vincularon por `UPDATE` masivo (mismo criterio que TCS Albrook); 17 no
+corresponden a ningún alumno matriculado actualmente (`YEAR 6 - EAGLES`
+completo — grado `07`, que no existe todavía en este colegio — más un
+puñado sueltos en otras carpetas) y quedan pendientes de que el colegio
+confirme si son alumnos nuevos por agregar. 53 alumnos de los 121 siguen
+sin foto (la carpeta no los cubría).
+
+### Fix: RLS de Storage bloqueaba subir fotos como super_admin en otro colegio (2026-08-30)
+Al subir una foto de alumno desde la app estando en "Modo Super Admin"
+configurando TCS Costa del Este: `Error al subir la imagen: new row
+violates row-level security policy`. Causa: las políticas de
+`storage.objects` para los buckets `avatars`/`detections`
+(`sql/storage_setup.sql`) comparan la carpeta del archivo contra el
+`tenant_id` del **propio perfil** de quien sube — nunca se les agregó la
+excepción `public.is_super_admin()` que sí tiene el resto de tablas desde
+`tenant_isolation_rls.sql`, así que un super_admin (cuyo perfil no
+pertenece al tenant que está configurando) quedaba bloqueado. Se agrega
+`sql/fix_storage_super_admin.sql`: recrea las 6 políticas (SELECT/INSERT/
+UPDATE/DELETE en `avatars`, SELECT/INSERT en `detections`) con
+`OR public.is_super_admin()`.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
