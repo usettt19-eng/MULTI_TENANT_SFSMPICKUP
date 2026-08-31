@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
+import { captureVideoFrameCompressed, compressImageFile } from '../lib/photoCompression';
 
 const AVAILABLE_MODULE_IDS = [
   'dashboard', 'security', 'wellness', 'students', 'guardians', 'checkin',
@@ -106,25 +107,17 @@ export function StaffManagement() {
 
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setPhotoPayload(canvas.toDataURL('image/jpeg'));
-        stopCamera();
-      }
+      setPhotoPayload(captureVideoFrameCompressed(videoRef.current, canvasRef.current));
+      stopCamera();
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setPhotoPayload(reader.result as string);
-      reader.readAsDataURL(file);
+    if (file && canvasRef.current) {
+      compressImageFile(file, canvasRef.current)
+        .then(setPhotoPayload)
+        .catch(err => console.error('Error comprimiendo la foto:', err));
     }
   };
 

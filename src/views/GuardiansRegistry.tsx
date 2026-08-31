@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { captureVideoFrameCompressed, compressImageFile } from '../lib/photoCompression';
 import {
   Users, Search, Filter, Mail, Phone,
   Shield, Trash2, Edit2, CheckCircle2, UserPlus, Plus,
@@ -107,17 +108,8 @@ export function GuardiansRegistry() {
 
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const data = canvas.toDataURL('image/jpeg');
-        setPhotoPayload(data);
-        stopCamera();
-      }
+      setPhotoPayload(captureVideoFrameCompressed(videoRef.current, canvasRef.current));
+      stopCamera();
     }
   };
 
@@ -131,10 +123,10 @@ export function GuardiansRegistry() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setPhotoPayload(reader.result as string);
-      reader.readAsDataURL(file);
+    if (file && canvasRef.current) {
+      compressImageFile(file, canvasRef.current)
+        .then(setPhotoPayload)
+        .catch(err => console.error('Error comprimiendo la foto:', err));
     }
   };
 

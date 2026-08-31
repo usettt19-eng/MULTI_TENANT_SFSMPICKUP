@@ -1436,6 +1436,23 @@ segundos acumulados — no lo llama nuestro código en ningún lado; probable
 una pestaña de Supabase Studio con algún selector de fecha/zona horaria
 refrescándose sola. No se investigó más a fondo.
 
+### El mismo problema de fotos sin comprimir, ahora en TCS Albrook (2026-08-31)
+Minutos después del fix anterior, el Directorio de Padres (`GuardiansRegistry.tsx`)
+de TCS Albrook dejó de cargar (spinner infinito). Se confirmó con SQL: de
+439 padres, 4 tenían foto en base64 sin comprimir sumando **9.1MB** (una
+sola de 4.1MB), y `fetchGuardians` trae **todos** los padres del colegio
+de una sola consulta (`select('*', parent_students(students(*)),
+vehicles(*))`, sin paginar) — el mismo problema de fondo que la foto del
+padre, pero ya presente desde antes en datos subidos por el colegio vía
+esta pantalla. Alivio inmediato: `UPDATE profiles SET photo_url = NULL`
+para esos 3 padres más pesados (dejó pasar el de 100KB). Fix de raíz: se
+crea `src/lib/photoCompression.ts` (`captureVideoFrameCompressed`,
+`compressImageFile` — mismo recorte a 480px/JPEG 0.72 que ya se usaba en
+`ParentDashboard.tsx`) y se aplica también en `GuardiansRegistry.tsx` y
+`StaffManagement.tsx`, las otras dos pantallas que guardan la foto como
+base64 directo en `profiles.photo_url`. `Students.tsx` no lo necesitaba:
+ya sube a Supabase Storage y guarda solo la URL corta, nunca base64.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
