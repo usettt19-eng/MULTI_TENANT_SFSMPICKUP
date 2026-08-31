@@ -774,6 +774,32 @@ app.delete(
   }),
 );
 
+/**
+ * Cambia los módulos habilitados de un acceso ya concedido (ver POST
+ * /api/staff, rama `granted_existing`). Antes de esto la única forma de
+ * ajustar permisos de alguien "de otro colegio" era revocar y volver a
+ * agregarlo desde cero — confuso, y sin este endpoint el frontend no tenía
+ * forma de distinguir "agregar" de "editar" para este caso.
+ */
+app.put(
+  '/api/staff/school-access/:staffId/:tenantId',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {staffId, tenantId} = req.params;
+    if (!isAdminOf(req.caller, tenantId)) return fail(res, 403, 'Requiere ser administrador del colegio.');
+
+    const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
+    const {error} = await admin
+      .from('staff_school_access')
+      .update({permissions})
+      .eq('staff_id', staffId)
+      .eq('tenant_id', tenantId);
+
+    if (error) return fail(res, 500, error.message);
+    return ok(res, {staff_id: staffId, tenant_id: tenantId, permissions});
+  }),
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // BIENESTAR
 // ════════════════════════════════════════════════════════════════════════════

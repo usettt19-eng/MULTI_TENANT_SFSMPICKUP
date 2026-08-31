@@ -51,6 +51,11 @@ export function StaffManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // staff_id de un acceso concedido (staff_school_access) que se está
+  // editando — distinto de editingId (que es el id de profiles de un
+  // miembro "de casa"). Solo se edita su lista de permisos en este colegio,
+  // nunca su nombre/correo/foto (eso vive en su perfil de su colegio real).
+  const [editingGrantId, setEditingGrantId] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   // Confirmation Modal State
@@ -170,7 +175,7 @@ export function StaffManagement() {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('staff_school_access')
-      .select('staff_id, created_at, staff:profiles!staff_school_access_staff_id_fkey(first_name, last_name, email)')
+      .select('staff_id, created_at, permissions, staff:profiles!staff_school_access_staff_id_fkey(first_name, last_name, email)')
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
     setGrantedAccess(data || []);
@@ -205,7 +210,19 @@ export function StaffManagement() {
     setIsSaving(true);
 
     try {
-      if (editingId) {
+      if (editingGrantId) {
+        // Solo se edita la lista de módulos de este acceso concedido — el
+        // nombre/correo/foto pertenecen a su perfil "de casa", en otro
+        // colegio, y no se tocan desde aquí.
+        const res = await apiFetch(`/api/staff/school-access/${editingGrantId}/${profile?.tenant_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ permissions: formData.permissions })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'API Error');
+        fetchGrantedAccess();
+      } else if (editingId) {
         // Update via API to keep logic centralized
         const res = await apiFetch(`/api/staff/${editingId}`, {
           method: 'PUT',
@@ -220,6 +237,7 @@ export function StaffManagement() {
         });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'API Error');
+        fetchStaff();
       } else {
         // Create new staff via API
         const res = await apiFetch('/api/staff', {
@@ -242,14 +260,17 @@ export function StaffManagement() {
         // se le dio acceso a este, sin mandarle una invitación nueva.
         if (json.data?.granted_existing) {
           alert('Ese correo ya tenía cuenta en otro colegio — se le dio acceso a este también, con el mismo correo y contraseña de siempre.');
+          fetchGrantedAccess();
+        } else {
+          fetchStaff();
         }
       }
 
       setIsModalOpen(false);
-      fetchStaff();
       setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
       resetPhoto();
       setEditingId(null);
+      setEditingGrantId(null);
     } catch (error: any) {
       alert("Error: " + error.message);
     }
@@ -411,6 +432,21 @@ export function StaffManagement() {
     setPhotoPayload(user.photo_url || '');
     setPhotoMethod('url');
     setEditingId(user.id);
+    setEditingGrantId(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditGrantModal = (g: any) => {
+    setFormData({
+      email: g.staff?.email || '',
+      first_name: g.staff?.first_name || '',
+      last_name: g.staff?.last_name || '',
+      permissions: Array.isArray(g.permissions) ? g.permissions : [],
+      notify_all_arrivals: false,
+    });
+    resetPhoto();
+    setEditingId(null);
+    setEditingGrantId(g.staff_id);
     setIsModalOpen(true);
   };
 
@@ -499,6 +535,7 @@ export function StaffManagement() {
             <button
               onClick={() => {
                 setEditingId(null);
+                setEditingGrantId(null);
                 setFormData({ email: '', first_name: '', last_name: '', permissions: [], notify_all_arrivals: false });
                 resetPhoto();
                 setIsModalOpen(true);
@@ -588,27 +625,55 @@ export function StaffManagement() {
               <p className="text-xs text-slate-400 italic">{t('staffPage.noneMatchSearch')}</p>
             ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredGrantedAccess.map((g: any) => (
-                <div key={g.staff_id} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 shrink-0 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-                      <Users className="w-5 h-5" />
+              {filteredGrantedAccess.map((g: any) => {
+                const gPerms: string[] = Array.isArray(g.permissions) ? g.permissions : [];
+                return (
+                <div key={g.staff_id} className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 shrink-0 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-black text-slate-800 text-sm truncate">{g.staff?.first_name} {g.staff?.last_name}</h3>
+                        <p className="text-xs font-bold text-slate-400 truncate">{g.staff?.email}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-black text-slate-800 text-sm truncate">{g.staff?.first_name} {g.staff?.last_name}</h3>
-                      <p className="text-xs font-bold text-slate-400 truncate">{g.staff?.email}</p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEditGrantModal(g)}
+                        className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                        title={t('staffPage.editPermissionsBtn')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRevokeAccess(g.staff_id)}
+                        disabled={revokingStaffId === g.staff_id}
+                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
+                        title={t('staffPage.revokeAccessTooltip')}
+                      >
+                        {revokingStaffId === g.staff_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleRevokeAccess(g.staff_id)}
-                    disabled={revokingStaffId === g.staff_id}
-                    className="shrink-0 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"
-                    title={t('staffPage.revokeAccessTooltip')}
-                  >
-                    {revokingStaffId === g.staff_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  </button>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gPerms.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">{t('staffPage.noAccessConfigured')}</span>
+                    ) : (
+                      gPerms.map(p => {
+                        const labelKey = MODULE_LABEL_KEYS[p];
+                        return (
+                          <span key={p} className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                            {labelKey ? t(labelKey) : p}
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             )}
           </section>
@@ -654,16 +719,32 @@ export function StaffManagement() {
                   <Shield className="w-5 h-5 text-indigo-600" />
                 </div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                  {editingId ? t('staffPage.editPermissionsModalTitle') : t('staffPage.createNewStaffModalTitle')}
+                  {editingGrantId
+                    ? t('staffPage.editGrantModalTitle')
+                    : editingId
+                    ? t('staffPage.editPermissionsModalTitle')
+                    : t('staffPage.createNewStaffModalTitle')}
                 </h2>
               </div>
-              <button onClick={() => { setIsModalOpen(false); stopCamera(); }} className="p-2.5 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all">
+              <button onClick={() => { setIsModalOpen(false); setEditingGrantId(null); stopCamera(); }} className="p-2.5 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-8 flex-1 overflow-y-auto">
               <form id="staff-form" onSubmit={handleSave} className="space-y-6">
+                {editingGrantId ? (
+                  <div className="flex items-center gap-4 bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4">
+                    <div className="w-12 h-12 shrink-0 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-800 truncate">{formData.first_name} {formData.last_name}</p>
+                      <p className="text-xs font-bold text-slate-400 truncate">{formData.email}</p>
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">{t('staffPage.editGrantHint')}</p>
+                    </div>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-[7rem_1fr] gap-4 sm:gap-6 items-start">
                   {/* Foto */}
                   <div className="w-28 mx-auto sm:mx-0 space-y-2">
@@ -747,6 +828,7 @@ export function StaffManagement() {
                     )}
                   </div>
                 </div>
+                )}
 
                 <div>
                   <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">{t('staffPage.accessPermissionsTitle')}</h3>
@@ -771,6 +853,7 @@ export function StaffManagement() {
                   </div>
                 </div>
 
+                {!editingGrantId && (
                 <div
                   onClick={() => setFormData(prev => ({ ...prev, notify_all_arrivals: !prev.notify_all_arrivals }))}
                   className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${formData.notify_all_arrivals ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-100 hover:border-emerald-200'}`}
@@ -787,6 +870,7 @@ export function StaffManagement() {
                     {formData.notify_all_arrivals && <Check className="w-3 h-3" />}
                   </div>
                 </div>
+                )}
               </form>
             </div>
 

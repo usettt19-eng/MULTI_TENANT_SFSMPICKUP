@@ -1347,6 +1347,24 @@ pertenece al tenant que está configurando) quedaba bloqueado. Se agrega
 UPDATE/DELETE en `avatars`, SELECT/INSERT en `detections`) con
 `OR public.is_super_admin()`.
 
+### Gestión de Personal: no se podía editar los permisos de alguien "de otro colegio" (2026-08-30)
+El staff con acceso concedido a un segundo colegio (tabla
+`staff_school_access`, sección "Access from other schools" en
+`StaffManagement.tsx`) solo se podía revocar, nunca editar — si al
+otorgarle el acceso no se marcó ningún módulo, quedaba con permisos
+vacíos y sin forma de arreglarlo salvo revocar y volver a agregarlo desde
+"Agregar Staff" (confuso, y nada obvio). Se agrega:
+- Backend: `PUT /api/staff/school-access/:staffId/:tenantId` — actualiza
+  solo `permissions` de esa fila (nombre/correo/foto no aplican, viven en
+  su perfil real de su colegio de casa).
+- Frontend: cada tarjeta de "acceso de otro colegio" ahora muestra los
+  módulos ya otorgados como chips (antes no se veía nada, por eso no era
+  obvio que estaban vacíos) y tiene un botón de editar junto al de
+  revocar. El modal, en este modo (`editingGrantId`), oculta foto/nombre/
+  correo/aviso de invitación y el toggle de "notificar todas las
+  llegadas" (no existen en `staff_school_access`) y solo deja tocar la
+  grilla de módulos.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
