@@ -1365,6 +1365,20 @@ vacíos y sin forma de arreglarlo salvo revocar y volver a agregarlo desde
   llegadas" (no existen en `staff_school_access`) y solo deja tocar la
   grilla de módulos.
 
+### En Tránsito: el personal puede sacar a un alumno sin esperar al padre (2026-08-31)
+`TransitMonitor.tsx` era de solo lectura — si el padre no confirmaba en su
+app (sin señal, batería, o simplemente no lo hizo), el alumno se quedaba
+ahí indefinidamente hasta que el auto-cierre a los 20 minutos lo sacara.
+Se agregó un botón pequeño en la fila del adulto de cada tarjeta
+(`handleStaffComplete`) para que el personal que entrega físicamente al
+alumno lo confirme desde ahí mismo. Usa la misma transición de estado que
+el botón del padre en `ParentDashboard.tsx` (`handleFinalConfirm`):
+`pickup_events` de `'released'` a `'completed'`, con `completed_at` — pero
+filtrando por el `id` del pickup en vez de por `parent_id`, así que no
+toca ni depende de la lógica del padre. Queda registrado en la Bitácora
+con el prefijo "CICLO COMPLETADO (personal)" para diferenciarlo del cierre
+hecho por el padre o del automático a los 20 minutos.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

@@ -1,26 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell } from 'lucide-react';
+import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 
 /**
- * Pantalla de solo lectura: alumnos ya aprobados por el profesor (status
- * 'released') que todavía no fueron confirmados por el padre en el
- * vehículo (status 'completed', vía el botón del padre en su app). No
- * tiene ninguna acción — es guía visual para el personal en el trayecto
- * entre el salón y la puerta.
+ * Alumnos ya aprobados por el profesor (status 'released') que todavía no
+ * fueron confirmados por el padre en el vehículo (status 'completed'). Es
+ * sobre todo guía visual para el personal en el trayecto entre el salón y
+ * la puerta, pero cada tarjeta tiene un botón para que el personal que
+ * físicamente entrega al alumno lo saque de tránsito sin depender de que
+ * el padre confirme en su app (misma transición 'released' -> 'completed'
+ * que usa `handleFinalConfirm` en ParentDashboard.tsx, filtrando por el id
+ * del pickup en vez de por parent_id — esa lógica del padre no se toca).
  */
 export function TransitMonitor() {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   // Compartida con Monitor Externo y con el widget de "carritos" (Padres en
   // el Perímetro): la puerta elegida en cualquiera de las tres se adopta
   // automáticamente en las otras.
@@ -129,6 +133,36 @@ export function TransitMonitor() {
       }
     }
     setLoading(false);
+  };
+
+  // Confirmación manual del personal que entrega al alumno — mismo efecto
+  // que el botón del padre en su app (pickup_events pasa de 'released' a
+  // 'completed'), pero disparada desde acá para cuando el padre no
+  // confirma (sin señal, sin batería, etc.). Se filtra por el id del
+  // pickup, no por parent_id, así que no interfiere con
+  // handleFinalConfirm en ParentDashboard.tsx.
+  const handleStaffComplete = async (pickup: any) => {
+    setCompletingId(pickup.id);
+    const { error } = await supabase
+      .from('pickup_events')
+      .update({ status: 'completed', completed_at: new Date() })
+      .eq('id', pickup.id)
+      .eq('status', 'released');
+
+    if (error) {
+      alert(t('transit.staffCompleteError'));
+    } else {
+      const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
+      await logActivity(
+        'PICKUP',
+        `CICLO COMPLETADO (personal): ${profile?.first_name || 'Personal'} confirmó la entrega de ${fullName} directamente desde En Tránsito, sin esperar la confirmación del padre.`,
+        profile?.first_name || 'Personal',
+        { student_id: pickup.student_id, pickup_event_id: pickup.id, staff_confirmed: true },
+        profile?.tenant_id
+      );
+      setPickups(prev => prev.filter(p => p.id !== pickup.id));
+    }
+    setCompletingId(null);
   };
 
   // Prioridad por orden de espera: sin released_at en la base, announced_at
@@ -286,6 +320,18 @@ export function TransitMonitor() {
                             </p>
                           )}
                         </div>
+                        <button
+                          onClick={() => handleStaffComplete(pickup)}
+                          disabled={completingId === pickup.id}
+                          title={t('transit.staffCompleteBtn')}
+                          className="shrink-0 w-8 h-8 rounded-xl bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all active:scale-90 disabled:opacity-50 flex items-center justify-center"
+                        >
+                          {completingId === pickup.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
 
                       {vehicle && (
