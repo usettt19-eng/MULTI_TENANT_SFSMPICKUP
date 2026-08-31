@@ -338,16 +338,31 @@ export function ParentDashboard() {
     }
   };
 
+  // profiles.photo_url guarda el base64 tal cual (mismo criterio que
+  // GuardiansRegistry.tsx/StaffManagement.tsx — ver nota al declarar
+  // photoPayload más arriba), pero una foto de cámara/galería sin recortar
+  // puede pesar varios MB de texto. Esa columna se trae completa en CADA
+  // `SELECT * FROM profiles` de toda la app (fetchProfiles en cada login,
+  // listados de staff/padres, etc.) — medido en producción: un solo
+  // `UPDATE profiles SET photo_url` sin comprimir tardó 1.5s promedio, y es
+  // sospechoso directo de los timeouts que reportó el colegio al iniciar
+  // sesión justo después de activar esta función. Se recorta a un máximo de
+  // 480px de lado y JPEG calidad 0.72 antes de guardar — de sobra para un
+  // avatar, y baja el peso típico de varios MB a decenas de KB.
+  const MAX_PHOTO_DIM = 480;
+  const PHOTO_JPEG_QUALITY = 0.72;
+
   const takePhotoPicture = () => {
     if (photoVideoRef.current && photoCanvasRef.current) {
       const video = photoVideoRef.current;
       const canvas = photoCanvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setPhotoPayload(canvas.toDataURL('image/jpeg'));
+        setPhotoPayload(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
         stopPhotoCamera();
       }
     }
@@ -355,11 +370,25 @@ export function ParentDashboard() {
 
   const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setPhotoPayload(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = photoCanvasRef.current;
+        if (!canvas) return;
+        const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(img.width, img.height));
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setPhotoPayload(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
+        }
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const openPhotoModal = () => {

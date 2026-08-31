@@ -1408,6 +1408,34 @@ de fin de semana que faltaban en `WEEKDAY_KEYS`
 que admite `day_of_week`, aunque en la práctica el colegio solo configura
 de lunes a viernes.
 
+### Fix: foto de perfil del padre sin comprimir causaba timeouts en toda la app (2026-08-31)
+El colegio reportó la app lenta y, al iniciar sesión, `Timeout: La conexión
+con el servidor tardó demasiado.` / `fetchProfiles error: upstream request
+timeout`. Se descartó el servidor Docker (contenedores sanos, `sfsmpickup`
+responde en 1.3ms local) y la red del colegio (el mismo timeout salía
+también desde el servidor). La causa real, confirmada con
+`pg_stat_statements` en el SQL Editor de Supabase: el `UPDATE profiles SET
+photo_url = ...` de la foto de perfil del padre (agregada hoy mismo, ver
+entrada "El padre ya puede subir su propia foto") tardaba **1.5s
+promedio** — porque se guarda como base64 directo en la columna sin
+comprimir, y una foto de cámara/galería sin recortar pesa varios MB de
+texto. Esa misma columna se trae de vuelta en **cada** `SELECT * FROM
+profiles` de toda la app — incluido `fetchProfiles`, que corre en cada
+login — así que una sola foto pesada podía arrastrar timeouts para
+cualquiera, no solo para ese padre. Se agrega compresión del lado del
+cliente en `ParentDashboard.tsx` (`takePhotoPicture`/
+`handlePhotoFileUpload`, vía un `<canvas>` oculto): recorta a máximo 480px
+de lado y JPEG calidad 0.72 antes de guardar, bajando el peso típico de
+varios MB a decenas de KB. Las 4 fotos que ya se habían guardado sin
+comprimir mientras se probaba la función quedan pendientes de limpiar a
+mano (o de que esos padres vuelvan a subirlas con la app ya actualizada).
+
+**Pendiente/hallazgo aparte, sin resolver**: `pg_stat_statements` también
+mostró `SELECT name FROM pg_timezone_names` con 632 llamadas y 368
+segundos acumulados — no lo llama nuestro código en ningún lado; probable
+una pestaña de Supabase Studio con algún selector de fecha/zona horaria
+refrescándose sola. No se investigó más a fondo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
