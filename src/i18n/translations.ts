@@ -69,6 +69,8 @@ export const translations = {
     'dashboard.noPickups': 'No pending pickups',
     'dashboard.dailyDepartures': "Today's Departures by Grade/Section",
     'dashboard.noDeparturesToday': 'No completed departures yet today',
+    'dashboard.carpoolsTitle': 'Configured Car Pools',
+    'dashboard.noCarpools': 'No recurring car pools configured',
     'dashboard.pickedUpBy': 'PICKUP BY',
     'dashboard.mainEntrance': 'Main Entrance',
     'dashboard.sideEntrance': 'Side Entrance',
@@ -613,6 +615,8 @@ export const translations = {
     'settingsDismissal.weekdayWed': 'Wed',
     'settingsDismissal.weekdayThu': 'Thu',
     'settingsDismissal.weekdayFri': 'Fri',
+    'settingsDismissal.weekdaySat': 'Sat',
+    'settingsDismissal.weekdaySun': 'Sun',
 
     // Parent Perimeter Panel ("box de padres en el perímetro")
     'perimeter.title': 'Parents in the Perimeter',
@@ -776,6 +780,8 @@ export const translations = {
     'dashboard.noPickups': 'No hay recolecciones pendientes',
     'dashboard.dailyDepartures': 'Salidas de Hoy por Grado/Sección',
     'dashboard.noDeparturesToday': 'Todavía no hay salidas completadas hoy',
+    'dashboard.carpoolsTitle': 'Car Pools Configurados',
+    'dashboard.noCarpools': 'No hay car pools recurrentes configurados',
     'dashboard.pickedUpBy': 'RECOGE',
     'dashboard.mainEntrance': 'Entrada Principal',
     'dashboard.sideEntrance': 'Entrada Lateral',
@@ -1320,6 +1326,8 @@ export const translations = {
     'settingsDismissal.weekdayWed': 'Mié',
     'settingsDismissal.weekdayThu': 'Jue',
     'settingsDismissal.weekdayFri': 'Vie',
+    'settingsDismissal.weekdaySat': 'Sáb',
+    'settingsDismissal.weekdaySun': 'Dom',
 
     // Parent Perimeter Panel ("box de padres en el perímetro")
     'perimeter.title': 'Padres en el Perímetro',

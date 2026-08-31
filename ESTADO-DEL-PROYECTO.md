@@ -1392,6 +1392,22 @@ refrescar el perfil activo sin recargar la página, se agregó
 útil en general para cualquier edición futura del propio perfil, no solo
 la foto.
 
+### Dashboard: nueva tarjeta con los Car Pools configurados (2026-08-31)
+Los car pools recurrentes (`carpool_authorizations`) solo se veían de
+pasada en Solicitudes (`RequestsCenter.tsx`), mezclados en el feed de
+actividad junto con reemplazos y limitados a los últimos 50 creados — uno
+configurado hace tiempo podía quedar fuera de esa vista aunque siguiera
+activo, sin ninguna pantalla que mostrara "esto es lo que hay configurado
+ahora mismo". Se agregó una tarjeta "Car Pools Configurados" en
+`OperationsDashboard.tsx` (entre "Salidas Autónomas de Hoy" y "Pickup Zone
+Analysis"), con tiempo real vía suscripción a `carpool_authorizations`:
+cada fila muestra el alumno, quién autoriza → quién conduce, y el día de
+la semana, sin límite de antigüedad. Se agregaron las claves de traducción
+de fin de semana que faltaban en `WEEKDAY_KEYS`
+(`settingsDismissal.weekdaySat`/`weekdaySun`) para poder cubrir los 7 días
+que admite `day_of_week`, aunque en la práctica el colegio solo configura
+de lunes a viernes.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

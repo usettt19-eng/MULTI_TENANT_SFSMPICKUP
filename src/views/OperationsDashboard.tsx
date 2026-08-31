@@ -11,12 +11,26 @@ import {
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
   ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode,
-  FileBarChart
+  FileBarChart, Car
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { DailyReportModal } from '../components/DailyReportModal';
+import type { TranslationKey } from '../i18n/translations';
+
+// carpool_authorizations.day_of_week: 0=domingo...6=sábado (igual que
+// CARPOOL_DAY_NAMES en RequestsCenter.tsx). En la práctica siempre va a ser
+// un día de colegio (1-5), pero se cubren los 7 por si acaso.
+const CARPOOL_WEEKDAY_KEYS: Record<number, TranslationKey> = {
+  0: 'settingsDismissal.weekdaySun',
+  1: 'settingsDismissal.weekdayMon',
+  2: 'settingsDismissal.weekdayTue',
+  3: 'settingsDismissal.weekdayWed',
+  4: 'settingsDismissal.weekdayThu',
+  5: 'settingsDismissal.weekdayFri',
+  6: 'settingsDismissal.weekdaySat',
+};
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
   const { t } = useLanguage();
@@ -44,6 +58,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // mezclarla con las recogidas normales.
   const [selfDismissalsToday, setSelfDismissalsToday] = useState<any[]>([]);
   const [showDailyReportModal, setShowDailyReportModal] = useState(false);
+  // Car pools activos (recurrentes, tabla carpool_authorizations) — antes
+  // solo se veían de pasada en Solicitudes, mezclados en el feed de
+  // actividad y limitados a los últimos 50 creados, así que uno viejo podía
+  // desaparecer de la vista aunque siguiera activo. Acá se listan TODOS los
+  // configurados ahora mismo, sin límite de fecha de creación.
+  const [configuredCarpools, setConfiguredCarpools] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -68,6 +88,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchSchoolSettings();
     fetchDailyDepartures();
     fetchSelfDismissalsToday();
+    fetchConfiguredCarpools();
 
     const pickupChannel = supabase
       .channel('public:pickup_events')
@@ -120,6 +141,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       })
       .subscribe();
 
+    const carpoolChannel = supabase
+      .channel('public:carpool_authorizations_dashboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_authorizations' }, () => {
+        fetchConfiguredCarpools();
+      })
+      .subscribe();
+
     // Fallback polling every 10 seconds to ensure data consistency
     const pollInterval = window.setInterval(() => {
       console.log('Dashboard fallback polling...');
@@ -131,6 +159,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchStats();
       fetchDailyDepartures();
       fetchSelfDismissalsToday();
+      fetchConfiguredCarpools();
     }, 10000);
 
     return () => {
@@ -140,6 +169,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       supabase.removeChannel(detectionChannel);
       supabase.removeChannel(auditChannel);
       supabase.removeChannel(alertChannel);
+      supabase.removeChannel(carpoolChannel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);
@@ -250,6 +280,23 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     }
 
     setSelfDismissalsToday(data || []);
+  };
+
+  const fetchConfiguredCarpools = async () => {
+    if (!profile?.tenant_id) return;
+    const parentFields = 'first_name, last_name';
+    const { data, error } = await supabase
+      .from('carpool_authorizations')
+      .select(`id, day_of_week, student:students(first_name, last_name, grade, section), authorizing:profiles!carpool_authorizations_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_authorizations_driver_parent_id_fkey(${parentFields})`)
+      .eq('tenant_id', profile.tenant_id)
+      .order('day_of_week', { ascending: true });
+
+    if (error) {
+      console.error('Error cargando car pools configurados:', error);
+      return;
+    }
+
+    setConfiguredCarpools(data || []);
   };
 
   const fetchLatestDetections = async () => {
@@ -579,6 +626,54 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                           {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Car Pools Configurados */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Car className="w-5 h-5 text-[#1e293b]" />
+                <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">{t('dashboard.carpoolsTitle')}</h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-full border border-slate-200">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">{t('dashboard.realtimeSync')}</span>
+                </span>
+                <span className="bg-[#1e293b] text-white px-4 py-1.5 rounded-full text-xs font-black">
+                  {configuredCarpools.length}
+                </span>
+              </div>
+            </div>
+            <div className="p-5">
+              {configuredCarpools.length === 0 ? (
+                <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest text-center py-6">
+                  {t('dashboard.noCarpools')}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {configuredCarpools.map((cp) => (
+                    <div key={cp.id} className="flex items-center gap-3 bg-[#f8fafc] rounded-xl p-3 border border-slate-100">
+                      <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                        <Car className="w-4 h-4 text-indigo-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-[#1e293b] truncate">
+                          {cp.student?.first_name} {cp.student?.last_name}
+                          <span className="text-slate-400 font-bold"> · {cp.student?.grade || '—'}{cp.student?.section ? ` ${cp.student.section}` : ''}</span>
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 truncate">
+                          {cp.authorizing?.first_name} {cp.authorizing?.last_name} → {cp.driver?.first_name} {cp.driver?.last_name}
+                        </p>
+                      </div>
+                      <span className="shrink-0 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                        {CARPOOL_WEEKDAY_KEYS[cp.day_of_week] ? t(CARPOOL_WEEKDAY_KEYS[cp.day_of_week]) : cp.day_of_week}
+                      </span>
                     </div>
                   ))}
                 </div>
