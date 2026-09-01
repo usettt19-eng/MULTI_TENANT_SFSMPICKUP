@@ -205,7 +205,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;

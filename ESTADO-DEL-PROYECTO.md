@@ -1464,6 +1464,21 @@ el sidebar en móvil (`toggleMenu()` de `LayoutContext`). El import de
 mismo botón (ícono `Menu`/`X`, oculto en desktop con `md:hidden`) junto al
 logo del encabezado propio del Dashboard.
 
+**Seguía sin poder salir**: con el botón ya arreglado, el sidebar abría en
+el celular pero "Cerrar Sesión" (y parte de "Ajustes") quedaban cortados
+fuera de la pantalla, sin scroll para alcanzarlos — captura real: con
+Colegio Demo (15 módulos habilitados) el `<nav>` de arriba nunca llegaba a
+mostrar todo, y aun así "Cerrar Sesión" no aparecía. Causa: en
+`Sidebar.tsx`, `<nav className="flex-1 ... overflow-y-auto">` necesita
+`min-h-0` para que Flexbox lo deje encoger de verdad — sin eso, un
+`flex-1` con `overflow-y-auto` no se activa (el hijo conserva su alto
+natural, `min-height: auto` por default), así que en vez de hacer scroll
+interno el `<nav>` empuja el bloque de abajo (Bloqueo/Ajustes/Cerrar
+Sesión, que vive fuera del área con scroll) más allá del borde inferior
+de una pantalla de celular — y como el `<aside>` está en `position:
+fixed` sin su propio `overflow`, ese contenido empujado queda inalcanzable,
+no solo oculto. Se agrega `min-h-0` al `<nav>`.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
