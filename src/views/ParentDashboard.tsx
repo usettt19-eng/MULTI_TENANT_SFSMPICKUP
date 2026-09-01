@@ -18,6 +18,15 @@ import {
   HelpCircle
 } from 'lucide-react';
 
+// Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
+// aunque el padre ya esté físicamente dentro del perímetro del colegio —
+// evita que quien llega mucho antes de la salida quede anunciado en la cola
+// de recogida sin que nadie lo haya llamado. Es un límite fijo para toda la
+// app, no configurable por colegio (cada colegio tiene su propia hora de
+// salida por grado en `school_grades.exit_time`, pero este corte de
+// "todavía es muy temprano para anunciarse" es el mismo para todos).
+const ANNOUNCE_ARRIVAL_MIN_HOUR = 11;
+
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut, refreshProfile } = useAuth();
   const { language, t, setLanguage, hasManualLanguage } = useLanguage();
@@ -59,7 +68,18 @@ export function ParentDashboard() {
   const releasedAnnouncedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
+  // Reloj local que solo se usa para saber si ya se puede anunciar la
+  // llegada (ver ANNOUNCE_ARRIVAL_MIN_HOUR). Se refresca cada 30s para que
+  // el botón se habilite solo, sin recargar la página, apenas dé la hora —
+  // aunque el padre ya esté parado dentro del perímetro desde antes.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+  const canAnnounceArrivalNow = now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR;
+
   // School selector state
   const [showSchoolSelector, setShowSchoolSelector] = useState(false);
 
@@ -1089,10 +1109,10 @@ export function ParentDashboard() {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
     wasInsideRef.current = isInside;
-    if (justEntered && status === 'idle' && !loading) {
+    if (justEntered && status === 'idle' && !loading && canAnnounceArrivalNow) {
       handleAnnounceArrival();
     }
-  }, [isNative, isBackgroundTrackingActive, isInside, status, loading]);
+  }, [isNative, isBackgroundTrackingActive, isInside, status, loading, canAnnounceArrivalNow]);
 
   // Reporta al colegio si el padre está dentro o fuera del perímetro, para
   // que recepción vea en vivo quién está llegando — sin guardar coordenadas,
@@ -1175,6 +1195,10 @@ export function ParentDashboard() {
 
   const handleAnnounceArrival = async (manual: boolean = false) => {
     if (!isInside && !manual) return;
+    if (!canAnnounceArrivalNow) {
+      setErrorMessage(t('parent.pickup.tooEarlyError'));
+      return;
+    }
     setLoading(true);
     for (const student of pickupStudents) {
       const { data: newEvent, error: insertError } = await supabase.from('pickup_events').insert({
@@ -1509,14 +1533,21 @@ export function ParentDashboard() {
         ) : (
           <div className="space-y-4">
             {isLocationEnabled ? (
-              <button
-                onClick={() => handleAnnounceArrival()}
-                disabled={!isInside || loading}
-                className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
-              >
-                 <ShieldCheck className="w-10 h-10" />
-                 <span className="text-2xl font-black">{t('parent.pickup.announceBtn')}</span>
-              </button>
+              <>
+                <button
+                  onClick={() => handleAnnounceArrival()}
+                  disabled={!isInside || loading || !canAnnounceArrivalNow}
+                  className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && canAnnounceArrivalNow ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
+                >
+                   <ShieldCheck className="w-10 h-10" />
+                   <span className="text-2xl font-black">{t('parent.pickup.announceBtn')}</span>
+                </button>
+                {isInside && !canAnnounceArrivalNow && (
+                  <p className="text-xs font-bold text-slate-500 text-center">
+                    {t('parent.pickup.tooEarlyError')}
+                  </p>
+                )}
+              </>
             ) : (
               <div className="bg-white border-2 border-dashed border-slate-200 rounded-[3rem] p-6 space-y-3">
                 <p className="text-xs font-bold text-slate-500 text-center">
@@ -1544,6 +1575,11 @@ export function ParentDashboard() {
                     <p className="text-xs font-bold text-slate-600 text-center">
                       {t('parent.pickup.confirmManualMsg')}
                     </p>
+                    {!canAnnounceArrivalNow && (
+                      <p className="text-xs font-bold text-slate-500 text-center">
+                        {t('parent.pickup.tooEarlyError')}
+                      </p>
+                    )}
                     <div className="flex gap-3">
                       <button
                         onClick={() => setShowManualArrival(false)}
@@ -1554,8 +1590,8 @@ export function ParentDashboard() {
                       </button>
                       <button
                         onClick={() => handleAnnounceArrival(true)}
-                        disabled={loading}
-                        className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                        disabled={loading || !canAnnounceArrivalNow}
+                        className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.pickup.confirmArrivalBtn')}
                       </button>

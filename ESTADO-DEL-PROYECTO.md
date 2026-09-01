@@ -1527,6 +1527,25 @@ bloqueante (el mismo patrón de banner verde que ya usa la confirmación
 automática por geocerca), independiente de `isInside`, además de seguir
 activando la tarjeta de despedida cuando sí aplica.
 
+### No se deja anunciar la llegada antes de las 11:00 am (2026-09-01)
+El colegio reportó que si un padre llegaba mucho antes de la hora de
+salida (por ejemplo antes de las 11 am, cuando la salida más temprana en
+TCS Albrook es a las 12:00 pm para Nursery/Pre-Nursery), la app igual lo
+anunciaba en la cola de recogida y avisaba al personal del salón —
+`handleAnnounceArrival()` solo dependía del GPS (`isInside`), sin ningún
+chequeo de hora. Se agrega un límite fijo para toda la app,
+`ANNOUNCE_ARRIVAL_MIN_HOUR = 11`: antes de esa hora (local del
+dispositivo) el botón "Anunciar Llegada" aparece deshabilitado con un
+aviso ("Podrás anunciar tu llegada a partir de las 11:00 am"), igual el
+flujo manual de respaldo sin GPS, y el anuncio automático al entrar al
+perímetro por rastreo nativo en segundo plano tampoco se dispara antes de
+esa hora. Es el mismo límite para todos los colegios (no depende de
+`school_grades.exit_time`, que sí varía por colegio/grado) — se puede
+ajustar más adelante si algún colegio necesita una hora distinta. Un
+reloj local que se refresca cada 30s (`now`) hace que el botón se
+habilite solo apenas da la hora, sin que el padre tenga que salir y
+volver a entrar al perímetro ni recargar la página.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
