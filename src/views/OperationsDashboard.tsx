@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
-import { TopNav } from '../components/TopNav';
 import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useLayout } from '../contexts/LayoutContext';
 import { GoogleGenAI, Modality } from "@google/genai";
 import {
   AlertTriangle, Clock, CheckCircle2, UserPlus, Users,
@@ -11,7 +11,7 @@ import {
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
   ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode,
-  FileBarChart, Car
+  FileBarChart, Car, Menu, X
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
@@ -35,6 +35,7 @@ const CARPOOL_WEEKDAY_KEYS: Record<number, TranslationKey> = {
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
+  const { toggleMenu, isMenuOpen } = useLayout();
   const [pickups, setPickups] = useState<any[]>([]);
   const isFirstFetch = useRef(true);
   const announcedPickupIds = useRef<Set<string>>(new Set());
@@ -475,6 +476,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         <div className="col-span-12 lg:col-span-8 space-y-5">
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-4 min-w-0">
+              <button
+                onClick={toggleMenu}
+                className="p-2 -ml-1 rounded-xl hover:bg-slate-100 transition-colors md:hidden text-slate-700 shrink-0 border border-slate-200"
+              >
+                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
               {logoUrl && <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
               <h1 className="text-xl font-black text-slate-800 truncate">{t('dashboard.title')}</h1>
             </div>

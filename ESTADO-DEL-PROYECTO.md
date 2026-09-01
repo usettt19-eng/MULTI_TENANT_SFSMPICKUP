@@ -1453,6 +1453,17 @@ crea `src/lib/photoCompression.ts` (`captureVideoFrameCompressed`,
 base64 directo en `profiles.photo_url`. `Students.tsx` no lo necesitaba:
 ya sube a Supabase Storage y guarda solo la URL corta, nunca base64.
 
+### Fix: sin forma de abrir el menú lateral desde el celular en el Dashboard (2026-08-31)
+El colegio reportó que en el teléfono, estando en el Panel Principal, no
+había botón de menú ni manera de ver el sidebar. Causa: `OperationsDashboard.tsx`
+es la única pantalla de toda la app que **no** usa el componente compartido
+`TopNav.tsx` (tiene su propio encabezado con logo + botón "Reporte del
+Día") — y ese encabezado propio nunca tuvo el botón hamburguesa que abre
+el sidebar en móvil (`toggleMenu()` de `LayoutContext`). El import de
+`TopNav` seguía en el archivo pero sin usarse (se quitó). Se agrega el
+mismo botón (ícono `Menu`/`X`, oculto en desktop con `md:hidden`) junto al
+logo del encabezado propio del Dashboard.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
