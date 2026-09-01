@@ -1546,6 +1546,47 @@ reloj local que se refresca cada 30s (`now`) hace que el botón se
 habilite solo apenas da la hora, sin que el padre tenga que salir y
 volver a entrar al perímetro ni recargar la página.
 
+### Fix: los avisos de Pool Day le llegaban a TODO el staff del colegio, no solo a administración (2026-09-01)
+En plena salida de alumnos en TCS Albrook, varios maestros reportaron
+recibir avisos de alumnos que no eran suyos. Se encontraron dos causas
+distintas y separadas:
+
+**Causa 1 — dato mal configurado**: Nikolas Claus de la Ossa (maestro de
+grado 05 - Manta Rays) tenía marcado `notify_all_arrivals: true` en su
+perfil (el check de Gestión de Personal pensado para recepción/
+administración, "recibir todos los avisos de llegada"). Con eso activo,
+`/api/pickup/notify-staff` le mandaba el aviso de **cada alumno que
+llegaba en todo el colegio** — se confirmó con una consulta cruzando
+`notifications` de hoy contra la asignación real por sección: 63 avisos,
+uno por prácticamente cada alumno del colegio entre las 8:00 am y las
+3:27 pm. Se corrigió de inmediato con un `UPDATE` directo sobre su
+`additional_tutor_name` (sin tocar sus permisos ni su asignación real).
+Se confirmó por separado que Emma Wigley e Ingrid Leon tienen el mismo
+check activo mas sus permisos amplios (seguridad, compliance, ajustes,
+estadísticas) indican que sí les corresponde recibir todo — no se
+tocaron.
+
+**Causa 2 — bug de código**: por separado, la maestra Alba Sanz (grado
+01 - Golden Frogs) reportó un aviso de "Recogida por Pool Day" de un
+alumno de grado 03 que no tenía nada que ver con ella. La función
+`notifyTenantAdmins()` (`server/src/index.ts`), usada para avisar de
+Pool Day (al configurarse y al momento de la recogida), le notifica a
+**todo perfil con `role = 'admin'` del tenant** — y en esta app cada
+maestro/staff también tiene `role: 'admin'` en la base de datos (sus
+permisos limitados viven aparte, en el JSON de `additional_tutor_name`),
+así que ese "avisar a los administradores" terminaba avisándole a todo
+el personal del colegio, sin importar el grado/sección del alumno. Se
+agrega `notifySchoolAdmins()`, una función separada que sí filtra: solo
+administradores reales (`is_staff` no es `true`) o staff con
+`notify_all_arrivals: true` explícito — el mismo criterio que ya usa
+`/api/pickup/notify-staff`. Se cambian los 3 usos de Pool Day
+("Nuevo Pool Day configurado", "Pool Day de un día configurado",
+"Recogida por Pool Day") a la función nueva. La Alerta Discreta y la
+Solicitud de Ayuda de Check-In (`/api/security/discrete-alert`) se
+dejan con `notifyTenantAdmins()` sin cambios — para esos dos casos sí es
+intencional que le llegue a todo el staff, sea o no de la sección del
+alumno, por tratarse de avisos de seguridad.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

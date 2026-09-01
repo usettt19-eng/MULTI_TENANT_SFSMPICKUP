@@ -1307,7 +1307,17 @@ async function validateCarpoolActors(
   return null;
 }
 
-/** Notifica a los administradores del colegio (no bloquea la respuesta si falla). */
+/**
+ * Notifica a TODO el personal del colegio (administradores reales y
+ * maestros/staff por igual) — no bloquea la respuesta si falla. Pensada
+ * para avisos de seguridad (alerta discreta, solicitud de ayuda) donde
+ * cualquiera del staff debe enterarse, sin importar su grado/sección.
+ *
+ * En esta app cada maestro/staff también tiene `role = 'admin'` en la
+ * base de datos (con permisos limitados guardados aparte, en
+ * `additional_tutor_name`) — por eso esta función alcanza a todo el
+ * personal, no solo a quien administra el colegio.
+ */
 async function notifyTenantAdmins(tenantId: string, title: string, message: string) {
   try {
     const {data: admins} = await admin.from('profiles').select('id').eq('tenant_id', tenantId).eq('role', 'admin');
@@ -1317,6 +1327,44 @@ async function notifyTenantAdmins(tenantId: string, title: string, message: stri
     );
   } catch (err) {
     console.error('Error al notificar a administradores:', err);
+  }
+}
+
+/**
+ * Notifica solo a quien de verdad administra el colegio, o a quien tenga
+ * marcado explícitamente "recibir todos los avisos de llegada"
+ * (`notify_all_arrivals`, el mismo check de Gestión de Personal que usa
+ * /api/pickup/notify-staff) — a diferencia de notifyTenantAdmins, NO le
+ * llega a cualquier maestro con `role = 'admin'` + `is_staff`.
+ *
+ * Se usa para los avisos de Pool Day: antes de este fix, cada Pool Day
+ * (configurado o al momento de la recogida) le llegaba a absolutamente
+ * todo el personal del colegio, aunque el alumno no tuviera nada que ver
+ * con su grado o sección — confirmado en TCS Albrook el 2026-09-01.
+ */
+async function notifySchoolAdmins(tenantId: string, title: string, message: string) {
+  try {
+    const {data: profiles} = await admin
+      .from('profiles')
+      .select('id, additional_tutor_name')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'admin');
+    if (!profiles || profiles.length === 0) return;
+    const recipients = profiles.filter((p) => {
+      try {
+        const parsed = JSON.parse(p.additional_tutor_name || '{}');
+        if (parsed?.is_staff !== true) return true; // administrador real del colegio
+        return parsed?.notify_all_arrivals === true;
+      } catch {
+        return true; // JSON inválido: se trata como administrador real, igual que antes
+      }
+    });
+    if (recipients.length === 0) return;
+    await admin.from('notifications').insert(
+      recipients.map((a) => ({user_id: a.id, title, message, type: 'info', tenant_id: tenantId})),
+    );
+  } catch (err) {
+    console.error('Error al notificar a administradores del colegio:', err);
   }
 }
 
@@ -1460,7 +1508,7 @@ app.post(
     const studentName = data?.[0]?.student ? `${(data[0] as any).student.first_name} ${(data[0] as any).student.last_name}` : 'un alumno';
     const driverName = data?.[0]?.driver ? `${(data[0] as any).driver.first_name} ${(data[0] as any).driver.last_name}` : 'otro padre';
     const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-    await notifyTenantAdmins(
+    await notifySchoolAdmins(
       tenantId,
       'Nuevo Pool Day configurado',
       `${req.caller!.email ?? 'Un padre'} autorizó a ${driverName} a recoger a ${studentName} los días: ${days.map((d) => dayNames[d]).join(', ')}.`,
@@ -1519,7 +1567,7 @@ app.post(
 
     const studentName = data?.[0]?.student ? `${(data[0] as any).student.first_name} ${(data[0] as any).student.last_name}` : 'un alumno';
     const driverName = data?.[0]?.driver ? `${(data[0] as any).driver.first_name} ${(data[0] as any).driver.last_name}` : 'otro padre';
-    await notifyTenantAdmins(
+    await notifySchoolAdmins(
       tenantId,
       'Pool Day de un día configurado',
       `${req.caller!.email ?? 'Un padre'} autorizó a ${driverName} a recoger a ${studentName} el ${date} (excepción de un día).`,
@@ -1598,7 +1646,7 @@ app.post(
       ? `${applicable.authorizing.first_name} ${applicable.authorizing.last_name}`
       : 'el padre/tutor habitual';
 
-    await notifyTenantAdmins(
+    await notifySchoolAdmins(
       tenantId,
       'Recogida por Pool Day',
       `${req.caller!.email ?? 'Un padre'} está recogiendo a ${studentName} hoy en lugar de ${authName} (Pool Day autorizado).`,
