@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
 import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
+import { GeofenceMap } from '../components/settings/GeofenceMap';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export function Settings() {
@@ -114,15 +115,6 @@ export function Settings() {
       fetchSettings();
     }
     setSaving(false);
-  };
-
-  const getMapUrl = () => {
-    return `https://www.google.com/maps/embed/v1/view?key=YOUR_API_KEY_OR_FREE_MODE&center=${settings.latitude},${settings.longitude}&zoom=18&maptype=satellite`;
-  };
-
-  // Alternative for preview without API Key
-  const getStaticMapUrl = () => {
-    return `https://maps.google.com/maps?q=${settings.latitude},${settings.longitude}&z=15&output=embed`;
   };
 
   return (
@@ -362,16 +354,13 @@ export function Settings() {
                   </div>
                 </div>
 
-                {/* Map Iframe */}
+                {/* Mapa con el radio real de la geocerca dibujado */}
                 <div className="flex-1 rounded-[2.2rem] overflow-hidden bg-slate-800 relative">
-                  <iframe 
-                    width="100%" 
-                    height="100%" 
-                    frameBorder="0" 
-                    title="School Map Location"
-                    className="grayscale-[0.1] contrast-[1.1]"
-                    src={getStaticMapUrl()}
-                  ></iframe>
+                  <GeofenceMap
+                    latitude={settings.latitude}
+                    longitude={settings.longitude}
+                    radiusMeters={settings.pickup_radius_meters}
+                  />
                 </div>
 
                 {/* Footer Data */}

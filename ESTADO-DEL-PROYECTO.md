@@ -1671,6 +1671,37 @@ viniendo de `notifications`, sin tocar). Si no tiene ninguna asignación
 hoy, el indicador lo dice explícito y el estado vacío cambia de mensaje
 en consecuencia, en vez de mostrar el mismo "sin llegadas" ambiguo.
 
+### Ajustes: el mapa de ubicación ahora dibuja el radio real de la geocerca (2026-09-01)
+Investigando un caso en TCS Albrook (padres con GPS activo, físicamente en
+el colegio a las 3pm, con el botón "Ya Llegué" en gris sin activarse):
+el radio configurado (`school_settings.pickup_radius_meters`) era de solo
+35 metros — muy corto para una fila de carros/estacionamiento real. El
+problema de fondo era que en Ajustes no había forma de VER hasta dónde
+llegaba ese radio: el mapa era un iframe de Google Maps sin API key (el
+código traía `key=YOUR_API_KEY_OR_FREE_MODE`, nunca configurada), así que
+ni mostraba satélite real ni se le podía dibujar nada encima.
+
+Se reemplaza por un mapa con **Leaflet** (`src/components/settings/GeofenceMap.tsx`)
++ tiles de OpenStreetMap — gratis, sin API key — que dibuja un círculo real
+(en metros, no aproximado en píxeles) centrado en las coordenadas
+configuradas, con el mismo radio del slider "Radio de Llegada", y hace
+`fitBounds` automático para que el círculo siempre se vea completo sin
+importar si son 10m o 500m. Se instala `leaflet` + `@types/leaflet`
+(`npm install`). Las funciones `getMapUrl()`/`getStaticMapUrl()` (el
+iframe viejo) se eliminan por no usarse más; el label "Vista Satelital
+Activa" pasa a "Vista de la Geocerca" porque ya no es imagen satelital.
+Si el colegio llega a tener una API key de Google Maps más adelante,
+alcanza con cambiar la capa de tiles dentro de `GeofenceMap.tsx`, sin
+tocar el resto de la pantalla.
+
+Se probó de forma aislada (harness temporal con Playwright, sin
+autenticación, borrado después de confirmar) que el círculo se dibuja
+correctamente centrado y con el radio esperado; las imágenes reales de
+mapa no se pudieron ver desde este entorno de desarrollo porque la
+política de red del sandbox bloquea `tile.openstreetmap.org` — un
+navegador real en producción sí debería cargarlas sin problema, al ser
+un dominio público estándar.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
