@@ -824,10 +824,22 @@ export function Students() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">{t('students.grade')}</label>
-                    <select 
+                    <select
                       required
                       value={grade}
-                      onChange={e => setGrade(e.target.value)}
+                      onChange={e => {
+                        const newGrade = e.target.value;
+                        setGrade(newGrade);
+                        // Si la sección actual no pertenece a las configuradas
+                        // para el grado nuevo, se limpia — evita arrastrar una
+                        // sección de otro grado (la causa real del desajuste
+                        // que rompió los avisos de personal en TCS Albrook).
+                        const newGradeConfig = schoolGrades.find(g => g.name === newGrade);
+                        const newSections: string[] = newGradeConfig?.sections || [];
+                        if (newSections.length > 0 && !newSections.some(s => s.toLowerCase() === section.toLowerCase())) {
+                          setSection('');
+                        }
+                      }}
                       className="w-full bg-surface-container-low border border-outline-variant/20 rounded-[1.25rem] px-6 py-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-primary appearance-none cursor-pointer"
                     >
                       <option value="">{t('students.selectGradePlaceholder')}</option>
@@ -858,14 +870,49 @@ export function Students() {
                   </div>
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">{t('students.section')}</label>
-                    <input 
-                      required 
-                      value={section} 
-                      onChange={e => setSection(e.target.value)} 
-                      type="text" 
-                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-[1.25rem] px-6 py-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-primary" 
-                      placeholder="Eje. A" 
-                    />
+                    {(() => {
+                      // La sección se elige de la lista configurada en Ajustes
+                      // para el grado seleccionado (school_grades.sections) —
+                      // así no puede quedar un alumno con una sección que no
+                      // coincide con ninguna asignación de personal, como pasó
+                      // en TCS Albrook. Si el grado no tiene secciones
+                      // configuradas (ej. un grado sin dividir en secciones),
+                      // se cae al campo de texto libre de siempre.
+                      const currentGradeConfig = schoolGrades.find(g => g.name === grade);
+                      const configuredSections: string[] = currentGradeConfig?.sections || [];
+                      if (configuredSections.length === 0) {
+                        return (
+                          <input
+                            required
+                            value={section}
+                            onChange={e => setSection(e.target.value)}
+                            type="text"
+                            className="w-full bg-surface-container-low border border-outline-variant/20 rounded-[1.25rem] px-6 py-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-primary"
+                            placeholder="Eje. A"
+                          />
+                        );
+                      }
+                      // Si el valor actual (ej. al editar un alumno ya
+                      // desalineado) no está en la lista configurada, se
+                      // muestra igual como opción para no perderlo/ocultarlo
+                      // — el admin lo ve y decide corregirlo.
+                      const options = section && !configuredSections.some(s => s.toLowerCase() === section.toLowerCase())
+                        ? [section, ...configuredSections]
+                        : configuredSections;
+                      return (
+                        <select
+                          required
+                          value={section}
+                          onChange={e => setSection(e.target.value)}
+                          className="w-full bg-surface-container-low border border-outline-variant/20 rounded-[1.25rem] px-6 py-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-primary appearance-none cursor-pointer"
+                        >
+                          <option value="">{t('students.selectSectionPlaceholder')}</option>
+                          {options.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                 </div>
 

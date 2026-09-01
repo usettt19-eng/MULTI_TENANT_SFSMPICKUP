@@ -1587,6 +1587,33 @@ dejan con `notifyTenantAdmins()` sin cambios — para esos dos casos sí es
 intencional que le llegue a todo el staff, sea o no de la sección del
 alumno, por tratarse de avisos de seguridad.
 
+### La sección del alumno ahora se elige de una lista, no se escribe libre (2026-09-01)
+Causa raíz de fondo del incidente de hoy en TCS Albrook: en Alumnos, el
+campo "Sección" era un `<input type="text">` de texto libre, totalmente
+independiente de las secciones configuradas por grado en Ajustes
+(`school_grades.sections`, la lista que sí usa el horario de salida para
+saber a qué maestro avisar). Eso permitía que un alumno quedara con una
+sección que no coincidía con ninguna asignación real — como Victoria
+Varela Fernandez (grado 07, sección "Eagles", que en realidad es una
+sección del grado 06) — y esos alumnos simplemente no generaban ningún
+aviso de personal al llegar su padre/tutor.
+
+En `src/views/Students.tsx`, el campo "Sección" del formulario de
+alta/edición ahora es un `<select>` con las secciones configuradas para
+el grado ya elegido (mismo array `sections` de `school_grades` que usa
+Ajustes → Horario de Salida) — solo se cae al campo de texto libre de
+siempre si ese grado no tiene ninguna sección configurada (ej. un grado
+sin dividir, como el 13 de TCS Albrook). Si el alumno ya tenía guardada
+una sección que no está en la lista (el caso de Victoria), esa se
+muestra igual como primera opción para que el admin la vea y la corrija,
+en vez de ocultarla. Al cambiar el grado seleccionado, si la sección
+actual no pertenece a las secciones del grado nuevo, se limpia sola para
+no arrastrar una sección de otro grado por accidente.
+
+No se tocó el import por CSV (`handleCsvImport`), que sigue tomando la
+sección como texto libre de la columna 4 del archivo — sigue siendo un
+punto de entrada donde puede colarse el mismo tipo de desajuste.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
