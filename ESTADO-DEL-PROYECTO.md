@@ -1494,6 +1494,23 @@ pasa a usar el `signOut()` de `AuthContext` (el mismo que usa el botón
 equivalente del Sidebar) en vez de llamar `supabase.auth.signOut()`
 directo.
 
+### Fix: si el personal cerraba el ciclo desde En Tránsito, el padre no veía el mensaje de despedida (2026-09-01)
+Cuando el personal usa el botón nuevo de En Tránsito para entregar al
+alumno (en vez de que el padre pulse "Confirmar Encuentro" en su propia
+app), el registro en `pickup_events` pasa a `status: 'completed'`
+directamente. La app del padre sí se enteraba por el canal en tiempo real
+que ya tiene suscrito a `pickup_events` — pero solo reaccionaba
+limpiando la pantalla de vuelta al estado inicial ('idle'), sin mostrar
+el cierre amable ("mensaje de despedida") que sí aparece cuando el padre
+confirma él mismo. Causa: `justCompletedToday` (el flag que activa ese
+mensaje) solo se ponía en `true` dentro de `handleFinalConfirm`, la
+función que corre cuando el padre pulsa su botón — nunca en el listener
+en tiempo real que reacciona a cambios hechos por otros. Se agrega esa
+misma señal al listener: si la actualización que llega por
+`postgres_changes` trae `status: 'completed'`, se activa
+`justCompletedToday` igual que si el padre hubiera confirmado, sin tocar
+`handleFinalConfirm` ni la lógica propia del padre.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

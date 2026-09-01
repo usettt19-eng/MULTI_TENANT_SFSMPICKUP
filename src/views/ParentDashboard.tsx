@@ -197,6 +197,15 @@ export function ParentDashboard() {
           const record = payload.new || payload.old;
           if (record && record.tenant_id && record.tenant_id !== profile.tenant_id) return;
           console.log('Pickup event update received:', payload);
+          // Si el personal cerró el ciclo desde En Tránsito (sin que el
+          // padre pulsara "Confirmar Encuentro"), el registro pasa a
+          // 'completed' directamente por este canal en tiempo real. Se
+          // replica lo que hace handleFinalConfirm en ese caso: mostrar el
+          // mismo mensaje de despedida, como si el padre lo hubiese
+          // confirmado él mismo.
+          if ((payload as any).new?.status === 'completed') {
+            setJustCompletedToday(true);
+          }
           checkActivePickups();
         })
         .on('postgres_changes', {
