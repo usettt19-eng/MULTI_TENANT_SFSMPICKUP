@@ -1479,6 +1479,21 @@ de una pantalla de celular — y como el `<aside>` está en `position:
 fixed` sin su propio `overflow`, ese contenido empujado queda inalcanzable,
 no solo oculto. Se agrega `min-h-0` al `<nav>`.
 
+### Fix: el círculo de usuario arriba a la derecha no hacía nada al pulsar en el celular (2026-09-01)
+Segundo reporte sobre navegación móvil, esta vez sobre el círculo con las
+iniciales del usuario en `TopNav.tsx` (junto a la campana y el engranaje):
+en el teléfono, tocarlo no abría nada. Causa: el menú desplegable (correo
++ "Cerrar Sesión") solo se mostraba con clases CSS `group-hover` — es
+decir, dependía de que el mouse estuviera encima del elemento, algo que no
+existe en pantallas táctiles, así que el menú nunca podía abrirse desde el
+celular. Se convierte en un menú de verdad: un `useState` que se alterna
+al tocar el círculo (mismo patrón que ya usan las Notificaciones y el
+selector de idioma en la misma barra), con una capa transparente
+`fixed inset-0` para cerrarlo al tocar afuera. De paso, "Cerrar Sesión"
+pasa a usar el `signOut()` de `AuthContext` (el mismo que usa el botón
+equivalente del Sidebar) en vez de llamar `supabase.auth.signOut()`
+directo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

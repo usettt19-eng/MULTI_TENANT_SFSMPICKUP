@@ -17,7 +17,8 @@ export function TopNav({ title, subtitle, showTabs, tabs, activeTab }: TopNavPro
   const { language, setLanguage, t } = useLanguage();
   const { isMenuOpen, toggleMenu, setCurrentView } = useLayout();
   const [user, setUser] = React.useState<any>(null);
-  const { profile } = useAuth() as any;
+  const { profile, signOut } = useAuth() as any;
+  const [showUserMenu, setShowUserMenu] = React.useState(false);
 
   // Estado del sistema (bloqueo de emergencia): mismo canal broadcast
   // 'system_state'/'lockdown' que ya usan Sidebar.tsx y VerificationDisplay.tsx
@@ -297,25 +298,40 @@ export function TopNav({ title, subtitle, showTabs, tabs, activeTab }: TopNavPro
             </button>
           )}
 
-          <div className="relative group ml-2">
-            <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-fixed shadow-sm cursor-pointer">
+          <div className="relative ml-2">
+            <button
+              onClick={() => setShowUserMenu(prev => !prev)}
+              className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-fixed shadow-sm cursor-pointer block"
+            >
               <img
                 src={user?.user_metadata?.avatar_url || "https://ui-avatars.com/api/?name=" + (user?.email || "User")}
                 alt="Profile"
                 className="w-full h-full object-cover"
               />
-            </div>
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2">
-              <div className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">
-                {user?.email}
-              </div>
-              <button
-                onClick={() => supabase.auth.signOut()}
-                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-              >
-                <LogOut className="w-4 h-4" /> Cerrar Sesión
-              </button>
-            </div>
+            </button>
+            {showUserMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-50 p-2">
+                  <div className="px-4 py-2 text-xs font-bold text-slate-500 uppercase truncate">
+                    {user?.email}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      if (typeof signOut === 'function') {
+                        signOut();
+                      } else {
+                        supabase.auth.signOut();
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" /> Cerrar Sesión
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
