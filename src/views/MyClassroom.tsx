@@ -5,6 +5,7 @@ import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
+import { resolveMyGradeSectionsToday } from '../lib/dismissalSchedule';
 
 /**
  * Vista privada por staff: a diferencia de Monitor Externo (que a propósito
@@ -33,6 +34,12 @@ export function MyClassroom() {
   const [loading, setLoading] = useState(true);
   const [authorizingId, setAuthorizingId] = useState<string | null>(null);
   const [lockdownActive, setLockdownActive] = useState(false);
+  // Solo para MOSTRAR a qué grado/sección está asignado el staff hoy — la
+  // lista de quién llegó (pickups) sigue armándose aparte, desde
+  // notifications, así que esto nunca decide a quién se le muestra un
+  // padre, solo evita la duda de "¿no tengo nada asignado, o es que
+  // todavía no llegó nadie?".
+  const [myAssignments, setMyAssignments] = useState<Array<{ gradeName: string; section: string }>>([]);
   const channelRef = useRef<any>(null);
 
   const fetchDoors = async () => {
@@ -114,6 +121,7 @@ export function MyClassroom() {
     if (!profile?.tenant_id || !profile?.id) return;
     fetchDoors();
     fetchMyPickups();
+    resolveMyGradeSectionsToday(profile.tenant_id, profile.id, 'regular').then(setMyAssignments);
 
     const channel = supabase
       .channel(`my_classroom_${profile.id}_${Math.random()}`)
@@ -236,6 +244,16 @@ export function MyClassroom() {
             {t('myClassroom.title')} <School className="w-8 h-8 text-indigo-600" />
           </h1>
           <p className="text-sm text-slate-500 font-medium mt-1">{t('myClassroom.subtitle')}</p>
+          <div className={`inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider ${myAssignments.length > 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+            <School className="w-3.5 h-3.5 shrink-0" />
+            {myAssignments.length > 0 ? (
+              <span>
+                {t('myClassroom.assignedTodayLabel')}: {myAssignments.map(a => `${a.gradeName}${a.section ? ' - ' + a.section : ''}`).join(', ')}
+              </span>
+            ) : (
+              <span>{t('myClassroom.noAssignmentTodayLabel')}</span>
+            )}
+          </div>
         </header>
 
         {loading ? (
@@ -245,8 +263,12 @@ export function MyClassroom() {
             <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <School className="w-10 h-10 text-slate-300" />
             </div>
-            <h3 className="text-xl font-black text-slate-800">{t('myClassroom.emptyTitle')}</h3>
-            <p className="text-slate-400 font-medium mt-2">{t('myClassroom.emptySubtitle')}</p>
+            <h3 className="text-xl font-black text-slate-800">
+              {myAssignments.length > 0 ? t('myClassroom.emptyTitle') : t('myClassroom.emptyNoAssignmentTitle')}
+            </h3>
+            <p className="text-slate-400 font-medium mt-2">
+              {myAssignments.length > 0 ? t('myClassroom.emptySubtitle') : t('myClassroom.emptyNoAssignmentSubtitle')}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

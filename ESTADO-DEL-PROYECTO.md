@@ -1658,6 +1658,19 @@ más de un alumno propio esperando al mismo tiempo. También respeta el
 Bloqueo de Emergencia: mismo overlay rojo de pantalla completa que ya usan
 Monitor Externo/En Tránsito, escuchando el mismo canal `system_state`.
 
+**Falta indicar cuál grado/sección es (mismo día)**: la pantalla no decía
+en ningún lado a qué grado/sección está asignado el staff hoy — solo se
+podía inferir de las tarjetas, y si no había ninguna, no se sabía si era
+por falta de asignación o porque nadie había llegado todavía. Se agrega
+`resolveMyGradeSectionsToday()` en `lib/dismissalSchedule.ts` (inverso de
+`resolveResponsibleStaffIds`: dado un staff, a qué grado+sección está
+asignado hoy, con el mismo criterio de prioridad excepción-sobre-horario-
+semanal) — se usa **solo para mostrar** un indicador arriba ("Asignado
+hoy a: 03 - Jaguars"), nunca para filtrar qué tarjetas se ven (eso sigue
+viniendo de `notifications`, sin tocar). Si no tiene ninguna asignación
+hoy, el indicador lo dice explícito y el estado vacío cambia de mensaje
+en consecuencia, en vez de mostrar el mismo "sin llegadas" ambiguo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
