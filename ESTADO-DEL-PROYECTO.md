@@ -1511,6 +1511,22 @@ misma señal al listener: si la actualización que llega por
 `justCompletedToday` igual que si el padre hubiera confirmado, sin tocar
 `handleFinalConfirm` ni la lógica propia del padre.
 
+**Seguía sin verse en la práctica**: el fix anterior solo activaba
+`justCompletedToday`, y esa tarjeta de despedida ("Nos vemos mañana" /
+"Buen fin de semana") solo se muestra si además `isInside` es `true` —
+es decir, si la app logró confirmar por geolocalización que el padre
+sigue dentro del perímetro del colegio en ese instante. En la entrega
+real eso casi nunca se cumple (el padre puede estar sin permiso de
+ubicación, con señal GPS imprecisa, o ya se está retirando), así que no
+aparecía nada. Cuando el padre pulsa su propio botón "Confirmar
+Encuentro", en cambio, además de la tarjeta (si aplica) siempre ve un
+`alert()` de "¡Ciclo de recogida terminado! Buen viaje." sin importar su
+ubicación — ese aviso incondicional es el que faltaba replicar. Se agrega
+el mismo mensaje (`parent.pickup.completedAlert`) como aviso no
+bloqueante (el mismo patrón de banner verde que ya usa la confirmación
+automática por geocerca), independiente de `isInside`, además de seguir
+activando la tarjeta de despedida cuando sí aplica.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

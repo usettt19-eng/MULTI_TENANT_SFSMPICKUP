@@ -200,11 +200,15 @@ export function ParentDashboard() {
           // Si el personal cerró el ciclo desde En Tránsito (sin que el
           // padre pulsara "Confirmar Encuentro"), el registro pasa a
           // 'completed' directamente por este canal en tiempo real. Se
-          // replica lo que hace handleFinalConfirm en ese caso: mostrar el
-          // mismo mensaje de despedida, como si el padre lo hubiese
-          // confirmado él mismo.
+          // replica lo que hace handleFinalConfirm en ese caso: la
+          // tarjeta de despedida (que solo se ve si el padre sigue dentro
+          // del perímetro) y, sin depender de la ubicación, el mismo aviso
+          // de "Ciclo de recogida terminado" que vería si hubiese pulsado
+          // el botón él mismo.
           if ((payload as any).new?.status === 'completed') {
             setJustCompletedToday(true);
+            setSuccessMessage(t('parent.pickup.completedAlert'));
+            setTimeout(() => setSuccessMessage(null), 10000);
           }
           checkActivePickups();
         })
