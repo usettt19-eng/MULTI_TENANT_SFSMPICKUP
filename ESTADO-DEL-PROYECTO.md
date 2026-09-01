@@ -1643,6 +1643,21 @@ ahora no ve absolutamente nada en Mi Salón hasta que le asignen un
 grado/sección real en Ajustes → Horario de Salida y llegue el primer
 padre — no expone a nadie más mientras tanto.
 
+**Mi Salón ahora autoriza la salida, igual que Monitor Externo (mismo día)**:
+la primera versión era solo informativa (ver quién llegó, sin poder hacer
+nada). Cada tarjeta ahora trae la misma información que la tarjeta
+principal de Monitor Externo — foto y grado del alumno, sección, puerta,
+hora de anuncio (con "Atrasado" si pasaron más de 20 min), foto/nombre/
+teléfono del padre o tutor, badges de PIN OK/BIOMETRY OK, a quién más se
+le avisó, vehículo — y un botón "AUTHORIZE" con el mismo efecto que
+`handleConfirmRelease` en `VerificationDisplay.tsx` (pickup_events pasa a
+`released`, log de auditoría, aviso al padre). A diferencia de Monitor
+Externo (una sola tarjeta "en foco" con cola al costado), acá se listan
+todas las tarjetas completas a la vez, porque un mismo staff puede tener
+más de un alumno propio esperando al mismo tiempo. También respeta el
+Bloqueo de Emergencia: mismo overlay rojo de pantalla completa que ya usan
+Monitor Externo/En Tránsito, escuchando el mismo canal `system_state`.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
