@@ -1614,6 +1614,35 @@ No se tocó el import por CSV (`handleCsvImport`), que sigue tomando la
 sección como texto libre de la columna 4 del archivo — sigue siendo un
 punto de entrada donde puede colarse el mismo tipo de desajuste.
 
+### Nueva pantalla "Mi Salón": vista privada por staff, sin tocar Monitor Externo (2026-09-01)
+Se creó una cuenta de staff nueva en TCS Costa del Este, sin ninguna
+asignación de grado/sección todavía, y esa persona podía entrar a Monitor
+Externo y ver la cola de salida de **todo el colegio** — fotos, teléfonos,
+PIN, estado de biometría y guardianes autorizados de cualquier alumno, no
+solo los suyos. Causa: `VerificationDisplay.tsx` (`fetchPickups()`)
+trae todos los `pickup_events` del tenant filtrando solo por `tenant_id` y
+estado — el único filtro que existe es por puerta (para colegios con
+varias puertas), no por persona/sección. Esto es a propósito para el
+personal de puerta/seguridad, que sí necesita poder verificar a
+cualquier alumno que llegue — así que no se tocó esa pantalla ni su
+lógica, para no romper ese flujo que ya funciona.
+
+En su lugar se agrega una pantalla nueva y separada, **Mi Salón**
+(`src/views/MyClassroom.tsx`, permiso `myclassroom`, otorgable por staff
+desde Gestión de Personal como cualquier otro módulo): cada quien ve
+únicamente a los padres que llegaron a buscar a un alumno para el que
+esa persona ya recibió el aviso de "X llegó" — se arma cruzando
+`notifications` (`user_id` = el staff logueado, con `pickup_event_id`) 
+contra `pickup_events` en estado `announced`/`in_queue`, en vez de
+recalcular la asignación de grado/sección por separado. Como reutiliza
+la tabla `notifications` (la misma que ya arma `/api/pickup/notify-staff`,
+ya corregida hoy), esta pantalla no puede desalinearse de a quién le
+toca cada alumno — si el backend decide no avisarle a alguien, esa
+persona tampoco lo ve acá. Un staff recién creado sin nada asignado
+ahora no ve absolutamente nada en Mi Salón hasta que le asignen un
+grado/sección real en Ajustes → Horario de Salida y llegue el primer
+padre — no expone a nadie más mientras tanto.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

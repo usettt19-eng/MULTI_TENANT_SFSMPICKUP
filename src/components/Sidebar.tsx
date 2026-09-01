@@ -17,7 +17,8 @@ import {
   UserCog,
   MessageSquare,
   BarChart3,
-  Footprints
+  Footprints,
+  School
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -132,6 +133,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     { id: 'checkin', label: t('nav.checkin'), icon: MapPin },
     { id: 'security', label: t('nav.security'), icon: ShieldCheck },
     { id: 'external', label: t('nav.external'), icon: Monitor },
+    { id: 'myclassroom', label: t('nav.myClassroom'), icon: School },
     { id: 'transit', label: t('nav.transit'), icon: Footprints },
     { id: 'wellness', label: t('nav.wellness'), icon: Heart },
     { id: 'visitors', label: t('nav.visitors'), icon: Users },
