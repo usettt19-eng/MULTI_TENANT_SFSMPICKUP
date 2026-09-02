@@ -73,9 +73,20 @@ export function ParentDashboard() {
   // llegada (ver ANNOUNCE_ARRIVAL_MIN_HOUR). Se refresca cada 30s para que
   // el botón se habilite solo, sin recargar la página, apenas dé la hora —
   // aunque el padre ya esté parado dentro del perímetro desde antes.
+  //
+  // El mismo intervalo también refresca school_settings (interruptor de
+  // las 11am incluido): si la app llevaba un rato abierta y el colegio
+  // cambió el interruptor mientras tanto, no hay que confiar solo en el
+  // canal de tiempo real de Supabase — en apps nativas móviles ese
+  // WebSocket se puede cortar en segundo plano sin que nada avise, y hasta
+  // ahora la única forma de que se corrigiera sola era cerrar y volver a
+  // abrir la app. Confirmado en TCS Albrook el 2026-09-01.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    const intervalId = window.setInterval(() => {
+      setNow(new Date());
+      fetchSchoolSettings();
+    }, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
   // El colegio puede desactivar este límite temporalmente desde el

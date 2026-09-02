@@ -1728,6 +1728,34 @@ mostraba `s.grade` — la sección nunca se mostraba, aunque sí venía en el
 mismo registro (`students(*)`). Se agrega junto al grado, separada por
 " · " (ej. "03 · Jaguars"), solo cuando el alumno tiene sección cargada.
 
+### El interruptor de las 11am no llegaba a la app del padre si ya llevaba rato abierta (2026-09-01)
+Probando en TCS Albrook con una cuenta de padre de prueba: con el
+interruptor nuevo ya desactivado (confirmado por SQL directo:
+`announce_arrival_restriction_enabled = false`), el botón "Anunciar
+Llegada" seguía gris y con el mensaje de las 11am, aunque el GPS ya
+marcaba "Llegaste". Causa: `ParentDashboard.tsx` solo trae
+`school_settings` (interruptor incluido) **una vez**, al abrir la app
+(`initDashboard()`), y después depende exclusivamente del canal de
+Supabase Realtime para enterarse de cambios posteriores — si ese
+WebSocket se corta (común en apps móviles nativas al pasar a segundo
+plano o con la red celular), la app se queda con el valor viejo
+indefinidamente, sin ningún aviso. Confirmado: cerrar la app de Android
+por completo y volver a abrirla (fetch nuevo desde cero) lo corrigió al
+instante.
+
+Se agrega `fetchSchoolSettings()` al mismo intervalo de 30s que ya
+refresca el reloj del límite de las 11am, como respaldo del tiempo real
+— mismo patrón que ya usan otras pantallas (`pollInterval` en
+`TransitMonitor.tsx`/`OperationsDashboard.tsx`) para no depender 100% de
+que el WebSocket siga vivo.
+
+De paso, en esta sesión de prueba se detectó y limpió un perfil de padre
+duplicado/huérfano (`luis Perez`, The Casco School, sin alumno
+vinculado, mismo correo `srubenduse@gmail.com` que el perfil real de
+prueba en TCS Albrook) — eliminado junto con sus filas dependientes
+(`form_responses`, `parent_presence`, etc.) para no dejar confusión
+sobre cuál perfil es el activo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
