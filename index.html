@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- maximum-scale=1/user-scalable=no: sin esto, iOS Safari/WKWebView
+    hace zoom automático a TODA la página al tocar cualquier input con
+    letra menor a 16px (varios de esta app usan text-sm, 14px) — y si ese
+    zoom no se deshace solo, la pantalla queda "expandida", empujando
+    menús y botones fuera del área visible/táctil. En Android no pasa
+    porque Chrome no tiene ese comportamiento de auto-zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <!-- La app es siempre clara — sin esto, cuando el celular está en modo
     oscuro del sistema, algunos navegadores (Chrome/Firefox en Android)
     "oscurecen" automáticamente el contenido de páginas que no declaran su

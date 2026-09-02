@@ -1787,8 +1787,32 @@ función devolvía silenciosamente `[]` (mostrando "sin asignación" como
 si fuera la verdad, sin ningún rastro del error real). Ahora cada
 consulta loguea el error en consola si falla, para poder diagnosticar
 la próxima vez sin tener que descartar todo el resto a mano de nuevo.
-Pendiente: confirmar con un reintento limpio (recarga completa/cierre y
-reapertura de la app) si el problema persiste.
+
+**Resuelto — no era un bug**: el caso de Alfredo se explicó por completo.
+Había una excepción de un día (`dismissal_overrides`, creada por el
+propio colegio mientras probaba el feature de "2 encargados") para hoy,
+grado 03, sección Jaguars, slot 1, reemplazándolo por "test suarez". Mi
+Salón le da prioridad a esa excepción sobre el horario semanal
+recurrente — el mismo criterio que ya usa `/api/pickup/notify-staff` y
+el resto de la app —, así que "sin asignación hoy" para Alfredo era el
+comportamiento correcto: ese día, según la excepción, no le toca a él.
+No se tocó nada de la lógica de resolución, solo quedó el registro de
+errores agregado arriba, que sigue siendo útil para el futuro.
+
+### La app de iOS se quedaba "con zoom" y los menús quedaban inalcanzables (2026-09-02)
+Reporte de usuarios de la app de Apple: la pantalla se veía "muy grande"
+y no podían tocar los menús, como si quedaran empujados fuera de la
+pantalla. Causa: el `viewport` de `index.html` no bloqueaba el zoom —
+iOS Safari/WKWebView hace zoom automático a **toda la página** al tocar
+cualquier campo de texto con letra menor a 16px (varios inputs de esta
+app usan `text-sm`, 14px), y si ese zoom no se deshace solo, la pantalla
+queda ampliada permanentemente, empujando menús y botones fuera del
+área visible/táctil. Android no tiene este comportamiento de auto-zoom,
+por eso nunca se había notado ahí. Se agrega `maximum-scale=1.0,
+user-scalable=no` al meta `viewport` — como la app nativa carga el sitio
+en vivo (no un bundle empaquetado, ver `capacitor.config.ts`), este
+cambio llega a la app de iOS con el mismo deploy del sitio web, sin
+generar un build nuevo para la App Store.
 
 ---
 
