@@ -1820,7 +1820,9 @@ export function ParentDashboard() {
                 <img src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"} className="w-16 h-16 rounded-2xl object-cover" />
                 <div className="flex-1">
                    <h5 className="font-bold text-slate-800">{s.first_name} {s.last_name}</h5>
-                   <p className="text-[11px] text-slate-500 font-black uppercase">{s.grade || t('parent.students.gradeUnassigned')}</p>
+                   <p className="text-[11px] text-slate-500 font-black uppercase">
+                     {s.grade || t('parent.students.gradeUnassigned')}{s.section && ` · ${s.section}`}
+                   </p>
                 </div>
                 {(s as any)._isCarpool && (
                   <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border border-emerald-100 flex items-center gap-1">

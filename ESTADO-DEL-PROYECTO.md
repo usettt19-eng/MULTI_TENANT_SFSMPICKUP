@@ -1722,6 +1722,12 @@ now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR`: con el interruptor
 apagado, el botón "Ya Llegué" vuelve a depender solo del GPS, igual que
 antes de hoy.
 
+### La app del padre no mostraba la sección del alumno, solo el grado (2026-09-01)
+En la lista de "mis alumnos" de `ParentDashboard.tsx`, cada tarjeta solo
+mostraba `s.grade` — la sección nunca se mostraba, aunque sí venía en el
+mismo registro (`students(*)`). Se agrega junto al grado, separada por
+" · " (ej. "03 · Jaguars"), solo cuando el alumno tiene sección cargada.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
