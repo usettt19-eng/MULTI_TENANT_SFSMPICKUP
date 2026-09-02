@@ -98,16 +98,28 @@ export async function resolveMyGradeSectionsToday(
 ): Promise<Array<{ gradeName: string; section: string }>> {
   if (!tenantId || !staffId) return [];
 
-  const { data: grades } = await supabase
+  const { data: grades, error: gradesError } = await supabase
     .from('school_grades')
     .select('id, name, sections')
     .eq('tenant_id', tenantId);
+  if (gradesError) {
+    // Antes esto fallaba en silencio y "Mi Salón" mostraba "sin
+    // asignación" como si fuera la verdad, sin dejar rastro de que en
+    // realidad la consulta nunca llegó a responder — confirmado con
+    // Alfredo Marcos (TCS Albrook) el 2026-09-01, con la asignación real
+    // intacta en la base de datos.
+    console.error('resolveMyGradeSectionsToday: error al traer school_grades:', gradesError);
+    return [];
+  }
   if (!grades || grades.length === 0) return [];
 
   const dateStr = date.toISOString().slice(0, 10);
   const dayOfWeek = date.getDay();
 
-  const [{ data: assignmentRows }, { data: overrideRows }] = await Promise.all([
+  const [
+    { data: assignmentRows, error: assignmentError },
+    { data: overrideRows, error: overrideError },
+  ] = await Promise.all([
     supabase
       .from('dismissal_assignments')
       .select('grade_id, staff_id, staff_id_2, section')
@@ -121,6 +133,8 @@ export async function resolveMyGradeSectionsToday(
       .eq('schedule_type', scheduleType)
       .eq('override_date', dateStr),
   ]);
+  if (assignmentError) console.error('resolveMyGradeSectionsToday: error al traer dismissal_assignments:', assignmentError);
+  if (overrideError) console.error('resolveMyGradeSectionsToday: error al traer dismissal_overrides:', overrideError);
 
   const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
   const pickExact = <T extends { section: string }>(rows: T[], sectionValue: string): T | undefined =>

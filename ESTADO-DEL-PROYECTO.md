@@ -1756,6 +1756,40 @@ prueba en TCS Albrook) — eliminado junto con sus filas dependientes
 (`form_responses`, `parent_presence`, etc.) para no dejar confusión
 sobre cuál perfil es el activo.
 
+### Investigación: Alfredo Marcos vio "sin salón asignado" en Mi Salón pese a tener la asignación correcta (2026-09-01)
+Reporte del colegio: el maestro Alfredo Marcos (grado 03 - Jaguars, TCS
+Albrook, cuenta creada el 2026-08-19) entró a Mi Salón y vio "Sin grado/
+sección asignado hoy", aunque su asignación existe y está bien
+configurada para los 5 días de la semana, hoy incluido.
+
+Se descartaron, una por una y confirmadas todas por SQL directo:
+- **RLS**: la política de lectura de `dismissal_assignments`/
+  `dismissal_overrides` (`tenant_read`) solo exige que el tenant
+  coincida (`tenant_id IN user_tenant_ids()`), sin distinguir admin vs.
+  staff limitado — no bloquea a Alfredo.
+- **Perfil duplicado**: Alfredo tiene un solo perfil en `profiles`, sin
+  huérfanos con el mismo correo (a diferencia del caso de
+  `srubenduse@gmail.com` de arriba).
+- **Desalineación de datos**: la sección "Jaguars" es **byte por byte
+  idéntica** entre `dismissal_assignments.section` y
+  `school_grades.sections` (mismo largo, mismo hex UTF-8) — no hay
+  espacios/caracteres invisibles.
+- **Falta de configuración para hoy**: tiene asignación los 5 días de la
+  semana, incluido el día de la prueba.
+
+No se encontró ninguna causa de fondo — la hipótesis más probable es una
+carga vieja de la página (el mismo patrón de caché de todo el día de
+hoy), ya que su sesión pudo venir de antes de que "Mi Salón" existiera.
+Se agrega manejo explícito de errores en `resolveMyGradeSectionsToday()`
+(`src/lib/dismissalSchedule.ts`) — antes, si `school_grades`,
+`dismissal_assignments` o `dismissal_overrides` fallaban al traerse, la
+función devolvía silenciosamente `[]` (mostrando "sin asignación" como
+si fuera la verdad, sin ningún rastro del error real). Ahora cada
+consulta loguea el error en consola si falla, para poder diagnosticar
+la próxima vez sin tener que descartar todo el resto a mano de nuevo.
+Pendiente: confirmar con un reintento limpio (recarga completa/cierre y
+reapertura de la app) si el problema persiste.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
