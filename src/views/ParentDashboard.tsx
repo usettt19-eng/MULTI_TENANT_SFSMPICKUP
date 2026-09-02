@@ -220,68 +220,18 @@ export function ParentDashboard() {
     if (profile) {
       initDashboard();
 
-      // Listen for TEACHER AUTHORIZATIONS & NEW NOTIFICATIONS
-      const channel = supabase
-        .channel(`parent-feed-${profile.id}-${Math.random()}`)
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'pickup_events',
-          filter: `parent_id=eq.${profile.id}`
-        }, (payload) => {
-          const record = payload.new || payload.old;
-          if (record && record.tenant_id && record.tenant_id !== profile.tenant_id) return;
-          console.log('Pickup event update received:', payload);
-          // Si el personal cerró el ciclo desde En Tránsito (sin que el
-          // padre pulsara "Confirmar Encuentro"), el registro pasa a
-          // 'completed' directamente por este canal en tiempo real. Se
-          // replica lo que hace handleFinalConfirm en ese caso: la
-          // tarjeta de despedida (que solo se ve si el padre sigue dentro
-          // del perímetro) y, sin depender de la ubicación, el mismo aviso
-          // de "Ciclo de recogida terminado" que vería si hubiese pulsado
-          // el botón él mismo.
-          if ((payload as any).new?.status === 'completed') {
-            setJustCompletedToday(true);
-            setSuccessMessage(t('parent.pickup.completedAlert'));
-            setTimeout(() => setSuccessMessage(null), 10000);
-          }
-          checkActivePickups();
-        })
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${profile.id}`
-        }, (payload) => {
-          const record = payload.new;
-          if (record && record.tenant_id && record.tenant_id !== profile.tenant_id) return;
-          console.log('New notification received:', payload);
-          setNotifications(prev => [payload.new, ...prev]);
-          playBeep();
-          checkActivePickups();
-          
-          if (payload.new.title.includes('camino') || payload.new.title.includes('Autorizado')) {
-            setSuccessMessage(payload.new.message);
-            setTimeout(() => setSuccessMessage(null), 10000);
-          }
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'school_settings',
-          filter: `tenant_id=eq.${profile.tenant_id}`,
-        }, (payload: any) => {
-          if (payload.new && 'announce_arrival_restriction_enabled' in payload.new) {
-            setAnnounceRestrictionEnabled(payload.new.announce_arrival_restriction_enabled !== false);
-          }
-        })
-        .subscribe((status) => {
-          console.log(`Real-time channel status for parent ${profile.id}:`, status);
-        });
+      // pickup_events, notifications y school_settings nunca estuvieron en
+      // la publicación de Realtime de Supabase (solo parent_presence lo
+      // está) — el canal .on('postgres_changes', ...) que había acá nunca
+      // recibía nada, así que el mensaje de despedida al staff cerrar el
+      // ciclo, el beep/aviso de nuevas notificaciones, y el interruptor de
+      // las 11am nunca se enteraban en vivo por esta vía. Toda esa lógica
+      // ahora vive dentro de checkActivePickups()/fetchNotifications()
+      // (detectando la transición al pollear) y el poll de 30s de
+      // fetchSchoolSettings de arriba — que son los que de verdad corren.
 
       return () => {
         stopLocationWatch();
-        supabase.removeChannel(channel);
       };
     }
   }, [profile]);
@@ -800,6 +750,11 @@ export function ParentDashboard() {
     if (data) setStudents(data.map(d => d.students).filter(Boolean));
   };
 
+  // notifications no está en la publicación de Realtime de Supabase, así
+  // que el beep y el banner de "en camino/autorizado" se detectan comparando
+  // cada poll contra los ids ya vistos, en vez de por WebSocket.
+  const seenNotificationIdsRef = useRef<Set<string> | null>(null);
+
   const fetchNotifications = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
@@ -808,7 +763,22 @@ export function ParentDashboard() {
       .eq('user_id', profile.id)
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
-    if (data) setNotifications(data);
+    if (data) {
+      const seen = seenNotificationIdsRef.current;
+      if (seen) {
+        const freshOnes = data.filter(n => !seen.has(n.id));
+        if (freshOnes.length > 0) {
+          playBeep();
+          const bannerable = freshOnes.find(n => n.title?.includes('camino') || n.title?.includes('Autorizado'));
+          if (bannerable) {
+            setSuccessMessage(bannerable.message);
+            setTimeout(() => setSuccessMessage(null), 10000);
+          }
+        }
+      }
+      seenNotificationIdsRef.current = new Set(data.map(n => n.id));
+      setNotifications(data);
+    }
   };
 
   const markAsRead = async (id: string) => {
@@ -910,6 +880,12 @@ export function ParentDashboard() {
     }
   };
 
+  // pickup_events no está en la publicación de Realtime de Supabase, así
+  // que la única forma de enterarse de que el staff cerró un ciclo desde
+  // Tránsito/Mi Salón (sin que el padre tocara nada) es notar, en un poll,
+  // que un ciclo que estaba activo hace un momento ya no aparece.
+  const hadActivePickupRef = useRef(false);
+
   const checkActivePickups = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
@@ -920,6 +896,7 @@ export function ParentDashboard() {
       .in('status', ['announced', 'in_queue', 'released']);
 
     if (data && data.length > 0) {
+      hadActivePickupRef.current = true;
       // Prioritize 'released' status: if any child is released, show the released UI
       const releasedEvent = data.find(event => event.status === 'released');
       if (releasedEvent) {
@@ -933,6 +910,16 @@ export function ParentDashboard() {
         setStatus('pickup_active');
       }
     } else {
+      // Si había un ciclo activo en el poll anterior y ya no aparece, se
+      // cerró — ya sea porque el padre confirmó (handleFinalConfirm ya puso
+      // el mensaje, esto es idempotente) o porque el staff lo completó
+      // directamente.
+      if (hadActivePickupRef.current) {
+        setJustCompletedToday(true);
+        setSuccessMessage(t('parent.pickup.completedAlert'));
+        setTimeout(() => setSuccessMessage(null), 10000);
+      }
+      hadActivePickupRef.current = false;
       releasedAnnouncedRef.current = false;
       setStatus('idle');
     }

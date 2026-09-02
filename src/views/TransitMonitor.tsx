@@ -65,17 +65,13 @@ export function TransitMonitor() {
     fetchDoors();
     fetchTransit();
 
-    const channel = supabase
-      .channel(`transit_monitor_${Math.random()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, () => {
-        fetchTransit();
-      })
-      .subscribe();
-
+    // pickup_events nunca estuvo en la publicación de Realtime de Supabase
+    // (solo parent_presence lo está) — el .on('postgres_changes', ...) que
+    // había acá nunca recibía nada, solo sumaba una conexión sin beneficio.
+    // El polling de abajo es, y siempre fue, el mecanismo real de refresco.
     const pollInterval = window.setInterval(fetchTransit, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);

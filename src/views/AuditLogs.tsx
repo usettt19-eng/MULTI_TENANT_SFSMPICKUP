@@ -17,17 +17,9 @@ export function AuditLogs() {
   useEffect(() => {
     fetchLogs();
 
-    const channel = supabase
-      .channel('public:audit_logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (payload) => {
-        if (payload.new.tenant_id !== profile?.tenant_id) return;
-        setLogs(prev => {
-          // Avoid duplicates if interval and realtime fire close to each other
-          if (prev.some(log => log.id === payload.new.id)) return prev;
-          return [payload.new, ...prev];
-        });
-      })
-      .subscribe();
+    // audit_logs no está en la publicación de Realtime de Supabase — el
+    // canal que había acá nunca recibía nada. El poll de abajo es, y
+    // siempre fue, el mecanismo real de refresco.
 
     // Auto-refresh every 5 seconds
     const intervalId = setInterval(() => {
@@ -35,7 +27,6 @@ export function AuditLogs() {
     }, 5000);
 
     return () => {
-      supabase.removeChannel(channel);
       clearInterval(intervalId);
     };
   }, [filter, profile?.tenant_id]);

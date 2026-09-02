@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLayout } from '../contexts/LayoutContext';
@@ -40,28 +40,21 @@ export function GuardianVerification() {
   useEffect(() => {
     fetchRequests(true);
 
-    const channel = supabase
-      .channel(`guardian_verification_${Math.random()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, (payload) => {
-        console.log('Real-time change detected in GuardianVerification:', payload);
-        if (payload.eventType === 'INSERT') {
-          playArrivalSound();
-        }
-        fetchRequests(false);
-      })
-      .subscribe();
-
-    // Fallback polling every 10 seconds
+    // pickup_events no está en la publicación de Realtime de Supabase — el
+    // canal que había acá nunca recibía nada. El poll de abajo (y la
+    // detección de ids nuevos dentro de fetchRequests) es, y siempre fue,
+    // el mecanismo real de refresco y del sonido de llegada.
     const pollInterval = window.setInterval(() => {
-      console.log('GuardianVerification fallback polling...');
+      console.log('GuardianVerification polling...');
       fetchRequests(false);
     }, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);
+
+  const seenRequestIdsRef = useRef<Set<string> | null>(null);
 
   const fetchRequests = async (isInitial = false) => {
     if (!profile?.tenant_id) return;
@@ -73,7 +66,14 @@ export function GuardianVerification() {
       .in('status', ['announced'])
       .order('announced_at', { ascending: false });
 
-    if (data) setRequests(data);
+    if (data) {
+      const seen = seenRequestIdsRef.current;
+      if (seen && data.some(r => !seen.has(r.id))) {
+        playArrivalSound();
+      }
+      seenRequestIdsRef.current = new Set(data.map(r => r.id));
+      setRequests(data);
+    }
     setLoading(false);
   };
 

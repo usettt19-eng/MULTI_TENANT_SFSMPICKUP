@@ -98,74 +98,17 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchSelfDismissalsToday();
     fetchConfiguredCarpools();
 
-    const pickupChannel = supabase
-      .channel('public:pickup_events')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, async (payload: any) => {
-        console.log('Pickup event change detected:', payload);
-        fetchPickups();
-        fetchDailyDepartures();
-      })
-      .subscribe();
+    // pickup_events, self_dismissal_events, replacement_requests,
+    // camera_detections, audit_logs, health_alerts, carpool_authorizations y
+    // school_settings nunca estuvieron en la publicación de Realtime de
+    // Supabase (solo parent_presence lo está) — los .on('postgres_changes',
+    // ...) que había acá para esas tablas nunca recibían nada, solo sumaban
+    // conexiones sin beneficio. El polling de abajo es, y siempre fue, el
+    // mecanismo real que refresca este dashboard.
 
-    const selfDismissalChannel = supabase
-      .channel('public:self_dismissal_events')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'self_dismissal_events' }, () => {
-        fetchSelfDismissalsToday();
-      })
-      .subscribe();
-
-    const requestChannel = supabase
-      .channel('public:replacement_requests_dashboard')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'replacement_requests'
-      }, () => {
-        fetchPendingRequests();
-      })
-      .subscribe();
-
-    const detectionChannel = supabase
-      .channel('public:camera_detections')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'camera_detections' }, (payload) => {
-        setLatestDetections(prev => ({
-          ...prev,
-          [payload.new.door_id]: payload.new
-        }));
-      })
-      .subscribe();
-
-    const auditChannel = supabase
-      .channel('public:audit_logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (payload) => {
-        setAuditLogs(prev => [payload.new, ...prev].slice(0, 5));
-      })
-      .subscribe();
-
-    const alertChannel = supabase
-      .channel('public:health_alerts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'health_alerts' }, () => {
-        fetchHealthAlerts();
-      })
-      .subscribe();
-
-    const carpoolChannel = supabase
-      .channel('public:carpool_authorizations_dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_authorizations' }, () => {
-        fetchConfiguredCarpools();
-      })
-      .subscribe();
-
-    const settingsChannel = supabase
-      .channel('public:school_settings_dashboard')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'school_settings' }, () => {
-        fetchSchoolSettings();
-      })
-      .subscribe();
-
-    // Fallback polling every 10 seconds to ensure data consistency
+    // Polling every 10 seconds — mecanismo real de refresco de este dashboard
     const pollInterval = window.setInterval(() => {
-      console.log('Dashboard fallback polling...');
+      console.log('Dashboard polling...');
       fetchPickups();
       fetchLatestDetections();
       fetchAuditLogs();
@@ -175,17 +118,10 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchDailyDepartures();
       fetchSelfDismissalsToday();
       fetchConfiguredCarpools();
+      fetchSchoolSettings();
     }, 10000);
 
     return () => {
-      supabase.removeChannel(pickupChannel);
-      supabase.removeChannel(selfDismissalChannel);
-      supabase.removeChannel(requestChannel);
-      supabase.removeChannel(detectionChannel);
-      supabase.removeChannel(auditChannel);
-      supabase.removeChannel(alertChannel);
-      supabase.removeChannel(carpoolChannel);
-      supabase.removeChannel(settingsChannel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);

@@ -175,15 +175,14 @@ export function ParentPerimeterPanel() {
     fetchDoors();
     fetchPresences();
 
+    // parent_presence es la única tabla que de verdad está en la publicación
+    // de Realtime de Supabase — este canal sí funciona. pickup_events no lo
+    // está, así que ese segundo canal que había acá nunca recibía nada, solo
+    // sumaba una conexión sin beneficio (el polling de abajo ya cubre su
+    // única función real, que era refrescar por cambios de pickup_events).
     const presenceChannel = supabase
       .channel('public:parent_presence_dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parent_presence' }, () => {
-        fetchPresences();
-      })
-      .subscribe();
-    const pickupChannel = supabase
-      .channel('public:pickup_events_perimeter')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, () => {
         fetchPresences();
       })
       .subscribe();
@@ -197,7 +196,6 @@ export function ParentPerimeterPanel() {
 
     return () => {
       supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(pickupChannel);
       clearInterval(pollInterval);
       clearInterval(tickInterval);
     };

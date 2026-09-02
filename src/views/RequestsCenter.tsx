@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
@@ -64,44 +64,31 @@ export function RequestsCenter() {
       ...(weekly.data ?? []).map((r: any) => ({ ...r, _kind: 'carpool_weekly' })),
       ...(overrides.data ?? []).map((r: any) => ({ ...r, _kind: 'carpool_override' })),
     ];
+    const seen = seenCarpoolIdsRef.current;
+    if (seen && events.some(e => !seen.has(e.id))) {
+      playArrivalSound();
+    }
+    seenCarpoolIdsRef.current = new Set(events.map(e => e.id));
     setCarpoolEvents(events);
   };
+  const seenCarpoolIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     fetchRequests(true);
     fetchCarpoolEvents();
 
-    const channel = supabase
-      .channel(`replacement_requests_${Math.random()}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'replacement_requests'
-      }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          playArrivalSound();
-        }
-        fetchRequests(false);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'carpool_authorizations' }, () => {
-        playArrivalSound();
-        fetchCarpoolEvents();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'carpool_overrides' }, () => {
-        playArrivalSound();
-        fetchCarpoolEvents();
-      })
-      .subscribe();
-
-    // Fallback polling every 10 seconds
+    // replacement_requests, carpool_authorizations y carpool_overrides no
+    // están en la publicación de Realtime de Supabase — el canal que había
+    // acá nunca recibía nada. El poll de abajo (con detección de ids nuevos
+    // dentro de fetchRequests/fetchCarpoolEvents) es, y siempre fue, el
+    // mecanismo real de refresco y del sonido de llegada.
     const pollInterval = window.setInterval(() => {
-      console.log('RequestsCenter fallback polling...');
+      console.log('RequestsCenter polling...');
       fetchRequests(false);
       fetchCarpoolEvents();
     }, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);
@@ -124,9 +111,17 @@ export function RequestsCenter() {
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
 
-    if (data) setRequests(data);
+    if (data) {
+      const seen = seenRequestIdsRef.current;
+      if (seen && data.some(r => !seen.has(r.id))) {
+        playArrivalSound();
+      }
+      seenRequestIdsRef.current = new Set(data.map(r => r.id));
+      setRequests(data);
+    }
     setLoading(false);
   };
+  const seenRequestIdsRef = useRef<Set<string> | null>(null);
 
   const handleProcessRequest = async (req: any, status: 'approved' | 'rejected') => {
     setProcessingId(req.id);

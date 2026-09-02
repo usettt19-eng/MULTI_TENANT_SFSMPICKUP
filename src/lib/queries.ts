@@ -250,25 +250,3 @@ export async function getAuditLogs(limit = 100): Promise<AuditLog[]> {
   return data || [];
 }
 
-// ============ REALTIME SUBSCRIPTIONS ============
-
-export function subscribeToPickupEvents(callback: () => void) {
-  return supabase
-    .channel('public:pickup_events')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, callback)
-    .subscribe();
-}
-
-export function subscribeToStudents(callback: () => void) {
-  return supabase
-    .channel('public:students')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, callback)
-    .subscribe();
-}
-
-export function subscribeToHealthAlerts(callback: () => void) {
-  return supabase
-    .channel('public:health_alerts')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'health_alerts' }, callback)
-    .subscribe();
-}

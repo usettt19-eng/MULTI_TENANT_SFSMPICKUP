@@ -52,15 +52,13 @@ export function Students() {
     fetchStudents();
     fetchSchoolGrades();
 
-    const channel = supabase
-      .channel('public:students')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => {
-        fetchStudents();
-      })
-      .subscribe();
+    // students nunca estuvo en la publicación de Realtime de Supabase (solo
+    // parent_presence lo está) — el .on('postgres_changes', ...) que había
+    // acá nunca recibía nada, solo sumaba una conexión sin beneficio.
+    const pollInterval = window.setInterval(fetchStudents, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
       stopCamera();
     };
   }, [profile?.tenant_id]);

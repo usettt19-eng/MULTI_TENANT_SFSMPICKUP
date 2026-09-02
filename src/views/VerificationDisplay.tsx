@@ -80,14 +80,12 @@ export function VerificationDisplay() {
     fetchDoorsAndGrades();
     fetchPickups();
 
-    // Use a unique channel name for postgres_changes to avoid conflicts with other components
-    const pickupChannel = supabase
-      .channel(`verification_display_pickups_${Math.random()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, async (payload: any) => {
-        console.log('Pickup event change detected:', payload);
-        fetchPickups();
-      })
-      .subscribe();
+    // pickup_events, school_settings, camera_detections y audit_logs nunca
+    // estuvieron en la publicación de Realtime de Supabase (solo
+    // parent_presence lo está) — esos .on('postgres_changes', ...) de acá
+    // nunca recibían nada, solo sumaban conexiones sin beneficio. El polling
+    // de abajo es, y siempre fue, el mecanismo real que refresca esta
+    // pantalla.
 
     // Broadcast channel for lockdown sync - must share the same name 'system_state'
     channelRef.current = supabase.channel('system_state')
@@ -107,44 +105,13 @@ export function VerificationDisplay() {
         }
       });
 
-    // Separate unique channel for school_settings changes
-    const settingsChannel = supabase
-      .channel(`monitor_settings_sync_${Math.random()}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'school_settings' }, (payload) => {
-        console.log('Monitor received DB update on school_settings:', payload);
-        if (payload.new && 'lockdown_mode' in payload.new) {
-          setLockdownActive(!!payload.new.lockdown_mode);
-        }
-      })
-      .subscribe();
-
-    const detectionChannel = supabase
-      .channel(`monitor_detections_${Math.random()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'camera_detections' }, (payload) => {
-        console.log('New camera detection:', payload.new);
-        setLatestDetections(prev => [payload.new, ...prev].slice(0, 3));
-      })
-      .subscribe();
-
-    const logsChannel = supabase
-      .channel(`monitor_logs_${Math.random()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (payload) => {
-        console.log('New log detected, refreshing queue:', payload.new);
-        fetchPickups();
-      })
-      .subscribe();
-
-    // Fallback polling every 10 seconds
+    // Polling every 10 seconds — mecanismo real de refresco de esta pantalla
     const pollInterval = window.setInterval(() => {
-      console.log('VerificationDisplay fallback polling...');
+      console.log('VerificationDisplay polling...');
       fetchPickups();
     }, 10000);
 
     return () => {
-      supabase.removeChannel(pickupChannel);
-      supabase.removeChannel(settingsChannel);
-      supabase.removeChannel(detectionChannel);
-      supabase.removeChannel(logsChannel);
       clearInterval(pollInterval);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);

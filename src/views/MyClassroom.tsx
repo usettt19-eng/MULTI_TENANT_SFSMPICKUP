@@ -123,16 +123,11 @@ export function MyClassroom() {
     fetchMyPickups();
     resolveMyGradeSectionsToday(profile.tenant_id, profile.id, 'regular').then(setMyAssignments);
 
-    const channel = supabase
-      .channel(`my_classroom_${profile.id}_${Math.random()}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${profile.id}`,
-      }, () => fetchRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_events' }, () => fetchRef.current())
-      .subscribe();
+    // notifications, pickup_events y school_settings nunca estuvieron en la
+    // publicación de Realtime de Supabase (solo parent_presence lo está) —
+    // los .on('postgres_changes', ...) que había acá nunca recibían nada,
+    // solo sumaban conexiones sin beneficio. El polling de abajo es, y
+    // siempre fue, el mecanismo real que refresca esta pantalla.
 
     // Mismo canal de bloqueo de emergencia que usan Sidebar/Monitor
     // Externo/En Tránsito — si el colegio está en lockdown, tampoco se debe
@@ -156,20 +151,9 @@ export function MyClassroom() {
         .then(({ data }) => setLockdownActive(!!data?.lockdown_mode));
     }
 
-    const settingsChannel = supabase
-      .channel(`my_classroom_settings_${Math.random()}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'school_settings' }, (payload: any) => {
-        if (payload.new && 'lockdown_mode' in payload.new) {
-          setLockdownActive(!!payload.new.lockdown_mode);
-        }
-      })
-      .subscribe();
-
     const pollInterval = window.setInterval(() => fetchRef.current(), 10000);
 
     return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(settingsChannel);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
       clearInterval(pollInterval);
     };

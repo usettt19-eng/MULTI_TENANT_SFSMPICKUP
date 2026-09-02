@@ -76,15 +76,13 @@ export function TopNav({ title, subtitle, showTabs, tabs, activeTab }: TopNavPro
     if (!profile?.id) return;
     fetchNotifications();
 
-    const channel = supabase
-      .channel(`topnav_notifications_${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` }, () => {
-        fetchNotifications();
-      })
-      .subscribe();
+    // notifications no está en la publicación de Realtime de Supabase — el
+    // canal que había acá nunca recibía nada, así que la campanita nunca se
+    // actualizaba sola después de la carga inicial. Poll cada 20s en su lugar.
+    const pollInterval = window.setInterval(fetchNotifications, 20000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [profile?.id, fetchNotifications]);
 
