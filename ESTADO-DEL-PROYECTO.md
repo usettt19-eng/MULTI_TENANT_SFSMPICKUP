@@ -1702,6 +1702,26 @@ política de red del sandbox bloquea `tile.openstreetmap.org` — un
 navegador real en producción sí debería cargarlas sin problema, al ser
 un dominio público estándar.
 
+### Interruptor en el Dashboard para desactivar temporalmente el límite de las 11am (2026-09-01)
+El colegio pidió una forma de desactivar el límite de las 11:00 am para
+anunciar llegada (agregado hoy mismo) durante una implementación/prueba,
+sin tener que tocar código ni redeployar — y volver a activarlo después.
+
+Se agrega la columna `school_settings.announce_arrival_restriction_enabled`
+(boolean, default `true` — así ningún colegio existente cambia de
+comportamiento sin que un admin lo toque a propósito; migración en
+`sql/add_announce_arrival_restriction_toggle.sql`). Un interruptor nuevo
+en el Dashboard (`OperationsDashboard.tsx`, solo visible para
+`role: 'admin'`, justo debajo del encabezado) lo prende/apaga con un
+`UPDATE` directo a esa columna, deja registro en `audit_logs`
+(`logActivity`), y sincroniza en tiempo real hacia `ParentDashboard.tsx`
+vía `postgres_changes` sobre `school_settings` — el padre ve el cambio
+al instante, sin recargar la página. `canAnnounceArrivalNow` en
+`ParentDashboard.tsx` ahora es `!announceRestrictionEnabled ||
+now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR`: con el interruptor
+apagado, el botón "Ya Llegué" vuelve a depender solo del GPS, igual que
+antes de hoy.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

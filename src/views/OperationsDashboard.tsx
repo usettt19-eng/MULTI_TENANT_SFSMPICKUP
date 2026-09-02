@@ -49,6 +49,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '' });
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  // Interruptor temporal para desactivar el límite de las 11am de
+  // ParentDashboard.tsx durante una implementación/prueba (ej. cuando el
+  // colegio todavía está ajustando la geocerca y no quieren que ese límite
+  // adicional se sume a la confusión). Vive en school_settings, por colegio,
+  // y sincroniza en vivo con la app del padre.
+  const [announceRestrictionEnabled, setAnnounceRestrictionEnabled] = useState(true);
+  const [togglingAnnounceRestriction, setTogglingAnnounceRestriction] = useState(false);
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
@@ -149,6 +156,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       })
       .subscribe();
 
+    const settingsChannel = supabase
+      .channel('public:school_settings_dashboard')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'school_settings' }, () => {
+        fetchSchoolSettings();
+      })
+      .subscribe();
+
     // Fallback polling every 10 seconds to ensure data consistency
     const pollInterval = window.setInterval(() => {
       console.log('Dashboard fallback polling...');
@@ -171,6 +185,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       supabase.removeChannel(auditChannel);
       supabase.removeChannel(alertChannel);
       supabase.removeChannel(carpoolChannel);
+      supabase.removeChannel(settingsChannel);
       clearInterval(pollInterval);
     };
   }, [profile?.tenant_id]);
@@ -391,11 +406,44 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('school_settings')
-      .select('logo_url')
+      .select('logo_url, announce_arrival_restriction_enabled')
       .eq('tenant_id', profile.tenant_id)
       .maybeSingle();
 
-    if (data) setLogoUrl(data.logo_url);
+    if (data) {
+      setLogoUrl(data.logo_url);
+      // Columna nueva (2026-09-01): en colegios que todavía no corrieron la
+      // migración puede venir null/undefined — se trata como "activo"
+      // (el comportamiento de siempre), no como "desactivado".
+      setAnnounceRestrictionEnabled(data.announce_arrival_restriction_enabled !== false);
+    }
+  };
+
+  const toggleAnnounceRestriction = async () => {
+    if (!profile?.tenant_id || togglingAnnounceRestriction) return;
+    const next = !announceRestrictionEnabled;
+    setTogglingAnnounceRestriction(true);
+    const { error } = await supabase
+      .from('school_settings')
+      .update({ announce_arrival_restriction_enabled: next })
+      .eq('tenant_id', profile.tenant_id);
+
+    if (error) {
+      console.error('Error al cambiar el límite de hora para anunciar llegada:', error);
+      alert(t('dashboard.announceRestrictionToggleError'));
+    } else {
+      setAnnounceRestrictionEnabled(next);
+      await logActivity(
+        'SECURITY',
+        next
+          ? `${profile?.first_name || 'Admin'} reactivó el límite de las 11:00 am para anunciar llegada.`
+          : `${profile?.first_name || 'Admin'} DESACTIVÓ temporalmente el límite de las 11:00 am para anunciar llegada.`,
+        profile?.first_name || 'Admin',
+        { announce_arrival_restriction_enabled: next },
+        profile?.tenant_id
+      );
+    }
+    setTogglingAnnounceRestriction(false);
   };
 
   const acknowledgeAlert = async (id: string) => {
@@ -494,6 +542,39 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           </div>
 
           {showDailyReportModal && <DailyReportModal onClose={() => setShowDailyReportModal(false)} />}
+
+          {profile?.role === 'admin' && (
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`p-2 rounded-xl shrink-0 ${announceRestrictionEnabled ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-600'}`}>
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-800 uppercase tracking-wider truncate">
+                    {t('dashboard.announceRestrictionTitle')}
+                  </p>
+                  <p className="text-[10px] font-bold text-slate-400 truncate">
+                    {announceRestrictionEnabled ? t('dashboard.announceRestrictionActiveSubtitle') : t('dashboard.announceRestrictionDisabledSubtitle')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={toggleAnnounceRestriction}
+                disabled={togglingAnnounceRestriction}
+                className={`shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 ${
+                  announceRestrictionEnabled
+                    ? 'bg-slate-800 text-white hover:bg-slate-700'
+                    : 'bg-amber-500 text-white hover:bg-amber-600 animate-pulse'
+                }`}
+              >
+                {togglingAnnounceRestriction
+                  ? '...'
+                  : announceRestrictionEnabled
+                    ? t('dashboard.announceRestrictionDeactivateBtn')
+                    : t('dashboard.announceRestrictionReactivateBtn')}
+              </button>
+            </div>
+          )}
 
           <ParentPerimeterPanel />
 

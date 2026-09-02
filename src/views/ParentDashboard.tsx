@@ -78,7 +78,11 @@ export function ParentDashboard() {
     const intervalId = window.setInterval(() => setNow(new Date()), 30000);
     return () => window.clearInterval(intervalId);
   }, []);
-  const canAnnounceArrivalNow = now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR;
+  // El colegio puede desactivar este límite temporalmente desde el
+  // Dashboard (ej. durante una implementación) — ver
+  // announce_arrival_restriction_enabled en school_settings.
+  const [announceRestrictionEnabled, setAnnounceRestrictionEnabled] = useState(true);
+  const canAnnounceArrivalNow = !announceRestrictionEnabled || now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR;
 
   // School selector state
   const [showSchoolSelector, setShowSchoolSelector] = useState(false);
@@ -248,6 +252,16 @@ export function ParentDashboard() {
           if (payload.new.title.includes('camino') || payload.new.title.includes('Autorizado')) {
             setSuccessMessage(payload.new.message);
             setTimeout(() => setSuccessMessage(null), 10000);
+          }
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'school_settings',
+          filter: `tenant_id=eq.${profile.tenant_id}`,
+        }, (payload: any) => {
+          if (payload.new && 'announce_arrival_restriction_enabled' in payload.new) {
+            setAnnounceRestrictionEnabled(payload.new.announce_arrival_restriction_enabled !== false);
           }
         })
         .subscribe((status) => {
@@ -752,11 +766,15 @@ export function ParentDashboard() {
       .eq('tenant_id', profile.tenant_id)
       .maybeSingle();
     if (data) {
-      setSchoolPos({ 
-        lat: Number(data.latitude), 
-        lng: Number(data.longitude), 
-        radius: data.pickup_radius_meters 
+      setSchoolPos({
+        lat: Number(data.latitude),
+        lng: Number(data.longitude),
+        radius: data.pickup_radius_meters
       });
+      // Columna nueva: en colegios que todavía no corrieron la migración
+      // puede venir null/undefined — se trata como "activo" (el
+      // comportamiento de siempre), no como "desactivado".
+      setAnnounceRestrictionEnabled(data.announce_arrival_restriction_enabled !== false);
     }
   };
 
