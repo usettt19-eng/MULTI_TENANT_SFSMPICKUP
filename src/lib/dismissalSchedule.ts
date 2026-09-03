@@ -1,6 +1,14 @@
 import { supabase } from './supabase';
 import type { DismissalScheduleType } from '../types/database';
 
+// Antes de esta hora, ninguna entrada al perímetro del colegio cuenta como
+// llegada de recogida — en la mañana los padres también entran a dejar a
+// sus hijos, y eso no debe habilitar "Anunciar Llegada" (ParentDashboard)
+// ni aparecer como si esperaran la salida en el panel de "carritos" del
+// staff (ParentPerimeterPanel). Un solo valor compartido entre ambos para
+// que nunca queden desincronizados.
+export const PICKUP_WINDOW_START_HOUR = 11;
+
 /**
  * Resuelve quiénes son los encargados de la salida (o del post school) de un
  * grado+sección en una fecha dada — hasta 2 personas, "slot 1" y "slot 2".

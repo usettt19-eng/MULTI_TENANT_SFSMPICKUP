@@ -5,6 +5,7 @@ import { Car, MapPin, DoorOpen } from 'lucide-react';
 import type { ParentPresence } from '../types/database';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { useLanguage } from '../contexts/LanguageContext';
+import { PICKUP_WINDOW_START_HOUR } from '../lib/dismissalSchedule';
 
 // No se guarda ni se muestra ninguna coordenada GPS real: esto es una
 // representación estilizada (tarjetas de vehículo), no un mapa. Solo usamos
@@ -88,7 +89,21 @@ export function ParentPerimeterPanel() {
       return;
     }
 
-    const parentIds = presences.map((p: ParentPresence) => p.parent_id);
+    // En la mañana los padres también entran al perímetro para dejar a sus
+    // hijos — eso también prende parent_presence, pero no es una recogida.
+    // Sin este filtro aparecían acá mezclados con los que sí esperan la
+    // salida, confundiendo al staff. Mismo criterio que usa el botón
+    // "Anunciar Llegada" del padre (PICKUP_WINDOW_START_HOUR).
+    const dismissalPresences = presences.filter((p: ParentPresence) =>
+      !p.entered_at || new Date(p.entered_at).getHours() >= PICKUP_WINDOW_START_HOUR
+    );
+
+    if (dismissalPresences.length === 0) {
+      setCards([]);
+      return;
+    }
+
+    const parentIds = dismissalPresences.map((p: ParentPresence) => p.parent_id);
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -125,7 +140,7 @@ export function ParentPerimeterPanel() {
     const completedTodaySet = new Set((completedToday || []).map((r: any) => r.parent_id));
 
     const built: PerimeterCard[] = [];
-    presences.forEach((p: ParentPresence) => {
+    dismissalPresences.forEach((p: ParentPresence) => {
       const parentName = `${p.parent?.first_name || ''} ${p.parent?.last_name || ''}`.trim() || t('perimeter.parentFallback');
       const vehicle = (vehicleByParent.get(p.parent_id) as any) || null;
       const activePickups = pickupsByParent.get(p.parent_id) || [];

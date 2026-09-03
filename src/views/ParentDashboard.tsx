@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
+import { PICKUP_WINDOW_START_HOUR as ANNOUNCE_ARRIVAL_MIN_HOUR } from '../lib/dismissalSchedule';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
@@ -27,7 +28,6 @@ import {
 // app, no configurable por colegio (cada colegio tiene su propia hora de
 // salida por grado en `school_grades.exit_time`, pero este corte de
 // "todavía es muy temprano para anunciarse" es el mismo para todos).
-const ANNOUNCE_ARRIVAL_MIN_HOUR = 11;
 
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut, refreshProfile } = useAuth();
