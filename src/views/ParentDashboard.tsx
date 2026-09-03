@@ -1133,6 +1133,15 @@ export function ParentDashboard() {
   // todavía no arrancó el carro— volvía a disparar un anuncio de llegada
   // repetido, en loop, hasta que finalmente se retiraba.
   const wasInsideRef = useRef(false);
+  // Candado sincrónico: handleAnnounceArrival tarda varios segundos en
+  // terminar (una llamada de red por cada hijo, más los avisos al backend) y
+  // solo marca `status` como no-idle hasta el final. Si en ese lapso el GPS
+  // dispara "justEntered" de nuevo (rebote de señal cerca del perímetro),
+  // `status` en memoria seguía viendo 'idle' y arrancaba una SEGUNDA llamada
+  // completa en paralelo — duplicando el pickup_events de cada hijo. Un ref
+  // se actualiza de inmediato (a diferencia de useState), así que sí alcanza
+  // a bloquear la reentrada.
+  const isAnnouncingRef = useRef(false);
   useEffect(() => {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
@@ -1241,71 +1250,76 @@ export function ParentDashboard() {
       setErrorMessage(t('parent.pickup.tooEarlyError'));
       return;
     }
+    if (isAnnouncingRef.current) return;
+    isAnnouncingRef.current = true;
     setLoading(true);
-    for (const student of pickupStudents) {
-      const { data: newEvent, error: insertError } = await supabase.from('pickup_events').insert({
-        parent_id: profile.id,
-        student_id: student.id,
-        status: 'announced',
-        announced_at: new Date().toISOString(),
-        tenant_id: profile.tenant_id,
-        door_id: selectedDoorId || null,
-        location_verified: !manual,
-      }).select('id').single();
+    try {
+      for (const student of pickupStudents) {
+        const { data: newEvent, error: insertError } = await supabase.from('pickup_events').insert({
+          parent_id: profile.id,
+          student_id: student.id,
+          status: 'announced',
+          announced_at: new Date().toISOString(),
+          tenant_id: profile.tenant_id,
+          door_id: selectedDoorId || null,
+          location_verified: !manual,
+        }).select('id').single();
 
-      if (insertError) {
-        console.error('Error inserting pickup event:', insertError);
-        setErrorMessage(`${t('parent.pickup.announceErrorPrefix')}${insertError.message}`);
-        setLoading(false);
-        return;
-      }
-
-      // Aviso dirigido al profesor/personal encargado de este grado+sección
-      // hoy (excepción del día, si hay, si no el horario semanal). No
-      // reemplaza la cola compartida que ya ven recepción y administración —
-      // solo se suma para avisar directamente a la persona correcta.
-      //
-      // El padre no tiene permiso (RLS) para insertar una notificación
-      // dirigida a OTRO usuario (solo a sí mismo, o si fuera staff) — insertar
-      // esto directo desde aquí fallaba en silencio para TODOS los avisos de
-      // llegada. Por eso pasa por el backend, igual que el aviso de pool day
-      // al admin un poco más abajo.
-      try {
-        const isCarpool = !!(student as any)._isCarpool;
-
-        await apiFetch('/api/pickup/notify-staff', {
-          method: 'POST',
-          body: JSON.stringify({ student_id: student.id, pickup_event_id: newEvent?.id ?? null }),
-        });
-
-        // El padre no tiene permiso para leer la lista de administradores
-        // (RLS), así que el aviso al admin de que hoy aplica un pool day pasa
-        // por el backend, que además revalida que la autorización sea real
-        // antes de notificar a nadie.
-        if (isCarpool) {
-          await apiFetch('/api/carpool/pickup-notify', {
-            method: 'POST',
-            body: JSON.stringify({ student_id: student.id }),
-          });
+        if (insertError) {
+          console.error('Error inserting pickup event:', insertError);
+          setErrorMessage(`${t('parent.pickup.announceErrorPrefix')}${insertError.message}`);
+          return;
         }
-      } catch (routeErr) {
-        console.error('Error al enrutar el aviso al encargado:', routeErr);
+
+        // Aviso dirigido al profesor/personal encargado de este grado+sección
+        // hoy (excepción del día, si hay, si no el horario semanal). No
+        // reemplaza la cola compartida que ya ven recepción y administración —
+        // solo se suma para avisar directamente a la persona correcta.
+        //
+        // El padre no tiene permiso (RLS) para insertar una notificación
+        // dirigida a OTRO usuario (solo a sí mismo, o si fuera staff) — insertar
+        // esto directo desde aquí fallaba en silencio para TODOS los avisos de
+        // llegada. Por eso pasa por el backend, igual que el aviso de pool day
+        // al admin un poco más abajo.
+        try {
+          const isCarpool = !!(student as any)._isCarpool;
+
+          await apiFetch('/api/pickup/notify-staff', {
+            method: 'POST',
+            body: JSON.stringify({ student_id: student.id, pickup_event_id: newEvent?.id ?? null }),
+          });
+
+          // El padre no tiene permiso para leer la lista de administradores
+          // (RLS), así que el aviso al admin de que hoy aplica un pool day pasa
+          // por el backend, que además revalida que la autorización sea real
+          // antes de notificar a nadie.
+          if (isCarpool) {
+            await apiFetch('/api/carpool/pickup-notify', {
+              method: 'POST',
+              body: JSON.stringify({ student_id: student.id }),
+            });
+          }
+        } catch (routeErr) {
+          console.error('Error al enrutar el aviso al encargado:', routeErr);
+        }
       }
+
+      await logActivity(
+        'PICKUP',
+        manual
+          ? `ANUNCIO DE LLEGADA: ${profile.first_name} confirmó su llegada manualmente (sin GPS).`
+          : `ANUNCIO DE LLEGADA: ${profile.first_name} llegó a la escuela mediante GPS.`,
+        profile.first_name,
+        { coords: [parentPos?.lat, parentPos?.lng] },
+        profile?.tenant_id
+      );
+
+      setShowManualArrival(false);
+      setStatus('pickup_active');
+    } finally {
+      isAnnouncingRef.current = false;
+      setLoading(false);
     }
-
-    await logActivity(
-      'PICKUP',
-      manual
-        ? `ANUNCIO DE LLEGADA: ${profile.first_name} confirmó su llegada manualmente (sin GPS).`
-        : `ANUNCIO DE LLEGADA: ${profile.first_name} llegó a la escuela mediante GPS.`,
-      profile.first_name,
-      { coords: [parentPos?.lat, parentPos?.lng] },
-      profile?.tenant_id
-    );
-
-    setShowManualArrival(false);
-    setStatus('pickup_active');
-    setLoading(false);
   };
 
   return (
