@@ -421,7 +421,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         title: '¡Alumno en camino!',
         message: `El maestro ha autorizado la salida de ${pickup?.student?.first_name}. Reúnete con él en el vehículo y confirma la recepción en tu App.`,
         type: 'success',
-        tenant_id: pickup?.student?.tenant_id
+        tenant_id: pickup?.tenant_id
       });
     }
     fetchPickups();

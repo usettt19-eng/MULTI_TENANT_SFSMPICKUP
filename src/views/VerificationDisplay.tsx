@@ -465,7 +465,8 @@ export function VerificationDisplay() {
           user_id: currentPickup.parent_id,
           title: '¡Saliendo por Puerta!',
           message: `El Personal de Puerta ha validado la salida de ${studentName || 'tu hijo'}. Reúnete con él en el vehículo.`,
-          type: 'success'
+          type: 'success',
+          tenant_id: currentPickup?.tenant_id,
         });
 
         // Background refresh to ensure sync

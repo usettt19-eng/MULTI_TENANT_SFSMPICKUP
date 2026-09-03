@@ -168,7 +168,8 @@ export function RequestsCenter() {
             user_id: parentId,
             title: 'Reemplazo Autorizado',
             message: `Tu solicitud para ${req.replacement_name} ha sido aprobada. El código QR ya está disponible en tu panel.`,
-            type: 'success'
+            type: 'success',
+            tenant_id: req.tenant_id,
           });
         }
       } else if (status === 'rejected' && parentId) {
@@ -177,7 +178,8 @@ export function RequestsCenter() {
           user_id: parentId,
           title: 'Solicitud de Reemplazo Rechazada',
           message: `Tu solicitud para ${req.replacement_name} no pudo ser procesada en este momento. Por favor contacta a recepción.`,
-          type: 'error'
+          type: 'error',
+          tenant_id: req.tenant_id,
         });
       }
 
