@@ -758,7 +758,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           {pendingRequests.length > 0 && (
             <section 
               onClick={() => setCurrentView('requests')}
-              className="bg-indigo-600 p-6 rounded-xl shadow-xl relative overflow-hidden cursor-pointer hover:bg-indigo-700 transition-all group"
+              className="bg-orange-500 p-6 rounded-xl shadow-xl relative overflow-hidden cursor-pointer hover:bg-orange-600 transition-all group"
             >
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                 <MessageSquare className="w-20 h-20 text-white" />
