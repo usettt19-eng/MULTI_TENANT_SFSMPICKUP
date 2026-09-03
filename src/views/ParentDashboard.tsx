@@ -1158,6 +1158,20 @@ export function ParentDashboard() {
     }).then(({ error }) => {
       if (error) console.error('Error al reportar presencia:', error);
     });
+
+    // parent_presence se sobreescribe en cada cambio (una sola fila por
+    // padre) — esto en cambio queda como fila permanente en morning_arrivals,
+    // para la pantalla de Llegadas Diarias del staff (con historial de días
+    // anteriores por sección, no solo el estado actual).
+    if (isInside && new Date().getHours() < ANNOUNCE_ARRIVAL_MIN_HOUR) {
+      supabase.from('morning_arrivals').insert({
+        parent_id: profile.id,
+        tenant_id: profile.tenant_id,
+        arrived_at: new Date().toISOString(),
+      }).then(({ error }) => {
+        if (error) console.error('Error al registrar llegada matutina:', error);
+      });
+    }
   }, [isInside, isLocationEnabled, profile?.id, profile?.tenant_id]);
 
   // Auto-refresh every 3 seconds when inside perimeter

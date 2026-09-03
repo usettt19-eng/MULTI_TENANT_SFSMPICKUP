@@ -11,7 +11,7 @@ import { captureVideoFrameCompressed, compressImageFile } from '../lib/photoComp
 
 const AVAILABLE_MODULE_IDS = [
   'dashboard', 'security', 'wellness', 'students', 'guardians', 'checkin',
-  'forms', 'requests', 'logs', 'compliance', 'external', 'myclassroom', 'visitors',
+  'forms', 'requests', 'logs', 'arrivals', 'compliance', 'external', 'myclassroom', 'visitors',
   'transit', 'settings',
   // Estos dos otorgan control sobre otros miembros del personal (incluida
   // la asignación de permisos) y sobre las estadísticas del colegio — a
@@ -34,6 +34,7 @@ const MODULE_LABEL_KEYS: Record<string, TranslationKey> = {
   forms: 'nav.forms',
   requests: 'staffModule.requests',
   logs: 'staffModule.logs',
+  arrivals: 'nav.arrivals',
   compliance: 'nav.compliance',
   external: 'nav.external',
   myclassroom: 'nav.myClassroom',

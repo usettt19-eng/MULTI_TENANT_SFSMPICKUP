@@ -18,7 +18,8 @@ import {
   MessageSquare,
   BarChart3,
   Footprints,
-  School
+  School,
+  Sunrise
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -148,6 +149,7 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
     // otorgárselos a cada miembro del staff, igual que cualquier otro
     // módulo.
     { id: 'logs', label: t('nav.logs'), icon: History },
+    { id: 'arrivals', label: t('nav.arrivals'), icon: Sunrise },
     { id: 'compliance', label: t('nav.compliance'), icon: Gavel },
     { id: 'staff', label: t('nav.staff'), icon: UserCog },
     { id: 'statistics', label: t('nav.statistics'), icon: BarChart3 },

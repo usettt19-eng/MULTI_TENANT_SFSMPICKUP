@@ -20,6 +20,7 @@ import { RequestsCenter } from './views/RequestsCenter';
 import { Statistics } from './views/Statistics';
 import { TransitMonitor } from './views/TransitMonitor';
 import { MyClassroom } from './views/MyClassroom';
+import { DailyArrivals } from './views/DailyArrivals';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LayoutProvider } from './contexts/LayoutContext';
 import { useAuth } from './contexts/AuthContext';
@@ -211,6 +212,8 @@ export default function App() {
         return <TransitMonitor />;
       case 'myclassroom':
         return <MyClassroom />;
+      case 'arrivals':
+        return <DailyArrivals />;
       default:
         return <OperationsDashboard setCurrentView={setCurrentView} />;
       }
