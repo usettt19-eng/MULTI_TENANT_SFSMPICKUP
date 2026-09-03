@@ -43,6 +43,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [healthAlerts, setHealthAlerts] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const seenPendingRequestIdsRef = useRef<Set<string> | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [selectedDoor, setSelectedDoor] = useState('puerta_1');
   const [loading, setLoading] = useState(true);
@@ -304,6 +305,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       .eq('status', 'pending');
 
     if (data) {
+      // Aviso de voz a recepción cuando llega una solicitud nueva — se
+      // detecta comparando contra los ids ya vistos, igual que el resto de
+      // las pantallas que dependen del polling en vez de Realtime.
+      const seen = seenPendingRequestIdsRef.current;
+      if (seen && data.some(r => !seen.has(r.id))) {
+        playGlobalVoiceMessage('Atención, tienen un nuevo mensaje de los padres.');
+      }
+      seenPendingRequestIdsRef.current = new Set(data.map(r => r.id));
       setPendingRequests(data);
     }
   };
