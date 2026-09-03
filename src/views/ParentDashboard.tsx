@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
@@ -858,15 +860,25 @@ export function ParentDashboard() {
   // Anuncio de voz DENTRO de la app del padre (no en el monitor externo del
   // colegio): cuando el maestro autoriza la salida, se lee en voz alta que
   // el alumno va camino al vehículo y se recuerda pulsar el botón de
-  // confirmación una vez que el padre ya lo tenga con él. Usa el
-  // speechSynthesis del propio navegador del padre — no el audioManager
-  // compartido del kiosco, que requiere activarlo con un clic previo.
+  // confirmación una vez que el padre ya lo tenga con él. En web/iOS usa el
+  // speechSynthesis del navegador (no el audioManager compartido del
+  // kiosco, que requiere activarlo con un clic previo). El WebView del
+  // sistema de Android no trae un motor de speechSynthesis confiable — ahí
+  // se usa el plugin nativo de TTS en su lugar, que sí habla siempre.
   const speakReleasedAnnouncement = (studentFirstName: string) => {
+    const name = studentFirstName || (language === 'en' ? 'your child' : 'tu hijo');
+    const esText = `Atención, ${name} fue autorizado para salir del salón y va en camino al vehículo. No olvides pulsar el botón de confirmación cuando ya lo tengas contigo.`;
+    const enText = `Attention, ${name} has been authorized to leave the classroom and is on the way to the vehicle. Don't forget to tap the confirmation button once you have them with you.`;
+
+    if (Capacitor.getPlatform() === 'android') {
+      TextToSpeech.speak({ text: esText, lang: 'es-ES', rate: 0.9 })
+        .then(() => TextToSpeech.speak({ text: enText, lang: 'en-US', rate: 0.9 }))
+        .catch(e => console.error('No se pudo anunciar la autorización por voz (Android):', e));
+      return;
+    }
+
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
-      const name = studentFirstName || (language === 'en' ? 'your child' : 'tu hijo');
-      const esText = `Atención, ${name} fue autorizado para salir del salón y va en camino al vehículo. No olvides pulsar el botón de confirmación cuando ya lo tengas contigo.`;
-      const enText = `Attention, ${name} has been authorized to leave the classroom and is on the way to the vehicle. Don't forget to tap the confirmation button once you have them with you.`;
       const esUtterance = new SpeechSynthesisUtterance(esText);
       esUtterance.lang = 'es-ES';
       esUtterance.rate = 0.9;
