@@ -146,13 +146,19 @@ export function RequestsCenter() {
 
           if (!additionalData.replacements) additionalData.replacements = [];
 
-          // Add the new replacement
+          // Add the new replacement — recurrente = queda autorizado
+          // indefinidamente pero solo los días marcados; de un solo uso
+          // (is_recurring false) se consume la primera vez que se escanea
+          // (ver isReplacementAuthorizedNow en lib/pickupHelpers.ts).
           const newReplacement = {
             name: req.replacement_name,
             phone: req.replacement_phone,
             photo_url: req.photo_url ?? null,
             token: crypto.randomUUID().slice(0, 8),
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            is_recurring: req.is_recurring !== false,
+            days_of_week: req.is_recurring !== false ? (req.days_of_week ?? null) : null,
+            used_at: null,
           };
 
           additionalData.replacements.push(newReplacement);
@@ -333,6 +339,16 @@ export function RequestsCenter() {
                               ) : (
                                 <span className="text-amber-600">{t('requests.noChildrenLinked')}</span>
                               )}
+                            </p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest mt-1">
+                              {req.is_recurring === false ? (
+                                <span className="text-amber-600">{t('requests.oneTimeUse')}</span>
+                              ) : Array.isArray(req.days_of_week) && req.days_of_week.length > 0 ? (
+                                <span className="text-indigo-600">
+                                  {t('requests.recurringOn')}{' '}
+                                  {req.days_of_week.map((d: number) => [t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')][d]).join(', ')}
+                                </span>
+                              ) : null}
                             </p>
                           </>
                         )}

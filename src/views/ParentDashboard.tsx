@@ -109,6 +109,11 @@ export function ParentDashboard() {
   const [replacementPhotoFile, setReplacementPhotoFile] = useState<File | null>(null);
   const [replacementPhotoPreview, setReplacementPhotoPreview] = useState<string | null>(null);
   const [isSubmittingReplacement, setIsSubmittingReplacement] = useState(false);
+  // Recurrente = queda autorizado indefinidamente, pero solo los días de
+  // semana marcados; de un solo uso = válido una vez, cualquier día, y se
+  // consume al escanearse en la puerta.
+  const [isReplacementRecurring, setIsReplacementRecurring] = useState(true);
+  const [replacementDays, setReplacementDays] = useState<number[]>([]);
 
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
@@ -573,6 +578,10 @@ export function ParentDashboard() {
   const handleRequestReplacement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replacementName || !replacementPhone) return;
+    if (isReplacementRecurring && replacementDays.length === 0) {
+      setErrorMessage(t('parent.replacement.daysRequiredError'));
+      return;
+    }
 
     setIsSubmittingReplacement(true);
     try {
@@ -601,7 +610,9 @@ export function ParentDashboard() {
           replacement_name: replacementName,
           replacement_phone: replacementPhone,
           photo_url: photoUrl,
-          tenant_id: profile?.tenant_id
+          tenant_id: profile?.tenant_id,
+          is_recurring: isReplacementRecurring,
+          days_of_week: isReplacementRecurring ? replacementDays : null,
         })
       });
 
@@ -625,6 +636,8 @@ export function ParentDashboard() {
       setReplacementPhone('');
       setReplacementPhotoFile(null);
       setReplacementPhotoPreview(null);
+      setIsReplacementRecurring(true);
+      setReplacementDays([]);
     } catch (err: any) {
       console.error(err);
       alert(t('parent.replacement.submitErrorPrefix') + (err.message || String(err)));
@@ -1764,8 +1777,15 @@ export function ParentDashboard() {
                   <div className="flex-1">
                     <h4 className="font-black text-slate-800 text-sm">{rep.name}</h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">{rep.phone}</p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-emerald-100">{t('parent.replacement.activeBadge')}</span>
+                      {rep.is_recurring === false ? (
+                        <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-amber-100">{t('parent.replacement.oneTimeOption')}</span>
+                      ) : Array.isArray(rep.days_of_week) && rep.days_of_week.length > 0 ? (
+                        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-indigo-100">
+                          {rep.days_of_week.map((d: number) => [t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')][d]).join(', ')}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button 
@@ -2020,6 +2040,52 @@ export function ParentDashboard() {
                     <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
                       {t('parent.replacement.photoHelp')}
                     </p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.replacement.scheduleLabel')}</label>
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsReplacementRecurring(true)}
+                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${isReplacementRecurring ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}
+                      >
+                        {t('parent.replacement.recurringOption')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setIsReplacementRecurring(false); setReplacementDays([]); }}
+                        className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${!isReplacementRecurring ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}
+                      >
+                        {t('parent.replacement.oneTimeOption')}
+                      </button>
+                    </div>
+                    {isReplacementRecurring ? (
+                      <>
+                        <div className="flex flex-wrap gap-2">
+                          {[0, 1, 2, 3, 4, 5, 6].map(day => {
+                            const dayLabels = [t('parent.days.sun'), t('parent.days.mon'), t('parent.days.tue'), t('parent.days.wed'), t('parent.days.thu'), t('parent.days.fri'), t('parent.days.sat')];
+                            const selected = replacementDays.includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => setReplacementDays(prev => selected ? prev.filter(d => d !== day) : [...prev, day])}
+                                className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${selected ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}
+                              >
+                                {dayLabels[day]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                          {t('parent.replacement.recurringHelp')}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 font-medium ml-1">
+                        {t('parent.replacement.oneTimeHelp')}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button

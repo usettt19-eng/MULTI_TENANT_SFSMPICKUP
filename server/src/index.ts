@@ -931,6 +931,23 @@ app.post(
     const {replacement_name, replacement_phone, photo_url} = req.body ?? {};
     if (!replacement_name) return fail(res, 400, 'Falta el nombre del reemplazo.');
 
+    // Recurrente = válido indefinidamente, pero solo los días marcados; de
+    // un solo uso = válido una vez, cualquier día, y se consume al
+    // escanearse. Sin días marcados en modo recurrente no tendría sentido
+    // (nunca sería válido), así que se exige al menos uno.
+    const isRecurring = req.body?.is_recurring !== false;
+    const rawDays = req.body?.days_of_week;
+    const daysOfWeek = Array.isArray(rawDays)
+      ? rawDays.filter((d: unknown) => typeof d === 'number' && d >= 0 && d <= 6)
+      : null;
+    // Solo se exige si el llamante mandó explícitamente el arreglo de días
+    // (el formulario del padre siempre lo manda); si no vino, se deja pasar
+    // sin restricción para no romper otros flujos que usan este mismo
+    // endpoint (ej. el aviso de "Delivery/Mensaje" en ParentDashboard).
+    if (isRecurring && Array.isArray(rawDays) && daysOfWeek!.length === 0) {
+      return fail(res, 400, 'Selecciona al menos un día de la semana, o márcalo como de un solo uso.');
+    }
+
     // El padre sólo puede solicitar por sí mismo; el personal, por cualquiera
     // de su colegio.
     const requestedFor = req.body?.parent_id ?? req.caller!.id;
@@ -955,6 +972,8 @@ app.post(
         photo_url: photo_url ?? null,
         status: 'pending',
         tenant_id: req.caller!.tenantId,
+        is_recurring: isRecurring,
+        days_of_week: daysOfWeek,
       })
       .select()
       .single();

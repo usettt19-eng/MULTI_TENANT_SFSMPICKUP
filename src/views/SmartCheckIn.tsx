@@ -18,6 +18,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { apiJson } from '../lib/apiFetch';
+import { findMatchingReplacement, isReplacementAuthorizedNow } from '../lib/pickupHelpers';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -220,8 +221,19 @@ export function SmartCheckIn() {
           } catch (e) {}
           
           const replacements = additionalData.replacements || [];
-          const isValid = replacements.some((r: any) => r.token === data.token && r.name === data.replacement_name);
-          
+          const match = findMatchingReplacement(replacements, data.token, data.replacement_name);
+          const isValid = !!match && isReplacementAuthorizedNow(match);
+
+          if (isValid && match && match.is_recurring === false) {
+            // De un solo uso: se consume apenas se valida, para que el
+            // mismo QR no vuelva a servir otro día.
+            match.used_at = new Date().toISOString();
+            await supabase
+              .from('profiles')
+              .update({ additional_tutor_name: JSON.stringify(additionalData) })
+              .eq('id', parentProfile.id);
+          }
+
           if (isValid) {
             setStatusMsg(`¡QR Válido! Bienvenido/a ${data.replacement_name}`);
             playVoiceMessage(`Código verificado para ${data.replacement_name}. Por favor, seleccione al alumno.`);

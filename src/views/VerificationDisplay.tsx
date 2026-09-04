@@ -8,7 +8,7 @@ import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
-import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
+import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
 
@@ -324,7 +324,18 @@ export function VerificationDisplay() {
       try { return JSON.parse(parentProfile?.additional_tutor_name || '{}'); } catch { return {}; }
     })();
     const replacements = additionalData.replacements || [];
-    const isValid = !!parentProfile && replacements.some((r: any) => r.token === data.token && r.name === data.replacement_name);
+    const match = findMatchingReplacement(replacements, data.token, data.replacement_name);
+    const isValid = !!parentProfile && !!match && isReplacementAuthorizedNow(match);
+
+    if (isValid && match && match.is_recurring === false) {
+      // De un solo uso: se consume apenas se valida, para que el mismo QR
+      // no vuelva a servir otro día.
+      match.used_at = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({ additional_tutor_name: JSON.stringify(additionalData) })
+        .eq('id', parentProfile.id);
+    }
 
     if (isValid) {
       setReplacementData(data);
