@@ -261,6 +261,26 @@ const pick = (body: Record<string, unknown>) =>
     PARENT_FIELDS.filter((k) => body[k] !== undefined).map((k) => [k, body[k]]),
   );
 
+// El PIN identifica al padre en SmartCheckIn (kiosco de puerta) buscando por
+// tenant_id + pin_code con .maybeSingle() — si dos padres del mismo colegio
+// comparten PIN, esa búsqueda encuentra 2 filas, falla en silencio, y a
+// AMBOS les sale "PIN Incorrecto" aunque el suyo sea correcto. No hay
+// constraint de unicidad en la base (el campo es texto libre digitado a
+// mano o importado del CSV), así que se valida acá antes de guardar.
+async function isPinTaken(tenantId: string | null, pinCode: string, excludeId?: string): Promise<boolean> {
+  if (!tenantId) return false;
+  let query = admin
+    .from('profiles')
+    .select('id', {count: 'exact', head: true})
+    .eq('tenant_id', tenantId)
+    .eq('role', 'parent')
+    .eq('pin_code', pinCode);
+  if (excludeId) query = query.neq('id', excludeId);
+  const {count, error} = await query;
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 app.post(
   '/api/parents',
   requireAuth,
@@ -272,6 +292,12 @@ app.post(
 
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
     if (!body.email) return fail(res, 400, 'Falta el correo.');
+
+    if (typeof body.pin_code === 'string' && body.pin_code.trim()) {
+      if (await isPinTaken(tenantId, body.pin_code.trim())) {
+        return fail(res, 409, 'Ese PIN ya lo usa otro padre de este colegio. Elige uno distinto.');
+      }
+    }
 
     const {data: created, error} = await admin.auth.admin.inviteUserByEmail(body.email, {
       redirectTo: process.env.PUBLIC_APP_URL || undefined,
@@ -322,6 +348,12 @@ app.put(
     if (body.email) {
       const {error} = await admin.auth.admin.updateUserById(id, {email: body.email});
       if (error) return fail(res, 400, error.message);
+    }
+
+    if (typeof body.pin_code === 'string' && body.pin_code.trim()) {
+      if (await isPinTaken(target.tenant_id, body.pin_code.trim(), id)) {
+        return fail(res, 409, 'Ese PIN ya lo usa otro padre de este colegio. Elige uno distinto.');
+      }
     }
 
     const {data: profile, error} = await admin
@@ -396,12 +428,28 @@ app.post(
       studentsByName.set(key, [...(studentsByName.get(key) ?? []), s.id]);
     }
 
+    // Los PIN del CSV vienen copiados a mano (ej. "últimos 4 del teléfono"),
+    // así que colisionan seguido entre familias distintas — se rastrean
+    // acá los que ya se usaron EN ESTE MISMO archivo, además de consultar
+    // los que ya existían en el colegio antes de la importación.
+    const pinsUsedInBatch = new Set<string>();
+
     // Secuencial a propósito: en paralelo se dispara el rate limit de Auth.
     for (const p of parents) {
       if (!p?.email) {
         failed.push({email: '(sin correo)', error: 'Falta el correo'});
         continue;
       }
+
+      const pin = typeof p.pin_code === 'string' ? p.pin_code.trim() : '';
+      if (pin) {
+        if (pinsUsedInBatch.has(pin) || (await isPinTaken(tenantId, pin))) {
+          failed.push({email: p.email, error: `PIN ${pin} ya está en uso por otro padre de este colegio`});
+          continue;
+        }
+        pinsUsedInBatch.add(pin);
+      }
+
       // Sin contraseña: cada padre recibe su propio correo de invitación.
       const {data: user, error} = await admin.auth.admin.inviteUserByEmail(p.email, {
         redirectTo: process.env.PUBLIC_APP_URL || undefined,
