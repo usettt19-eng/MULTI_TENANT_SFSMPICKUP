@@ -88,7 +88,8 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .select('id, announced_at, completed_at, location_verified, notes, student:students(first_name, last_name, grade, section), parent:profiles(first_name, last_name)')
         .eq('tenant_id', profile.tenant_id)
         .gte('announced_at', startIso)
-        .lt('announced_at', endIso),
+        .lt('announced_at', endIso)
+        .order('announced_at', { ascending: true }),
       supabase
         .from('pickup_events')
         .select('id, announced_at, completed_at, student:students(first_name, last_name, grade, section)')
@@ -101,25 +102,29 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .select('id, method, created_at, student:students(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
         .gte('created_at', startIso)
-        .lt('created_at', endIso),
+        .lt('created_at', endIso)
+        .order('created_at', { ascending: true }),
       supabase
         .from('daily_visitors')
         .select('id, visitor_name, company, visiting_whom, reason, check_in_time, check_out_time')
         .eq('tenant_id', profile.tenant_id)
         .gte('check_in_time', startIso)
-        .lt('check_in_time', endIso),
+        .lt('check_in_time', endIso)
+        .order('check_in_time', { ascending: true }),
       supabase
         .from('replacement_requests')
         .select('id, replacement_name, status, created_at')
         .eq('tenant_id', profile.tenant_id)
         .gte('created_at', startIso)
-        .lt('created_at', endIso),
+        .lt('created_at', endIso)
+        .order('created_at', { ascending: true }),
       supabase
         .from('student_incidents')
         .select('id, type, description, created_at, student:students(first_name, last_name, grade, section)')
         .eq('tenant_id', profile.tenant_id)
         .gte('created_at', startIso)
-        .lt('created_at', endIso),
+        .lt('created_at', endIso)
+        .order('created_at', { ascending: true }),
       supabase
         .from('health_alerts')
         .select('id, title, severity, created_at')
