@@ -17,6 +17,7 @@ import {
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { DailyReportModal } from '../components/DailyReportModal';
+import { BusRoutesPanel } from '../components/BusRoutesPanel';
 import type { TranslationKey } from '../i18n/translations';
 
 // carpool_authorizations.day_of_week: 0=domingo...6=sábado (igual que
@@ -665,6 +666,8 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               )}
             </div>
           </div>
+
+          <BusRoutesPanel />
 
           {/* Car Pools Configurados */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
