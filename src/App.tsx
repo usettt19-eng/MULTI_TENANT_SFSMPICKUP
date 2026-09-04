@@ -27,6 +27,7 @@ import { useAuth } from './contexts/AuthContext';
 import { Login } from './views/Login';
 import { SetPassword } from './views/SetPassword';
 import { SharedQRDisplay } from './views/SharedQRDisplay';
+import { AppInstallGate } from './components/AppInstallGate';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -130,7 +131,9 @@ export default function App() {
   if (profile?.role === 'parent') {
     return (
       <LanguageProvider>
-        <ParentDashboard />
+        <AppInstallGate>
+          <ParentDashboard />
+        </AppInstallGate>
       </LanguageProvider>
     );
   }
