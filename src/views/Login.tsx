@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft } from 'lucide-react';
+import { MobileAppBanner } from '../components/MobileAppBanner';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -114,6 +115,10 @@ export function Login() {
         <p className="text-center text-slate-500 font-medium text-xs sm:text-sm px-4">
           Gestión de entrega estudiantil segura
         </p>
+      </div>
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md mb-4">
+        <MobileAppBanner message="Usa Safe Smart Pickup desde la app para una mejor experiencia." />
       </div>
 
       <div className="mt-8 sm:mt-12 sm:mx-auto sm:w-full sm:max-w-md">

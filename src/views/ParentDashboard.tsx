@@ -8,6 +8,7 @@ import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { PICKUP_WINDOW_START_HOUR as ANNOUNCE_ARRIVAL_MIN_HOUR } from '../lib/dismissalSchedule';
+import { MobileAppBanner } from '../components/MobileAppBanner';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
   startBackgroundWatch, stopBackgroundWatch, openLocationSettings,
@@ -1477,7 +1478,9 @@ export function ParentDashboard() {
       </div>
 
       <div className="max-w-md mx-auto p-6 space-y-6">
-        
+
+        <MobileAppBanner message={t('parent.appBanner.message')} />
+
         {isInAppBrowser && !isLocationEnabled && !errorMessage && (
           <div className="bg-amber-50 text-amber-700 p-4 rounded-2xl text-xs font-bold flex items-center gap-3 border border-amber-100 animate-in slide-in-from-top-2">
             <AlertTriangle className="w-5 h-5 shrink-0" />
