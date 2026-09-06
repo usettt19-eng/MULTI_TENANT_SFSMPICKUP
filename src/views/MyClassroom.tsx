@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
-import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock } from 'lucide-react';
+import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock, UserX } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
 import { resolveMyGradeSectionsToday } from '../lib/dismissalSchedule';
 
@@ -200,6 +200,44 @@ export function MyClassroom() {
     }
   };
 
+  // Un anuncio (típicamente de un bus, que anuncia a todos sus alumnos de
+  // una sola vez) puede corresponder a un alumno que simplemente no vino a
+  // clases ese día — nadie lo va a autorizar nunca porque no está. Sin esto,
+  // ese pickup_events se queda en 'announced' para siempre: bloquea el
+  // botón naranja de "confirmar salida" del bus (que exige que TODOS los
+  // activos lleguen a 'released') y sigue apareciendo en Tránsito/Monitor
+  // Externo como si el alumno estuviera en camino. Se cierra directo como
+  // 'completed' (sin pasar por 'released') para que desaparezca de todas
+  // las colas activas de una vez, sin avisarle a nadie que "ya viene".
+  const handleMarkAbsent = async (pickup: any) => {
+    if (!confirm(`¿Confirmas que ${pickup.students?.first_name || 'el alumno'} no asistió a clases hoy?`)) return;
+    setAuthorizingId(pickup.id);
+    const studentName = pickup.students?.first_name;
+    try {
+      const { error: updateError } = await supabase
+        .from('pickup_events')
+        .update({ status: 'completed', completed_at: new Date(), notes: '[AUSENTE] No asistió a clases hoy' })
+        .eq('id', pickup.id);
+      if (updateError) throw updateError;
+
+      await supabase.from('audit_logs').insert({
+        event_type: 'SECURITY',
+        description: `AUSENCIA (Mi Salón): ${profile?.first_name || 'Personal'} marcó que ${studentName || 'el alumno'} no asistió a clases hoy.`,
+        actor_name: profile?.first_name || 'Personal',
+        metadata: { pickup_id: pickup.id },
+        tenant_id: pickup.tenant_id,
+      });
+
+      setPickups(prev => prev.filter(p => p.id !== pickup.id));
+    } catch (error: any) {
+      console.error('Error marking absence:', error);
+      alert(t('monitor.releaseErrorPrefix') + error.message);
+      fetchMyPickups();
+    } finally {
+      setAuthorizingId(null);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50 relative">
       <TopNav title={t('myClassroom.title')} subtitle={t('myClassroom.subtitle')} />
@@ -363,6 +401,15 @@ export function MyClassroom() {
                         <div className="flex-1">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{t('monitor.verifyBeforeAuthorize')}</p>
                         </div>
+                        <button
+                          onClick={() => handleMarkAbsent(pickup)}
+                          disabled={authorizingId === pickup.id}
+                          title="El alumno no asistió a clases hoy"
+                          className="w-full sm:w-auto px-4 py-3 rounded-2xl font-bold text-xs shadow-sm transition-all bg-white border border-rose-200 text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50"
+                        >
+                          <UserX className="w-4 h-4" />
+                          No vino hoy
+                        </button>
                         <button
                           onClick={() => handleAuthorize(pickup)}
                           disabled={authorizingId === pickup.id}
