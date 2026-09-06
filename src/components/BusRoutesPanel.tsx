@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Bus, Plus, Settings2, X, Search, CheckCircle2, Trash2, Loader2, Check } from 'lucide-react';
+import { Bus, Plus, Settings2, X, Search, CheckCircle2, Trash2, Loader2, Check, Car } from 'lucide-react';
 
 interface BusRoute {
   id: string;
@@ -14,6 +14,11 @@ interface BusRoute {
 interface ExitDoor {
   id: string;
   name: string;
+}
+
+interface RouteActivity {
+  total: number;
+  released: number;
 }
 
 /**
@@ -34,6 +39,15 @@ export function BusRoutesPanel() {
   const [loading, setLoading] = useState(true);
   const [announcingId, setAnnouncingId] = useState<string | null>(null);
   const [announcedId, setAnnouncedId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  // parent_id (el perfil fantasma del bus) -> conteo de pickup_events activos
+  // y cuántos de esos ya están 'released' (el maestro autorizó la salida).
+  // Se refresca sola cada 8s, igual que TransitMonitor, porque no hay
+  // Realtime en pickup_events — así el botón cambia de color solo, sin que
+  // recepción tenga que recargar la pantalla.
+  const [activity, setActivity] = useState<Record<string, RouteActivity>>({});
+  const routesRef = useRef<BusRoute[]>([]);
 
   const [showManageModal, setShowManageModal] = useState(false);
   const [editingRoute, setEditingRoute] = useState<BusRoute | null>(null);
@@ -49,6 +63,9 @@ export function BusRoutesPanel() {
     if (!profile?.tenant_id) return;
     fetchRoutes();
     fetchDoors();
+
+    const pollInterval = window.setInterval(fetchActivity, 8000);
+    return () => window.clearInterval(pollInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.tenant_id]);
 
@@ -73,8 +90,35 @@ export function BusRoutesPanel() {
     const counts = new Map<string, number>();
     (links || []).forEach((l: any) => counts.set(l.parent_id, (counts.get(l.parent_id) || 0) + 1));
 
-    setRoutes(routesData.map((r) => ({ ...r, student_count: counts.get(r.profile_id) || 0 })));
+    const withCounts = routesData.map((r) => ({ ...r, student_count: counts.get(r.profile_id) || 0 }));
+    setRoutes(withCounts);
+    routesRef.current = withCounts;
     setLoading(false);
+    fetchActivity();
+  };
+
+  // Cuenta, por cada ruta, cuántos pickup_events siguen activos y cuántos de
+  // esos ya están 'released' — cuando coinciden (todos autorizados por su
+  // maestro), el botón pasa a naranja para que recepción confirme que el
+  // bus ya se los llevó, igual que el botón ámbar del padre en su panel
+  // cuando el alumno está autorizado y falta confirmar que ya lo tiene.
+  const fetchActivity = async () => {
+    const profileIds = routesRef.current.map((r) => r.profile_id);
+    if (profileIds.length === 0) return;
+    const { data } = await supabase
+      .from('pickup_events')
+      .select('parent_id, status')
+      .in('parent_id', profileIds)
+      .in('status', ['announced', 'in_queue', 'released']);
+
+    const next: Record<string, RouteActivity> = {};
+    (data || []).forEach((row: any) => {
+      const entry = next[row.parent_id] || { total: 0, released: 0 };
+      entry.total += 1;
+      if (row.status === 'released') entry.released += 1;
+      next[row.parent_id] = entry;
+    });
+    setActivity(next);
   };
 
   const fetchDoors = async () => {
@@ -216,10 +260,44 @@ export function BusRoutesPanel() {
 
       setAnnouncedId(route.id);
       setTimeout(() => setAnnouncedId((current) => (current === route.id ? null : current)), 3000);
+      fetchActivity();
     } catch (err: any) {
       alert('Error al anunciar la llegada: ' + (err.message || String(err)));
     } finally {
       setAnnouncingId(null);
+    }
+  };
+
+  // Se habilita cuando TODOS los pickup_events activos de la ruta llegaron a
+  // 'released' (cada maestro ya autorizó al alumno correspondiente) — marca
+  // el cierre del ciclo para el bus completo de una vez, igual que el padre
+  // confirma "ya lo tengo" en su panel cuando el suyo queda autorizado.
+  const handleConfirmComplete = async (route: BusRoute) => {
+    setConfirmingId(route.id);
+    try {
+      const { error } = await supabase
+        .from('pickup_events')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('parent_id', route.profile_id)
+        .eq('status', 'released');
+      if (error) throw error;
+
+      const releasedCount = activity[route.profile_id]?.released ?? 0;
+      await logActivity(
+        'PICKUP',
+        `SALIDA DE BUS CONFIRMADA: "${route.name}" — ${releasedCount} alumno(s) ya autorizado(s) subieron al bus.`,
+        profile?.first_name || 'Recepción',
+        { bus_route: route.name, student_count: releasedCount },
+        profile?.tenant_id,
+      );
+
+      setConfirmedId(route.id);
+      setTimeout(() => setConfirmedId((current) => (current === route.id ? null : current)), 3000);
+      fetchActivity();
+    } catch (err: any) {
+      alert('Error al confirmar la salida del bus: ' + (err.message || String(err)));
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -250,30 +328,61 @@ export function BusRoutesPanel() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {routes.map((route) => {
               const isAnnouncing = announcingId === route.id;
+              const isConfirming = confirmingId === route.id;
               const justAnnounced = announcedId === route.id;
+              const justConfirmed = confirmedId === route.id;
+              const act = activity[route.profile_id];
+              const total = act?.total ?? 0;
+              const released = act?.released ?? 0;
+              // idle: nada activo, tocar anuncia la llegada.
+              // waiting: ya se anunció, pero faltan alumnos por autorizar en su salón.
+              // ready: todos los activos ya están autorizados — tocar confirma que el bus se los llevó.
+              const stage = total === 0 ? 'idle' : released === total ? 'ready' : 'waiting';
+              const flashing = justAnnounced || justConfirmed;
+
+              const handleClick = () => {
+                if (stage === 'idle') handleAnnounce(route);
+                else if (stage === 'ready') handleConfirmComplete(route);
+              };
+
+              const cardClasses = flashing
+                ? 'bg-emerald-50 border-emerald-200'
+                : stage === 'ready'
+                ? 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+                : stage === 'waiting'
+                ? 'bg-slate-50 border-slate-200 cursor-default'
+                : 'bg-amber-50 border-amber-100 hover:bg-amber-100';
+
+              const iconBgClasses = flashing ? 'bg-emerald-500' : stage === 'ready' ? 'bg-orange-500' : stage === 'waiting' ? 'bg-slate-400' : 'bg-amber-500';
+
+              let subtitle: string;
+              if (justAnnounced) subtitle = 'Llegada anunciada';
+              else if (justConfirmed) subtitle = 'Salida confirmada';
+              else if (stage === 'ready') subtitle = `Listo — ${released} alumno${released === 1 ? '' : 's'} autorizado${released === 1 ? '' : 's'}, toca para confirmar salida`;
+              else if (stage === 'waiting') subtitle = `${released}/${total} autorizados por su salón`;
+              else subtitle = `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''}`;
+
               return (
                 <div key={route.id} className="flex items-stretch gap-1.5">
                   <button
-                    onClick={() => handleAnnounce(route)}
-                    disabled={isAnnouncing}
-                    className={`flex-1 flex items-center gap-3 p-4 rounded-2xl border transition-all text-left disabled:opacity-60 ${
-                      justAnnounced
-                        ? 'bg-emerald-50 border-emerald-200'
-                        : 'bg-amber-50 border-amber-100 hover:bg-amber-100'
-                    }`}
+                    onClick={handleClick}
+                    disabled={isAnnouncing || isConfirming || stage === 'waiting'}
+                    className={`flex-1 flex items-center gap-3 p-4 rounded-2xl border transition-all text-left disabled:opacity-60 ${cardClasses}`}
                   >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${justAnnounced ? 'bg-emerald-500' : 'bg-amber-500'} text-white`}>
-                      {isAnnouncing ? <Loader2 className="w-5 h-5 animate-spin" /> : justAnnounced ? <Check className="w-5 h-5" /> : <Bus className="w-5 h-5" />}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBgClasses} text-white`}>
+                      {isAnnouncing || isConfirming ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : flashing ? (
+                        <Check className="w-5 h-5" />
+                      ) : stage === 'ready' ? (
+                        <Car className="w-5 h-5" />
+                      ) : (
+                        <Bus className="w-5 h-5" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-black text-slate-800 truncate">{route.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
-                        {justAnnounced
-                          ? 'Llegada anunciada'
-                          : `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${
-                              route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''
-                            }`}
-                      </p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{subtitle}</p>
                     </div>
                   </button>
                   <button
