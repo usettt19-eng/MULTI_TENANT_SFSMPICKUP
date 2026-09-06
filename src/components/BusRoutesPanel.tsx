@@ -7,7 +7,13 @@ interface BusRoute {
   id: string;
   name: string;
   profile_id: string;
+  door_id: string | null;
   student_count: number;
+}
+
+interface ExitDoor {
+  id: string;
+  name: string;
 }
 
 /**
@@ -32,6 +38,8 @@ export function BusRoutesPanel() {
   const [showManageModal, setShowManageModal] = useState(false);
   const [editingRoute, setEditingRoute] = useState<BusRoute | null>(null);
   const [routeName, setRouteName] = useState('');
+  const [routeDoorId, setRouteDoorId] = useState<string>('');
+  const [doors, setDoors] = useState<ExitDoor[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -40,6 +48,7 @@ export function BusRoutesPanel() {
   useEffect(() => {
     if (!profile?.tenant_id) return;
     fetchRoutes();
+    fetchDoors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.tenant_id]);
 
@@ -47,7 +56,7 @@ export function BusRoutesPanel() {
     if (!profile?.tenant_id) return;
     const { data: routesData } = await supabase
       .from('bus_routes')
-      .select('id, name, profile_id')
+      .select('id, name, profile_id, door_id')
       .eq('tenant_id', profile.tenant_id)
       .order('name');
 
@@ -68,6 +77,12 @@ export function BusRoutesPanel() {
     setLoading(false);
   };
 
+  const fetchDoors = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase.from('exit_doors').select('id, name').eq('tenant_id', profile.tenant_id).order('name');
+    if (data) setDoors(data);
+  };
+
   const fetchStudents = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase.from('students').select('*').eq('tenant_id', profile.tenant_id).order('first_name');
@@ -77,6 +92,7 @@ export function BusRoutesPanel() {
   const openCreateModal = () => {
     setEditingRoute(null);
     setRouteName('');
+    setRouteDoorId('');
     setSelectedStudents([]);
     setStudentSearchTerm('');
     fetchStudents();
@@ -86,6 +102,7 @@ export function BusRoutesPanel() {
   const openEditModal = async (route: BusRoute) => {
     setEditingRoute(route);
     setRouteName(route.name);
+    setRouteDoorId(route.door_id || '');
     setStudentSearchTerm('');
     await fetchStudents();
     const { data: links } = await supabase.from('parent_students').select('student_id').eq('parent_id', route.profile_id);
@@ -99,7 +116,10 @@ export function BusRoutesPanel() {
     setSaving(true);
     try {
       if (editingRoute) {
-        const { error: updateError } = await supabase.from('bus_routes').update({ name }).eq('id', editingRoute.id);
+        const { error: updateError } = await supabase
+          .from('bus_routes')
+          .update({ name, door_id: routeDoorId || null })
+          .eq('id', editingRoute.id);
         if (updateError) throw updateError;
 
         await supabase.from('parent_students').delete().eq('parent_id', editingRoute.profile_id);
@@ -124,6 +144,7 @@ export function BusRoutesPanel() {
           tenant_id: profile.tenant_id,
           name,
           profile_id: profileId,
+          door_id: routeDoorId || null,
         });
         if (routeError) throw routeError;
 
@@ -180,6 +201,7 @@ export function BusRoutesPanel() {
         status: 'announced',
         announced_at: new Date().toISOString(),
         tenant_id: profile.tenant_id,
+        door_id: route.door_id || null,
       }));
       const { error } = await supabase.from('pickup_events').insert(rows);
       if (error) throw error;
@@ -245,8 +267,12 @@ export function BusRoutesPanel() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-black text-slate-800 truncate">{route.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">
-                        {justAnnounced ? 'Llegada anunciada' : `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}`}
+                      <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
+                        {justAnnounced
+                          ? 'Llegada anunciada'
+                          : `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${
+                              route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''
+                            }`}
                       </p>
                     </div>
                   </button>
@@ -291,6 +317,23 @@ export function BusRoutesPanel() {
                   placeholder="Ej. Ruta 1 — Costa del Este"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Puerta por donde sale este bus</label>
+                <select
+                  value={routeDoorId}
+                  onChange={(e) => setRouteDoorId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                >
+                  <option value="">Sin puerta fija (usa el grado de cada alumno)</option>
+                  {doors.map((door) => (
+                    <option key={door.id} value={door.id}>{door.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                  Si la asignas, todos los alumnos de esta ruta salen agrupados por esa puerta al anunciar, sin importar su grado.
+                </p>
               </div>
 
               <div>
