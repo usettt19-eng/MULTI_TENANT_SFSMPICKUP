@@ -1982,8 +1982,8 @@ export function ParentDashboard() {
 
       {showReplacementModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
-             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center shrink-0">
                <div className="flex items-center gap-3">
                  <div className="p-2 bg-indigo-600 rounded-xl text-white">
                    <UserPlus className="w-5 h-5" />
@@ -1992,7 +1992,8 @@ export function ParentDashboard() {
                </div>
                <button onClick={() => setShowReplacementModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
              </div>
-             <form onSubmit={handleRequestReplacement} className="p-8 space-y-6">
+             <form onSubmit={handleRequestReplacement} className="flex flex-col flex-1 min-h-0">
+              <div className="p-8 space-y-6 overflow-y-auto">
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
                   {t('parent.replacement.modalDescription')}
                 </p>
@@ -2088,6 +2089,8 @@ export function ParentDashboard() {
                     )}
                   </div>
                 </div>
+              </div>
+              <div className="p-8 pt-0 shrink-0">
                 <button
                   type="submit"
                   disabled={isSubmittingReplacement}
@@ -2095,6 +2098,7 @@ export function ParentDashboard() {
                 >
                   {isSubmittingReplacement ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parent.replacement.submitBtn')}
                 </button>
+              </div>
              </form>
           </div>
         </div>
