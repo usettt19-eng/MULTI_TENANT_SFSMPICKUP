@@ -757,12 +757,16 @@ export function ParentDashboard() {
 
   const fetchStudents = async () => {
     if (!profile?.tenant_id) return;
+    // Sin filtro de tenant_id: un padre puede tener hijos en más de un
+    // colegio (parent_school_access) — el propio y uno prestado. El RLS de
+    // students/parent_students ya limita el resultado a los colegios donde
+    // este padre tiene acceso real, así que no hace falta (y sería
+    // incorrecto) restringir aquí a profile.tenant_id.
     const { data } = await supabase
       .from('parent_students')
       .select('students(*)')
-      .eq('parent_id', profile.id)
-      .eq('students.tenant_id', profile.tenant_id);
-    
+      .eq('parent_id', profile.id);
+
     if (data) setStudents(data.map(d => d.students).filter(Boolean));
   };
 
@@ -1269,13 +1273,24 @@ export function ParentDashboard() {
     setLoading(true);
     try {
       for (const student of pickupStudents) {
+        // El pickup_events queda con el tenant_id del ALUMNO, no el del
+        // perfil del padre: para la enorme mayoría son el mismo colegio,
+        // pero un padre con hijos en dos colegios (parent_school_access)
+        // tiene un solo profile.tenant_id — si se usara ese, el anuncio de
+        // un hijo del OTRO colegio quedaría invisible para el personal de
+        // ese colegio (sus políticas de RLS filtran por el tenant_id de la
+        // fila, no por quién la creó). La puerta elegida en pantalla es de
+        // la lista del colegio del padre, así que solo aplica si coincide
+        // con el colegio real del alumno — si no, se cae al criterio por
+        // grado (door_id null), igual que hacen las rutas de bus.
+        const studentTenantId = (student as any).tenant_id || profile.tenant_id;
         const { data: newEvent, error: insertError } = await supabase.from('pickup_events').insert({
           parent_id: profile.id,
           student_id: student.id,
           status: 'announced',
           announced_at: new Date().toISOString(),
-          tenant_id: profile.tenant_id,
-          door_id: selectedDoorId || null,
+          tenant_id: studentTenantId,
+          door_id: studentTenantId === profile.tenant_id ? (selectedDoorId || null) : null,
           location_verified: !manual,
         }).select('id').single();
 

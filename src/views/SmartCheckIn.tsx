@@ -375,29 +375,35 @@ export function SmartCheckIn() {
     setStatusMsg('Verificando...');
     // Un PIN de 4 dígitos tiene solo 10,000 combinaciones — sin filtrar por
     // colegio, dos padres de tenants distintos podrían compartir PIN y este
-    // kiosco terminaría anunciando la llegada del padre equivocado.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('tenant_id', staffProfile.tenant_id)
-      .eq('pin_code', pin)
-      .maybeSingle();
-    if (!profile) {
+    // kiosco terminaría anunciando la llegada del padre equivocado. La
+    // búsqueda va por RPC (find_parent_by_pin) en vez de un .eq('tenant_id')
+    // plano porque un padre con hijos en dos colegios (parent_school_access)
+    // tiene su perfil guardado en SU colegio de origen, no necesariamente en
+    // el de este kiosco.
+    const { data: parentId } = await supabase.rpc('find_parent_by_pin', {
+      p_tenant_id: staffProfile.tenant_id,
+      p_pin: pin,
+    });
+    if (!parentId) {
       setStatusMsg('PIN Incorrecto');
       setPin('');
       setTimeout(() => setStatusMsg(''), 3000);
       return;
     }
-    
-    const { data: students } = await supabase.from('parent_students').select('student_id, students(tenant_id)').eq('parent_id', profile.id);
-    if (students && students.length > 0) {
-      for (const st of students) {
+
+    const { data: students } = await supabase.from('parent_students').select('student_id, students(tenant_id)').eq('parent_id', parentId);
+    // Solo se anuncia a los alumnos de ESTE colegio: un padre con hijos en
+    // dos colegios (bus en uno, recogida en carro en el otro) no debe
+    // disparar un anuncio de llegada en el colegio donde no está parado.
+    const studentsHere = (students || []).filter((st) => (st.students as any)?.tenant_id === staffProfile.tenant_id);
+    if (studentsHere.length > 0) {
+      for (const st of studentsHere) {
         await supabase.from('pickup_events').insert({
           student_id: st.student_id,
-          parent_id: profile.id,
+          parent_id: parentId,
           status: 'announced',
           announced_at: new Date(),
-          tenant_id: (st.students as any)?.tenant_id
+          tenant_id: staffProfile.tenant_id,
         });
       }
       setStatusMsg('¡Anuncio Exitoso!');
@@ -551,13 +557,14 @@ export function SmartCheckIn() {
       // Sin filtrar por tenant_id, esto comparaba contra los padres de TODOS
       // los colegios — fuga entre colegios (RLS no lo frena: is_staff_of()
       // no filtra por sí sola, ver ESTADO-DEL-PROYECTO.md §4) y además hacía
-      // el reconocimiento mucho más lento de lo necesario.
-      const { data: parents, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, photo_url, tenant_id')
-        .eq('tenant_id', staffProfile.tenant_id)
-        .not('photo_url', 'is', null)
-        .neq('photo_url', '');
+      // el reconocimiento mucho más lento de lo necesario. Va por RPC
+      // (list_checkin_parents), no un .eq('tenant_id') plano, para incluir
+      // también a los padres con acceso prestado (parent_school_access) —
+      // su perfil vive en otro colegio pero pueden recoger aquí.
+      const { data: parentsRaw, error: fetchError } = await supabase.rpc('list_checkin_parents', {
+        p_tenant_id: staffProfile.tenant_id,
+      });
+      const parents = (parentsRaw || []).filter((p: any) => p.photo_url && p.photo_url !== '');
 
       if (fetchError || !parents || parents.length === 0) {
         throw new Error("No hay padres registrados con foto para comparar.");
