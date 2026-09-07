@@ -613,6 +613,63 @@ app.post(
   }),
 );
 
+/**
+ * Padres con acceso PRESTADO a este colegio (parent_school_access) — no
+ * aparecen en el listado normal de GuardiansRegistry porque ese filtra por
+ * profiles.tenant_id = este colegio, y el perfil de un padre prestado vive
+ * en el OTRO. Sin este endpoint no había forma de ver ni revocar un
+ * vínculo ya creado desde la pantalla.
+ */
+app.get(
+  '/api/parents/school-access',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = resolveTenantId(req.caller, req.query.tenant_id as string | undefined);
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const {data: grants, error: grantsError} = await admin
+      .from('parent_school_access')
+      .select('parent_id, tenant_id, created_at')
+      .eq('tenant_id', tenantId);
+    if (grantsError) return fail(res, 500, grantsError.message);
+    if (!grants || grants.length === 0) return ok(res, []);
+
+    const parentIds = grants.map((g) => g.parent_id);
+    const [parentsRes, studentsHereRes] = await Promise.all([
+      admin.from('profiles').select('id, first_name, last_name, email, phone, photo_url, tenant_id').in('id', parentIds),
+      admin.from('students').select('id').eq('tenant_id', tenantId),
+    ]);
+    if (parentsRes.error) return fail(res, 500, parentsRes.error.message);
+
+    const homeTenantIds = [...new Set((parentsRes.data ?? []).map((p) => p.tenant_id).filter(Boolean))];
+    const {data: homeTenants} = await admin.from('tenants').select('id, name').in('id', homeTenantIds);
+    const tenantNameById = new Map((homeTenants ?? []).map((t) => [t.id, t.name]));
+
+    const idsHere = new Set((studentsHereRes.data ?? []).map((s) => s.id));
+    const {data: links} = await admin
+      .from('parent_students')
+      .select('parent_id, students(id, first_name, last_name, grade, section)')
+      .in('parent_id', parentIds);
+
+    const studentsByParent = new Map<string, unknown[]>();
+    for (const l of links ?? []) {
+      const student = l.students as any;
+      if (!student || !idsHere.has(student.id)) continue;
+      const list = studentsByParent.get(l.parent_id) ?? [];
+      list.push(student);
+      studentsByParent.set(l.parent_id, list);
+    }
+
+    const result = (parentsRes.data ?? []).map((p) => ({
+      ...p,
+      home_tenant_name: tenantNameById.get(p.tenant_id) ?? null,
+      students: studentsByParent.get(p.id) ?? [],
+    }));
+
+    return ok(res, result);
+  }),
+);
+
 app.delete(
   '/api/parents/school-access/:parentId/:tenantId',
   requireAuth,

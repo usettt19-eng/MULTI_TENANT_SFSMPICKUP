@@ -44,6 +44,8 @@ export function GuardiansRegistry() {
   const [linkSelectedStudents, setLinkSelectedStudents] = useState<string[]>([]);
   const [linkStudentSearchTerm, setLinkStudentSearchTerm] = useState('');
   const [linkSaving, setLinkSaving] = useState(false);
+  const [grantedParents, setGrantedParents] = useState<any[]>([]);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -75,11 +77,42 @@ export function GuardiansRegistry() {
   useEffect(() => {
     fetchGuardians();
     fetchStudents();
+    fetchGrantedParents();
     if (localStorage.getItem('openAddGuardianModal') === 'true') {
       setIsModalOpen(true);
       localStorage.removeItem('openAddGuardianModal');
     }
   }, [profile?.tenant_id]);
+
+  // Padres con acceso PRESTADO a este colegio (parent_school_access) — su
+  // perfil vive en OTRO colegio, así que el listado normal de guardians
+  // (filtrado por tenant_id propio) nunca los muestra.
+  const fetchGrantedParents = async () => {
+    if (!profile?.tenant_id) return;
+    try {
+      const res = await apiFetch(`/api/parents/school-access?tenant_id=${profile.tenant_id}`);
+      const json = await res.json();
+      if (json.success) setGrantedParents(json.data || []);
+    } catch (error) {
+      console.error('Error fetching granted parents:', error);
+    }
+  };
+
+  const handleRevokeSchoolAccess = async (parentId: string, name: string) => {
+    if (!profile?.tenant_id) return;
+    if (!confirm(`¿Quitar el acceso de ${name} a este colegio? Ya no verá a sus hijos de aquí en la app.`)) return;
+    setRevokingId(parentId);
+    try {
+      const res = await apiFetch(`/api/parents/school-access/${parentId}/${profile.tenant_id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al quitar el acceso.');
+      fetchGrantedParents();
+    } catch (error: any) {
+      alert('Error al quitar el acceso: ' + (error.message || String(error)));
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   const fetchGuardians = async () => {
     if (!profile?.tenant_id) return;
@@ -546,7 +579,7 @@ export function GuardiansRegistry() {
       if (!res.ok || !json.success) throw new Error(json.error || 'Error al vincular.');
       setShowLinkOtherSchoolModal(false);
       resetLinkOtherSchoolForm();
-      fetchGuardians();
+      fetchGrantedParents();
     } catch (error: any) {
       alert('Error al vincular: ' + (error.message || String(error)));
     } finally {
@@ -555,6 +588,11 @@ export function GuardiansRegistry() {
   };
 
   const filteredGuardians = guardians.filter(g =>
+    `${g.first_name} ${g.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    g.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredGrantedParents = grantedParents.filter(g =>
     `${g.first_name} ${g.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     g.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -640,6 +678,51 @@ export function GuardiansRegistry() {
             </button>
           </div>
         </div>
+
+        {/* Padres de otro colegio con acceso prestado aquí (parent_school_access) */}
+        {filteredGrantedParents.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Link className="w-4 h-4 text-amber-700" />
+              <h2 className="text-xs font-black text-amber-800 uppercase tracking-widest">
+                Padres de Otro Colegio con Acceso Aquí
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredGrantedParents.map((g) => (
+                <div key={g.id} className="bg-white rounded-2xl p-4 border border-amber-100 flex items-start gap-3">
+                  {g.photo_url ? (
+                    <img src={g.photo_url} className="w-11 h-11 rounded-xl object-cover shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                      <Users className="w-5 h-5 text-amber-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-slate-800 truncate">{g.first_name} {g.last_name}</p>
+                    <p className="text-[10px] font-bold text-amber-700 uppercase truncate">
+                      Cuenta en {g.home_tenant_name || 'otro colegio'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">{g.email}</p>
+                    {g.students?.length > 0 && (
+                      <p className="text-[10px] text-slate-500 font-medium mt-1 truncate">
+                        Aquí: {g.students.map((s: any) => `${s.first_name} ${s.last_name}`).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRevokeSchoolAccess(g.id, `${g.first_name} ${g.last_name}`)}
+                    disabled={revokingId === g.id}
+                    title="Quitar acceso a este colegio"
+                    className="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {revokingId === g.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Directory View */}
         {loading ? (
