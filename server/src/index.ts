@@ -697,6 +697,76 @@ app.delete(
   }),
 );
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Reenvía la invitación a todos los padres del colegio que NUNCA se han
+ * logueado (auth.users.last_sign_in_at IS NULL). inviteUserByEmail() en un
+ * usuario ya existente pero sin confirmar no crea uno nuevo ni rompe su
+ * profile/parent_students — GoTrue regenera el token y reenvía el correo.
+ * No se espera el loop completo antes de responder (puede tomar minutos
+ * con 300+ padres): se responde con el total a enviar y se sigue en
+ * segundo plano, con una pausa entre cada uno para no saturar el límite de
+ * envío de SES ni el rate limit de Supabase Auth. El progreso queda en los
+ * logs del contenedor (`docker compose logs api`).
+ */
+app.post(
+  '/api/parents/resend-invites',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = resolveTenantId(req.caller, req.body?.tenant_id);
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const [{data: parents, error}, lastSignIns] = await Promise.all([
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email, additional_tutor_name')
+        .eq('tenant_id', tenantId)
+        .eq('role', 'parent')
+        .not('email', 'is', null),
+      fetchAllAuthUsersLastSignIn(),
+    ]);
+    if (error) return fail(res, 500, error.message);
+
+    const isBusRoute = (p: {additional_tutor_name: string | null}) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+
+    const targets = (parents ?? []).filter((p) => !isBusRoute(p) && !lastSignIns.get(p.id));
+
+    ok(res, {target_count: targets.length});
+    if (targets.length === 0) return;
+
+    void (async () => {
+      let sent = 0;
+      let failed = 0;
+      for (const p of targets) {
+        try {
+          const {error: inviteError} = await admin.auth.admin.inviteUserByEmail(p.email!, {
+            redirectTo: process.env.PUBLIC_APP_URL || undefined,
+            data: {first_name: p.first_name ?? '', last_name: p.last_name ?? '', role: 'parent', tenant_id: tenantId},
+          });
+          if (inviteError) {
+            failed++;
+            console.error(`[resend-invites] ${p.email}: ${inviteError.message}`);
+          } else {
+            sent++;
+          }
+        } catch (err: any) {
+          failed++;
+          console.error(`[resend-invites] ${p.email}: ${err?.message ?? err}`);
+        }
+        await sleep(600);
+      }
+      console.log(`[resend-invites] tenant=${tenantId} terminado: ${sent} enviados, ${failed} fallidos de ${targets.length}.`);
+    })();
+  }),
+);
+
 app.post(
   '/api/parents/bulk',
   requireAuth,

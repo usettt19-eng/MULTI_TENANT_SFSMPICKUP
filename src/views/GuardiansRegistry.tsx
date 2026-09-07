@@ -46,6 +46,7 @@ export function GuardiansRegistry() {
   const [linkSaving, setLinkSaving] = useState(false);
   const [grantedParents, setGrantedParents] = useState<any[]>([]);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [resendingInvites, setResendingInvites] = useState(false);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -587,6 +588,25 @@ export function GuardiansRegistry() {
     }
   };
 
+  const handleResendInvites = async () => {
+    if (!profile?.tenant_id) return;
+    if (!confirm('¿Reenviar la invitación a TODOS los padres de este colegio que nunca se han logueado? Puede tardar varios minutos en completarse.')) return;
+    setResendingInvites(true);
+    try {
+      const res = await apiFetch('/api/parents/resend-invites', {
+        method: 'POST',
+        body: JSON.stringify({ tenant_id: profile.tenant_id }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al reenviar invitaciones.');
+      alert(`Enviando invitaciones a ${json.data.target_count} padre(s) en segundo plano. Puede tardar varios minutos.`);
+    } catch (error: any) {
+      alert('Error al reenviar invitaciones: ' + (error.message || String(error)));
+    } finally {
+      setResendingInvites(false);
+    }
+  };
+
   const filteredGuardians = guardians.filter(g =>
     `${g.first_name} ${g.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     g.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -667,6 +687,16 @@ export function GuardiansRegistry() {
             >
               <Link className="w-4 h-4" />
               Otro Colegio
+            </button>
+
+            <button
+              onClick={handleResendInvites}
+              disabled={resendingInvites}
+              title="Reenviar la invitación a los padres que nunca se han logueado"
+              className="flex items-center gap-2 bg-surface-container-high text-primary px-4 py-2 rounded-xl font-bold text-sm hover:bg-surface-variant transition-colors shadow-sm disabled:opacity-50"
+            >
+              {resendingInvites ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Reenviar Invitaciones
             </button>
 
             <button
