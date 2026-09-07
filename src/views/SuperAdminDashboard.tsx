@@ -1,7 +1,7 @@
 import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Tenant {
@@ -39,6 +39,7 @@ export function SuperAdminDashboard() {
   const { profile, enterTenantAsAdmin } = useAuth() as any;
 
   const [stats, setStats] = useState<Record<string, any>>({});
+  const [staffListModal, setStaffListModal] = useState<Tenant | null>(null);
 
   useEffect(() => {
     fetchTenants();
@@ -288,8 +289,16 @@ export function SuperAdminDashboard() {
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨🏽‍🏫 {stats[tenant.id].staff} Staff</span>
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">🚪 {stats[tenant.id].doors} Puertas</span>
                             <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                              🟢 {stats[tenant.id].parentsLoggedToday ?? 0} Logeados Hoy
+                              🟢 {stats[tenant.id].parentsLoggedToday ?? 0} Padres Logeados Hoy
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => setStaffListModal(tenant)}
+                              disabled={!(stats[tenant.id].staffLoggedToday?.length > 0)}
+                              className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:hover:bg-indigo-50 disabled:cursor-default"
+                            >
+                              🧑‍🏫 {stats[tenant.id].staffLoggedToday?.length ?? 0} Staff Logeado Hoy
+                            </button>
                             {(stats[tenant.id].latitude && stats[tenant.id].longitude) && (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded">
                                 📍 {stats[tenant.id].latitude}, {stats[tenant.id].longitude}
@@ -539,6 +548,44 @@ export function SuperAdminDashboard() {
                   {isResettingPassword ? 'Actualizando...' : 'Actualizar'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff logueado hoy */}
+      {staffListModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Staff Logueado Hoy</h2>
+                <p className="text-xs text-slate-500 font-medium">{staffListModal.name}</p>
+              </div>
+              <button onClick={() => setStaffListModal(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto space-y-2">
+              {(stats[staffListModal.id]?.staffLoggedToday ?? [])
+                .slice()
+                .sort((a: any, b: any) => new Date(b.last_sign_in_at).getTime() - new Date(a.last_sign_in_at).getTime())
+                .map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{s.first_name} {s.last_name}</p>
+                      <p className="text-xs text-slate-400">{s.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${s.is_founder ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                        {s.is_founder ? 'Admin' : 'Staff'}
+                      </span>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {new Date(s.last_sign_in_at).toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
         </div>

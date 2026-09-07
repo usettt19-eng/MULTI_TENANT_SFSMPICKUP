@@ -161,10 +161,13 @@ async function fetchAllAuthUsersLastSignIn(): Promise<Map<string, string | null>
  * Estadísticas por colegio para el panel de super_admin.
  *
  * SuperAdminDashboard.tsx las indexa como `stats[tenant.id].students`,
- * `.parents`, `.staff`, `.doors`, `.latitude/.longitude`, `.parentsLoggedToday`
- * — no es un conteo global, es un objeto por tenant. `staff` replica el
- * criterio de StaffManagement.tsx: role='admin' Y el flag is_staff dentro del
- * JSON de additional_tutor_name (así no cuenta doble a los admins fundadores).
+ * `.parents`, `.staff`, `.doors`, `.latitude/.longitude`, `.parentsLoggedToday`,
+ * `.staffLoggedToday` — no es un conteo global, es un objeto por tenant.
+ * `staff` replica el criterio de StaffManagement.tsx: role='admin' Y el flag
+ * is_staff dentro del JSON de additional_tutor_name (así no cuenta doble a
+ * los admins fundadores). `staffLoggedToday` en cambio junta a TODO el que
+ * tiene acceso de personal en el colegio (fundador + is_staff) — es una
+ * lista para mostrar quién entró hoy, no un conteo de "cuántos hay".
  */
 app.get(
   '/api/tenants/stats',
@@ -184,14 +187,14 @@ app.get(
       if (r.error) return fail(res, 500, `${name}: ${r.error.message}`);
     }
 
-    const isStaff = (p: {role: string; additional_tutor_name: string | null}) => {
-      if (p.role !== 'admin') return false;
+    const isStaffFlag = (p: {additional_tutor_name: string | null}) => {
       try {
         return JSON.parse(p.additional_tutor_name || '{}')?.is_staff === true;
       } catch {
         return false;
       }
     };
+    const isStaff = (p: {role: string; additional_tutor_name: string | null}) => p.role === 'admin' && isStaffFlag(p);
 
     const stats: Record<
       string,
@@ -199,11 +202,15 @@ app.get(
         students: number; parents: number; staff: number; doors: number; parentsLoggedToday: number;
         latitude: number | null; longitude: number | null;
         admin: {id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null} | null;
+        staffLoggedToday: {id: string; first_name: string | null; last_name: string | null; email: string | null; is_founder: boolean; last_sign_in_at: string}[];
       }
     > = {};
 
     for (const t of tenants.data ?? []) {
-      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, parentsLoggedToday: 0, latitude: null, longitude: null, admin: null};
+      stats[t.id] = {
+        students: 0, parents: 0, staff: 0, doors: 0, parentsLoggedToday: 0,
+        latitude: null, longitude: null, admin: null, staffLoggedToday: [],
+      };
     }
     for (const s of students.data ?? []) {
       if (s.tenant_id && stats[s.tenant_id]) stats[s.tenant_id].students++;
@@ -219,15 +226,26 @@ app.get(
         stats[p.tenant_id].parents++;
         const lastSignIn = lastSignIns.get(p.id);
         if (lastSignIn && new Date(lastSignIn) >= todayStartUTC) stats[p.tenant_id].parentsLoggedToday++;
-      } else if (isStaff(p)) {
-        stats[p.tenant_id].staff++;
       } else if (p.role === 'admin') {
-        const current = earliestAdminAt[p.tenant_id];
-        if (!current || p.created_at < current) {
-          earliestAdminAt[p.tenant_id] = p.created_at;
-          stats[p.tenant_id].admin = {
-            id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, phone: p.phone,
-          };
+        const isFounder = !isStaffFlag(p);
+        if (!isFounder) stats[p.tenant_id].staff++;
+
+        if (isFounder) {
+          const current = earliestAdminAt[p.tenant_id];
+          if (!current || p.created_at < current) {
+            earliestAdminAt[p.tenant_id] = p.created_at;
+            stats[p.tenant_id].admin = {
+              id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, phone: p.phone,
+            };
+          }
+        }
+
+        const lastSignIn = lastSignIns.get(p.id);
+        if (lastSignIn && new Date(lastSignIn) >= todayStartUTC) {
+          stats[p.tenant_id].staffLoggedToday.push({
+            id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email,
+            is_founder: isFounder, last_sign_in_at: lastSignIn,
+          });
         }
       }
     }
