@@ -107,7 +107,7 @@ export function RequestsCenter() {
     if (isInitial) setLoading(true);
     const { data } = await supabase
       .from('replacement_requests')
-      .select('*, parent:profiles(first_name, last_name, tenant_id, parent_students(students(first_name, last_name)))')
+      .select('*, parent:profiles(first_name, last_name, tenant_id, parent_students(students(id, first_name, last_name, tenant_id)))')
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
 
@@ -159,6 +159,10 @@ export function RequestsCenter() {
             is_recurring: req.is_recurring !== false,
             days_of_week: req.is_recurring !== false ? (req.days_of_week ?? null) : null,
             used_at: null,
+            // null/ausente = todos los hijos (solicitudes de antes de este
+            // campo) — ver ESTADO-DEL-PROYECTO.md sobre por qué esto importa
+            // para un padre con hijos en dos colegios.
+            student_ids: req.student_ids ?? null,
           };
 
           additionalData.replacements.push(newReplacement);
@@ -329,16 +333,28 @@ export function RequestsCenter() {
                             </p>
                             <p className="text-xs font-bold mt-1">
                               {t('requests.forChildren')}{' '}
-                              {req.parent?.parent_students?.length > 0 ? (
-                                <span className="text-indigo-600">
-                                  {req.parent.parent_students
-                                    .map((ps: any) => ps.students ? `${ps.students.first_name} ${ps.students.last_name || ''}`.trim() : null)
-                                    .filter(Boolean)
-                                    .join(', ')}
-                                </span>
-                              ) : (
-                                <span className="text-amber-600">{t('requests.noChildrenLinked')}</span>
-                              )}
+                              {(() => {
+                                // Solo los hijos que el padre marcó (student_ids) — y,
+                                // de todas formas, solo los de ESTE colegio: un padre
+                                // con hijos en dos colegios (parent_school_access) no
+                                // debe ver acá al hijo del otro. Solicitudes de antes
+                                // de este campo (student_ids null) caen al criterio
+                                // viejo: todos los hijos de este colegio.
+                                const allLinked = (req.parent?.parent_students ?? [])
+                                  .map((ps: any) => ps.students)
+                                  .filter((s: any) => s && s.tenant_id === profile?.tenant_id);
+                                const hasSelection = Array.isArray(req.student_ids) && req.student_ids.length > 0;
+                                const relevant = hasSelection
+                                  ? allLinked.filter((s: any) => req.student_ids.includes(s.id))
+                                  : allLinked;
+                                return relevant.length > 0 ? (
+                                  <span className="text-indigo-600">
+                                    {relevant.map((s: any) => `${s.first_name} ${s.last_name || ''}`.trim()).join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600">{t('requests.noChildrenLinked')}</span>
+                                );
+                              })()}
                             </p>
                             <p className="text-[10px] font-bold uppercase tracking-widest mt-1">
                               {req.is_recurring === false ? (

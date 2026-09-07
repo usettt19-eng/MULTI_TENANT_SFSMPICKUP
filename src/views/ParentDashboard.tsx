@@ -114,6 +114,10 @@ export function ParentDashboard() {
   // consume al escanearse en la puerta.
   const [isReplacementRecurring, setIsReplacementRecurring] = useState(true);
   const [replacementDays, setReplacementDays] = useState<number[]>([]);
+  // A cuáles hijos aplica — importa sobre todo para un padre con hijos en
+  // dos colegios (parent_school_access): sin elegir, el permiso quedaba
+  // válido para TODOS sus hijos, incluso los del otro colegio.
+  const [replacementStudentIds, setReplacementStudentIds] = useState<string[]>([]);
 
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
@@ -582,6 +586,10 @@ export function ParentDashboard() {
       setErrorMessage(t('parent.replacement.daysRequiredError'));
       return;
     }
+    if (replacementStudentIds.length === 0) {
+      setErrorMessage('Selecciona a cuál(es) de tus hijos aplica este permiso.');
+      return;
+    }
 
     setIsSubmittingReplacement(true);
     try {
@@ -613,6 +621,7 @@ export function ParentDashboard() {
           tenant_id: profile?.tenant_id,
           is_recurring: isReplacementRecurring,
           days_of_week: isReplacementRecurring ? replacementDays : null,
+          student_ids: replacementStudentIds,
         })
       });
 
@@ -638,6 +647,7 @@ export function ParentDashboard() {
       setReplacementPhotoPreview(null);
       setIsReplacementRecurring(true);
       setReplacementDays([]);
+      setReplacementStudentIds([]);
     } catch (err: any) {
       console.error(err);
       alert(t('parent.replacement.submitErrorPrefix') + (err.message || String(err)));
@@ -1689,7 +1699,7 @@ export function ParentDashboard() {
             )}
 
             <button
-              onClick={() => setShowReplacementModal(true)}
+              onClick={() => { setReplacementStudentIds(students.map((s: any) => s.id)); setShowReplacementModal(true); }}
               className="w-full p-6 bg-white border-2 border-dashed border-indigo-200 rounded-[2.5rem] flex items-center justify-center gap-3 text-indigo-600 font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all"
             >
               <UserPlus className="w-5 h-5" />
@@ -2012,6 +2022,40 @@ export function ParentDashboard() {
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
                   {t('parent.replacement.modalDescription')}
                 </p>
+                {students.length > 0 && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                      ¿A cuál(es) de tus hijos aplica?
+                    </label>
+                    <div className="space-y-2">
+                      {students.map((s: any) => {
+                        const checked = replacementStudentIds.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
+                              checked ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setReplacementStudentIds((prev) =>
+                                  checked ? prev.filter((id) => id !== s.id) : [...prev, s.id],
+                                )
+                              }
+                              className="w-4 h-4 accent-indigo-600"
+                            />
+                            <span className="text-sm font-bold text-slate-700">
+                              {s.first_name} {s.last_name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('parent.replacement.fullNameLabel')}</label>

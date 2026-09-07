@@ -8,7 +8,7 @@ import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
-import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow } from '../lib/pickupHelpers';
+import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
 
@@ -325,7 +325,13 @@ export function VerificationDisplay() {
     })();
     const replacements = additionalData.replacements || [];
     const match = findMatchingReplacement(replacements, data.token, data.replacement_name);
-    const isValid = !!parentProfile && !!match && isReplacementAuthorizedNow(match);
+    // El reemplazo puede estar limitado a ciertos hijos (student_ids) — si
+    // el alumno que se está verificando ahora mismo no es uno de ellos
+    // (ej. un padre con hijos en dos colegios que solo autorizó para uno),
+    // el QR es válido en general pero no aplica a ESTA recogida.
+    const appliesToCurrentStudent =
+      !currentPickup?.student_id || !match || isReplacementForStudent(match, currentPickup.student_id);
+    const isValid = !!parentProfile && !!match && isReplacementAuthorizedNow(match) && appliesToCurrentStudent;
 
     if (isValid && match && match.is_recurring === false) {
       // De un solo uso: se consume apenas se valida, para que el mismo QR
@@ -349,10 +355,13 @@ export function VerificationDisplay() {
         tenant_id: parentProfile?.tenant_id ?? profile?.tenant_id,
       });
     } else {
-      setQrScanMessage(t('monitor.qrInvalidOrExpired'));
+      const wrongStudent = !!match && isReplacementAuthorizedNow(match) && !appliesToCurrentStudent;
+      setQrScanMessage(wrongStudent ? 'Este reemplazo no está autorizado para este alumno.' : t('monitor.qrInvalidOrExpired'));
       await supabase.from('audit_logs').insert({
         event_type: 'SECURITY',
-        description: `VERIFICACIÓN QR FALLIDA (Monitor Externo): intento de uso de un código inválido para ${data.replacement_name || 'desconocido'}.`,
+        description: wrongStudent
+          ? `VERIFICACIÓN QR FALLIDA (Monitor Externo): reemplazo ${data.replacement_name} válido pero no autorizado para este alumno.`
+          : `VERIFICACIÓN QR FALLIDA (Monitor Externo): intento de uso de un código inválido para ${data.replacement_name || 'desconocido'}.`,
         actor_name: 'Sistema QR',
         metadata: { method: 'qr_code', result: 'failure' },
         tenant_id: profile?.tenant_id,

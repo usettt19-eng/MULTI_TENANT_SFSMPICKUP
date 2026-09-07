@@ -18,7 +18,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { apiJson } from '../lib/apiFetch';
-import { findMatchingReplacement, isReplacementAuthorizedNow } from '../lib/pickupHelpers';
+import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -242,17 +242,24 @@ export function SmartCheckIn() {
             // Set recognized parent so the modal works
             setRecognizedParent(parentProfile);
             
-            // Fetch students
+            // Fetch students — solo los de ESTE colegio (un padre con hijos
+            // en dos colegios, parent_school_access, no debe poder marcar
+            // acá al hijo del otro) y, si el reemplazo se limitó a ciertos
+            // hijos (student_ids), solo esos.
             const { data: studentLinks } = await supabase
               .from('parent_students')
               .select('student_id, students(*)')
               .eq('parent_id', parentProfile.id);
-            
-            if (studentLinks && studentLinks.length > 0) {
-              setLinkedStudents(studentLinks.map(l => l.students));
+
+            const eligibleStudents = (studentLinks || [])
+              .map(l => l.students)
+              .filter((s: any) => s && s.tenant_id === staffProfile?.tenant_id && isReplacementForStudent(match, s.id));
+
+            if (eligibleStudents.length > 0) {
+              setLinkedStudents(eligibleStudents);
               setShowStudentModal(true);
             } else {
-              setStatusMsg('Padre reconocido pero no tiene alumnos asignados.');
+              setStatusMsg('Padre reconocido pero no tiene alumnos asignados en este colegio.');
             }
             
             // Log success

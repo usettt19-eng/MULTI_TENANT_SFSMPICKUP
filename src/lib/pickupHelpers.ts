@@ -51,6 +51,12 @@ export interface ReplacementAuthorization {
   // Solo aplica si is_recurring es false: fecha en que se consumió el
   // único uso permitido.
   used_at?: string | null;
+  // A cuáles hijos del padre aplica. null/undefined/[] (registros de antes
+  // de este campo) se trata como "todos los hijos del padre", igual que el
+  // comportamiento original — importa sobre todo para un padre con hijos en
+  // dos colegios (parent_school_access): sin esto, autorizar un reemplazo
+  // para uno de sus hijos lo autorizaba también en el OTRO colegio.
+  student_ids?: string[] | null;
 }
 
 export function findMatchingReplacement(
@@ -68,4 +74,9 @@ export function isReplacementAuthorizedNow(r: ReplacementAuthorization): boolean
     return r.days_of_week.includes(new Date().getDay());
   }
   return !r.used_at;
+}
+
+export function isReplacementForStudent(r: ReplacementAuthorization, studentId: string): boolean {
+  if (!Array.isArray(r.student_ids) || r.student_ids.length === 0) return true;
+  return r.student_ids.includes(studentId);
 }

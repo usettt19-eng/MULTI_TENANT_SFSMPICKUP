@@ -1386,6 +1386,28 @@ app.post(
       }
     }
 
+    // A qué hijo(s) aplica — solo se valida/exige cuando el llamante lo
+    // manda explícitamente (el formulario de "Solicitar Reemplazo" siempre
+    // lo manda; el aviso de "Delivery/Mensaje" reusa este mismo endpoint
+    // sin selector de alumno, y no debe romperse por esto). Se descartan
+    // ids que no sean realmente hijos de este padre — no confiar en lo que
+    // mande el cliente a ciegas.
+    const rawStudentIds = req.body?.student_ids;
+    let studentIds: string[] | null = null;
+    if (Array.isArray(rawStudentIds) && rawStudentIds.length > 0) {
+      const candidateIds = rawStudentIds.filter((id: unknown): id is string => typeof id === 'string');
+      const {data: validLinks} = await admin
+        .from('parent_students')
+        .select('student_id')
+        .eq('parent_id', requestedFor)
+        .in('student_id', candidateIds);
+      const validIds = new Set((validLinks ?? []).map((l) => l.student_id));
+      studentIds = candidateIds.filter((id) => validIds.has(id));
+      if (studentIds.length === 0) {
+        return fail(res, 400, 'Ninguno de los alumnos indicados pertenece a este padre.');
+      }
+    }
+
     const {data, error} = await admin
       .from('replacement_requests')
       .insert({
@@ -1397,6 +1419,7 @@ app.post(
         tenant_id: req.caller!.tenantId,
         is_recurring: isRecurring,
         days_of_week: daysOfWeek,
+        student_ids: studentIds,
       })
       .select()
       .single();
