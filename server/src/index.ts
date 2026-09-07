@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import express from 'express';
 import {admin} from './supabase.js';
 import {fail, isAdminOf, isStaffOf, ok, requireAuth, requireSuperAdmin, resolveTenantId} from './auth.js';
@@ -390,6 +391,96 @@ app.delete(
     if (error) return fail(res, 400, error.message);
 
     await admin.from('profiles').delete().eq('id', id);
+    return ok(res, {id});
+  }),
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// RUTAS DE BUS
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Una ruta de bus se apoya en un perfil de padre "fantasma" (profiles.role =
+ * 'parent', marcado con additional_tutor_name.is_bus_route) que nunca inicia
+ * sesión, solo sirve de contenedor de parent_students. Antes se creaba con un
+ * INSERT directo a profiles desde el cliente, con un id generado por
+ * crypto.randomUUID() en el navegador — sin fila correspondiente en
+ * auth.users. Eso rompía
+ * cualquier notificación (notifications.user_id tiene FK a auth.users) en
+ * cuanto un alumno de esa ruta se autorizaba. Acá se crea con
+ * admin.auth.admin.createUser(), que NO manda correo (a diferencia de
+ * inviteUserByEmail) pero sí deja una fila real en auth.users.
+ */
+app.post(
+  '/api/bus-routes',
+  requireAuth,
+  wrap(async (req, res) => {
+    const body = req.body ?? {};
+    const tenantId = resolveTenantId(req.caller, body.tenant_id);
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return fail(res, 400, 'Falta el nombre de la ruta.');
+
+    const studentIds: string[] = Array.isArray(body.student_ids) ? body.student_ids : [];
+    const doorId: string | null = typeof body.door_id === 'string' && body.door_id ? body.door_id : null;
+
+    const syntheticEmail = `busroute+${randomUUID()}@no-reply.safesmartpickup.com`;
+    const {data: created, error: userError} = await admin.auth.admin.createUser({
+      email: syntheticEmail,
+      email_confirm: true,
+      password: randomUUID(),
+      user_metadata: {first_name: name, last_name: '', role: 'parent', tenant_id: tenantId},
+    });
+    if (userError || !created?.user) return fail(res, 400, userError?.message ?? 'No se pudo crear la ruta.');
+
+    const profileId = created.user.id;
+    const {error: profileError} = await admin
+      .from('profiles')
+      .update({additional_tutor_name: JSON.stringify({is_bus_route: true})})
+      .eq('id', profileId);
+    if (profileError) return fail(res, 500, profileError.message);
+
+    const {data: route, error: routeError} = await admin
+      .from('bus_routes')
+      .insert({tenant_id: tenantId, name, profile_id: profileId, door_id: doorId})
+      .select()
+      .single();
+    if (routeError) return fail(res, 500, routeError.message);
+
+    if (studentIds.length > 0) {
+      const {error: linkError} = await admin
+        .from('parent_students')
+        .insert(studentIds.map((student_id) => ({parent_id: profileId, student_id})));
+      if (linkError) return fail(res, 500, linkError.message);
+    }
+
+    return ok(res, route);
+  }),
+);
+
+app.delete(
+  '/api/bus-routes/:id',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {id} = req.params;
+
+    const {data: route} = await admin
+      .from('bus_routes')
+      .select('id, tenant_id, profile_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!route) return fail(res, 404, 'Ruta no encontrada.');
+    if (!isStaffOf(req.caller, route.tenant_id)) return fail(res, 403, 'Sin permisos sobre esa ruta.');
+
+    await admin.from('parent_students').delete().eq('parent_id', route.profile_id);
+    await admin.from('bus_routes').delete().eq('id', id);
+
+    const {error} = await admin.auth.admin.deleteUser(route.profile_id);
+    if (error) return fail(res, 400, error.message);
+
+    await admin.from('profiles').delete().eq('id', route.profile_id);
     return ok(res, {id});
   }),
 );

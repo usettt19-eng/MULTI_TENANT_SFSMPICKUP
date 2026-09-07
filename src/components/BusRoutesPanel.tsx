@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
+import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
 import { Bus, Plus, Settings2, X, Search, CheckCircle2, Trash2, Loader2, Check, Car } from 'lucide-react';
 
@@ -173,30 +174,15 @@ export function BusRoutesPanel() {
           );
         }
       } else {
-        const profileId = crypto.randomUUID();
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: profileId,
-          tenant_id: profile.tenant_id,
-          role: 'parent',
-          first_name: name,
-          last_name: '',
-          additional_tutor_name: JSON.stringify({ is_bus_route: true }),
+        await apiJson('/api/bus-routes', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenant_id: profile.tenant_id,
+            name,
+            door_id: routeDoorId || null,
+            student_ids: selectedStudents,
+          }),
         });
-        if (profileError) throw profileError;
-
-        const { error: routeError } = await supabase.from('bus_routes').insert({
-          tenant_id: profile.tenant_id,
-          name,
-          profile_id: profileId,
-          door_id: routeDoorId || null,
-        });
-        if (routeError) throw routeError;
-
-        if (selectedStudents.length > 0) {
-          await supabase.from('parent_students').insert(
-            selectedStudents.map((student_id) => ({ parent_id: profileId, student_id })),
-          );
-        }
 
         await logActivity(
           'SYSTEM',
@@ -218,9 +204,12 @@ export function BusRoutesPanel() {
 
   const handleDeleteRoute = async (route: BusRoute) => {
     if (!confirm(`¿Eliminar la ruta "${route.name}"? No borra a los alumnos, solo la ruta.`)) return;
-    await supabase.from('parent_students').delete().eq('parent_id', route.profile_id);
-    await supabase.from('bus_routes').delete().eq('id', route.id);
-    await supabase.from('profiles').delete().eq('id', route.profile_id);
+    try {
+      await apiJson(`/api/bus-routes/${route.id}`, { method: 'DELETE' });
+    } catch (err: any) {
+      alert('Error al eliminar la ruta: ' + (err.message || String(err)));
+      return;
+    }
     fetchRoutes();
   };
 
