@@ -741,9 +741,21 @@ app.post(
     ok(res, {target_count: targets.length});
     if (targets.length === 0) return;
 
+    // Además de la consola (docker compose logs api, sin acceso directo al
+    // servidor), el resultado queda en audit_logs — así el admin lo ve
+    // desde la propia pantalla de Logs de la app, sin depender de SSH.
+    await admin.from('audit_logs').insert({
+      event_type: 'SYSTEM',
+      description: `REENVÍO DE INVITACIONES INICIADO: ${targets.length} padre(s) sin loguearse nunca.`,
+      actor_name: req.caller!.email || 'Admin',
+      metadata: {action: 'resend_invites_start', target_count: targets.length},
+      tenant_id: tenantId,
+    });
+
     void (async () => {
       let sent = 0;
       let failed = 0;
+      const failedEmails: string[] = [];
       for (const p of targets) {
         try {
           const {error: inviteError} = await admin.auth.admin.inviteUserByEmail(p.email!, {
@@ -752,17 +764,26 @@ app.post(
           });
           if (inviteError) {
             failed++;
+            failedEmails.push(p.email!);
             console.error(`[resend-invites] ${p.email}: ${inviteError.message}`);
           } else {
             sent++;
           }
         } catch (err: any) {
           failed++;
+          failedEmails.push(p.email!);
           console.error(`[resend-invites] ${p.email}: ${err?.message ?? err}`);
         }
         await sleep(600);
       }
       console.log(`[resend-invites] tenant=${tenantId} terminado: ${sent} enviados, ${failed} fallidos de ${targets.length}.`);
+      await admin.from('audit_logs').insert({
+        event_type: 'SYSTEM',
+        description: `REENVÍO DE INVITACIONES TERMINADO: ${sent} enviado(s), ${failed} fallido(s) de ${targets.length}.`,
+        actor_name: req.caller!.email || 'Admin',
+        metadata: {action: 'resend_invites_done', sent, failed, total: targets.length, failed_emails: failedEmails.slice(0, 50)},
+        tenant_id: tenantId,
+      });
     })();
   }),
 );
