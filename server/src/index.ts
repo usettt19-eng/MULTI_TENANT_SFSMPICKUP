@@ -168,22 +168,42 @@ async function fetchAllAuthUsersLastSignIn(): Promise<Map<string, string | null>
  * los admins fundadores). `staffLoggedToday` en cambio junta a TODO el que
  * tiene acceso de personal en el colegio (fundador + is_staff) — es una
  * lista para mostrar quién entró hoy, no un conteo de "cuántos hay".
+ *
+ * `staffActiveToday` NO usa last_sign_in_at: el staff (maestros, recepción)
+ * deja su tablet/computadora logueada por semanas, así que casi nunca
+ * "inicia sesión" de nuevo aunque trabaje todos los días — con un colegio
+ * de ~60 personas de staff eso hacía que el conteo por login mostrara 1
+ * aunque 21 personas distintas hubieran autorizado salidas ese mismo día.
+ * En cambio, se cuentan actores distintos en audit_logs (PICKUP/SECURITY)
+ * de hoy — actor_name es texto libre (no hay actor_id), así que es una
+ * aproximación: dos personas con el mismo nombre de pila cuentan como una.
  */
+const GENERIC_AUDIT_ACTORS = new Set([
+  'sistema', 'sistema auto', 'sistema qr', 'sistema facial',
+  'personal de puerta', 'recepcionista', 'recepción', 'admin',
+]);
+
 app.get(
   '/api/tenants/stats',
   requireAuth,
   requireSuperAdmin,
   wrap(async (_req, res) => {
-    const [tenants, students, profiles, doors, settings, lastSignIns] = await Promise.all([
+    const todayLocalStart = startOfTodayInPanamaUTC().toISOString();
+    const [tenants, students, profiles, doors, settings, lastSignIns, todayLogs] = await Promise.all([
       admin.from('tenants').select('id'),
       admin.from('students').select('tenant_id'),
       admin.from('profiles').select('id, tenant_id, role, first_name, last_name, email, phone, additional_tutor_name, created_at'),
       admin.from('exit_doors').select('tenant_id'),
       admin.from('school_settings').select('tenant_id, latitude, longitude'),
       fetchAllAuthUsersLastSignIn(),
+      admin
+        .from('audit_logs')
+        .select('tenant_id, actor_name, event_type, created_at')
+        .in('event_type', ['PICKUP', 'SECURITY'])
+        .gte('created_at', todayLocalStart),
     ]);
 
-    for (const [name, r] of Object.entries({tenants, students, profiles, doors, settings})) {
+    for (const [name, r] of Object.entries({tenants, students, profiles, doors, settings, todayLogs})) {
       if (r.error) return fail(res, 500, `${name}: ${r.error.message}`);
     }
 
@@ -202,15 +222,32 @@ app.get(
         students: number; parents: number; staff: number; doors: number; parentsLoggedToday: number;
         latitude: number | null; longitude: number | null;
         admin: {id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null} | null;
-        staffLoggedToday: {id: string; first_name: string | null; last_name: string | null; email: string | null; is_founder: boolean; last_sign_in_at: string}[];
+        staffActiveToday: {name: string; action_count: number; last_action_at: string}[];
       }
     > = {};
 
     for (const t of tenants.data ?? []) {
       stats[t.id] = {
         students: 0, parents: 0, staff: 0, doors: 0, parentsLoggedToday: 0,
-        latitude: null, longitude: null, admin: null, staffLoggedToday: [],
+        latitude: null, longitude: null, admin: null, staffActiveToday: [],
       };
+    }
+
+    const activeByTenant: Record<string, Map<string, {action_count: number; last_action_at: string}>> = {};
+    for (const log of todayLogs.data ?? []) {
+      if (!log.tenant_id || !stats[log.tenant_id]) continue;
+      const name = (log.actor_name || '').trim();
+      if (!name || GENERIC_AUDIT_ACTORS.has(name.toLowerCase())) continue;
+      const byName = (activeByTenant[log.tenant_id] ??= new Map());
+      const entry = byName.get(name) ?? {action_count: 0, last_action_at: log.created_at};
+      entry.action_count++;
+      if (log.created_at > entry.last_action_at) entry.last_action_at = log.created_at;
+      byName.set(name, entry);
+    }
+    for (const [tenantId, byName] of Object.entries(activeByTenant)) {
+      stats[tenantId].staffActiveToday = [...byName.entries()]
+        .map(([name, v]) => ({name, ...v}))
+        .sort((a, b) => (a.last_action_at < b.last_action_at ? 1 : -1));
     }
     for (const s of students.data ?? []) {
       if (s.tenant_id && stats[s.tenant_id]) stats[s.tenant_id].students++;
@@ -238,14 +275,6 @@ app.get(
               id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, phone: p.phone,
             };
           }
-        }
-
-        const lastSignIn = lastSignIns.get(p.id);
-        if (lastSignIn && new Date(lastSignIn) >= todayStartUTC) {
-          stats[p.tenant_id].staffLoggedToday.push({
-            id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email,
-            is_founder: isFounder, last_sign_in_at: lastSignIn,
-          });
         }
       }
     }

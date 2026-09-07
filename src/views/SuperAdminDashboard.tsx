@@ -294,10 +294,11 @@ export function SuperAdminDashboard() {
                             <button
                               type="button"
                               onClick={() => setStaffListModal(tenant)}
-                              disabled={!(stats[tenant.id].staffLoggedToday?.length > 0)}
+                              disabled={!(stats[tenant.id].staffActiveToday?.length > 0)}
+                              title="Staff que autorizó o registró alguna acción hoy (no depende de login — el staff deja su sesión abierta por semanas)"
                               className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:hover:bg-indigo-50 disabled:cursor-default"
                             >
-                              🧑‍🏫 {stats[tenant.id].staffLoggedToday?.length ?? 0} Staff Logeado Hoy
+                              🧑‍🏫 {stats[tenant.id].staffActiveToday?.length ?? 0} Staff Activo Hoy
                             </button>
                             {(stats[tenant.id].latitude && stats[tenant.id].longitude) && (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded">
@@ -559,33 +560,30 @@ export function SuperAdminDashboard() {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Staff Logueado Hoy</h2>
+                <h2 className="text-lg font-bold text-slate-900">Staff Activo Hoy</h2>
                 <p className="text-xs text-slate-500 font-medium">{staffListModal.name}</p>
               </div>
               <button onClick={() => setStaffListModal(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
+            <p className="px-6 pt-4 text-[11px] text-slate-400 font-medium leading-relaxed">
+              Basado en autorizaciones y acciones registradas hoy, no en login — el staff deja su sesión abierta por semanas.
+            </p>
             <div className="p-4 overflow-y-auto space-y-2">
-              {(stats[staffListModal.id]?.staffLoggedToday ?? [])
-                .slice()
-                .sort((a: any, b: any) => new Date(b.last_sign_in_at).getTime() - new Date(a.last_sign_in_at).getTime())
-                .map((s: any) => (
-                  <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{s.first_name} {s.last_name}</p>
-                      <p className="text-xs text-slate-400">{s.email}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${s.is_founder ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
-                        {s.is_founder ? 'Admin' : 'Staff'}
-                      </span>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        {new Date(s.last_sign_in_at).toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
+              {(stats[staffListModal.id]?.staffActiveToday ?? []).map((s: any) => (
+                <div key={s.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                  <div className="text-right">
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                      {s.action_count} acción{s.action_count === 1 ? '' : 'es'}
+                    </span>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {new Date(s.last_action_at).toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
-                ))}
+                </div>
+              ))}
             </div>
           </div>
         </div>
