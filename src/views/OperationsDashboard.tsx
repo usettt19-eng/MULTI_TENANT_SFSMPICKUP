@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
+import { apiFetch } from '../lib/apiFetch';
 import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,7 +49,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [selectedDoor, setSelectedDoor] = useState('puerta_1');
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '' });
+  const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '', parentsLoggedToday: 0 });
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   // Interruptor temporal para desactivar el límite de las 11am de
@@ -95,6 +96,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchHealthAlerts();
     fetchPendingRequests();
     fetchStats();
+    fetchParentsLoggedToday();
     fetchSchoolSettings();
     fetchDailyDepartures();
     fetchSelfDismissalsToday();
@@ -123,8 +125,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       fetchSchoolSettings();
     }, 10000);
 
+    // Aparte del poll de 10s de arriba — ver comentario en
+    // fetchParentsLoggedToday sobre por qué va separado.
+    const loggedTodayInterval = window.setInterval(fetchParentsLoggedToday, 120000);
+
     return () => {
       clearInterval(pollInterval);
+      clearInterval(loggedTodayInterval);
     };
   }, [profile?.tenant_id]);
 
@@ -345,7 +352,25 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       }
     }
 
-    setStats({ totalChildren: childrenCount || 0, totalParents: parentsCount || 0, topGrade });
+    setStats((prev) => ({ ...prev, totalChildren: childrenCount || 0, totalParents: parentsCount || 0, topGrade }));
+  };
+
+  // last_sign_in_at vive en auth.users, fuera del alcance de PostgREST sobre
+  // profiles — se pide al backend (service_role) igual que en el panel de
+  // SuperAdmin. Aparte de fetchStats() y con su propio intervalo, más
+  // espaciado: el dashboard entero refresca cada 10s, pero esto trae la
+  // lista completa de usuarios del proyecto (admin.auth.admin.listUsers)
+  // en el backend — meterlo en el poll de 10s multiplicaría innecesariamente
+  // esa carga sobre Supabase Auth en cada refresco.
+  const fetchParentsLoggedToday = async () => {
+    if (!profile?.tenant_id) return;
+    try {
+      const res = await apiFetch(`/api/tenants/${profile.tenant_id}/parents-logged-today`);
+      const json = await res.json();
+      if (json.success) setStats((prev) => ({ ...prev, parentsLoggedToday: json.data.count || 0 }));
+    } catch (e) {
+      console.error('Error fetching parentsLoggedToday:', e);
+    }
   };
 
   const fetchSchoolSettings = async () => {
@@ -835,7 +860,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           </section>
 
           {/* Quick Stats */}
-          <section className="grid grid-cols-3 gap-3">
+          <section className="grid grid-cols-2 gap-3">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.children')}</p>
               <p className="text-xl font-black text-slate-800">{stats.totalChildren}</p>
@@ -847,6 +872,10 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">{t('dashboard.topGrade')}</p>
               <p className="text-xl font-black text-slate-800">{stats.topGrade}</p>
+            </div>
+            <div className="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-100 text-center">
+              <p className="text-[9px] font-black text-emerald-600 uppercase">Logeados Hoy</p>
+              <p className="text-xl font-black text-emerald-700">{stats.parentsLoggedToday}</p>
             </div>
           </section>
 

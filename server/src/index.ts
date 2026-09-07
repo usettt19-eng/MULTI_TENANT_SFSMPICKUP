@@ -245,6 +245,35 @@ app.get(
   }),
 );
 
+/**
+ * Padres logeados hoy de UN colegio, para el dashboard normal (no
+ * super_admin). Mismo cálculo que parentsLoggedToday en /api/tenants/stats,
+ * pero accesible a cualquier staff de su propio colegio (o con acceso
+ * concedido), no solo al super_admin.
+ */
+app.get(
+  '/api/tenants/:tenantId/parents-logged-today',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const [{data: parents, error}, lastSignIns] = await Promise.all([
+      admin.from('profiles').select('id').eq('tenant_id', tenantId).eq('role', 'parent'),
+      fetchAllAuthUsersLastSignIn(),
+    ]);
+    if (error) return fail(res, 500, error.message);
+
+    const todayStartUTC = startOfTodayInPanamaUTC();
+    const count = (parents ?? []).filter((p) => {
+      const lastSignIn = lastSignIns.get(p.id);
+      return lastSignIn && new Date(lastSignIn) >= todayStartUTC;
+    }).length;
+
+    return ok(res, {count});
+  }),
+);
+
 app.post(
   '/api/tenants/reset-admin-password',
   requireAuth,
