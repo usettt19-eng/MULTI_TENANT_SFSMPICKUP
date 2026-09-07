@@ -642,6 +642,90 @@ app.delete(
   }),
 );
 
+/**
+ * Acceso de login para el ENCARGADO físico de un bus (el monitor que viaja
+ * con los alumnos), para que anuncie la llegada él mismo desde su celular —
+ * como cualquier padre — en vez de depender de que recepción lo haga por
+ * él desde BusRoutesPanel. La ruta de bus ya es, por dentro, un perfil de
+ * padre (ver comentario al inicio de este archivo); esto solo le pone un
+ * usuario y contraseña utilizables encima de esa misma cuenta.
+ *
+ * Supabase Auth exige que el campo "email" tenga forma de correo, pero no
+ * hace falta que sea un correo real que reciba nada — se arma como
+ * "<usuario>@buses.<dominio del colegio>.internal" para que sea único y
+ * fácil de dictar por teléfono, sin depender de que el encargado tenga
+ * correo propio.
+ */
+function busLoginEmail(username: string, tenantDomain: string): string {
+  return `${username}@buses.${tenantDomain}.internal`;
+}
+
+app.get(
+  '/api/bus-routes/:id/credentials',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {id} = req.params;
+    const {data: route} = await admin
+      .from('bus_routes')
+      .select('id, tenant_id, profile_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!route) return fail(res, 404, 'Ruta no encontrada.');
+    if (!isStaffOf(req.caller, route.tenant_id)) return fail(res, 403, 'Sin permisos sobre esa ruta.');
+
+    const {data: userData, error} = await admin.auth.admin.getUserById(route.profile_id);
+    if (error) return fail(res, 500, error.message);
+
+    // El correo interno de fábrica (busroute+<uuid>@no-reply...) nunca fue
+    // pensado para que nadie lo use como usuario — solo se muestra un
+    // usuario real si ya se configuró uno con el patrón de esta función.
+    const email = userData.user?.email ?? '';
+    const hasLogin = /^[^@]+@buses\.[^.]+\.internal$/.test(email);
+    return ok(res, {username: hasLogin ? email : null});
+  }),
+);
+
+app.put(
+  '/api/bus-routes/:id/credentials',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {id} = req.params;
+    const rawUsername = String(req.body?.username ?? '').trim().toLowerCase();
+    const password = String(req.body?.password ?? '');
+
+    if (!/^[a-z0-9._-]{3,40}$/.test(rawUsername)) {
+      return fail(res, 400, 'El usuario debe tener entre 3 y 40 caracteres: letras, números, puntos, guiones.');
+    }
+    if (password.length < 6) return fail(res, 400, 'La contraseña debe tener al menos 6 caracteres.');
+
+    const {data: route} = await admin
+      .from('bus_routes')
+      .select('id, tenant_id, profile_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!route) return fail(res, 404, 'Ruta no encontrada.');
+    if (!isStaffOf(req.caller, route.tenant_id)) return fail(res, 403, 'Sin permisos sobre esa ruta.');
+
+    const {data: tenant} = await admin.from('tenants').select('domain').eq('id', route.tenant_id).maybeSingle();
+    const tenantDomain = tenant?.domain || route.tenant_id;
+    const email = busLoginEmail(rawUsername, tenantDomain);
+
+    const {error} = await admin.auth.admin.updateUserById(route.profile_id, {
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error) {
+      if (error.message?.toLowerCase().includes('already been registered')) {
+        return fail(res, 409, 'Ese usuario ya lo tiene otra ruta de este colegio. Elige otro.');
+      }
+      return fail(res, 400, error.message);
+    }
+
+    return ok(res, {username: email});
+  }),
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // PADRES CON HIJOS EN MÁS DE UN COLEGIO (parent_school_access)
 // ════════════════════════════════════════════════════════════════════════════

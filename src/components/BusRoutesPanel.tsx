@@ -60,6 +60,14 @@ export function BusRoutesPanel() {
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Acceso de login para el encargado físico del bus (ver comentario del
+  // endpoint en el backend) — se muestra/edita solo dentro de "Editar Ruta".
+  const [currentLoginUsername, setCurrentLoginUsername] = useState<string | null>(null);
+  const [newLoginUsername, setNewLoginUsername] = useState('');
+  const [newLoginPassword, setNewLoginPassword] = useState('');
+  const [savingCredentials, setSavingCredentials] = useState(false);
+  const [credentialsError, setCredentialsError] = useState('');
+
   useEffect(() => {
     if (!profile?.tenant_id) return;
     fetchRoutes();
@@ -149,10 +157,40 @@ export function BusRoutesPanel() {
     setRouteName(route.name);
     setRouteDoorId(route.door_id || '');
     setStudentSearchTerm('');
+    setNewLoginUsername('');
+    setNewLoginPassword('');
+    setCredentialsError('');
+    setCurrentLoginUsername(null);
     await fetchStudents();
     const { data: links } = await supabase.from('parent_students').select('student_id').eq('parent_id', route.profile_id);
     setSelectedStudents((links || []).map((l: any) => l.student_id));
     setShowManageModal(true);
+
+    try {
+      const res = await apiJson(`/api/bus-routes/${route.id}/credentials`);
+      setCurrentLoginUsername(res.data?.username ?? null);
+    } catch (err) {
+      console.error('Error fetching bus login:', err);
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!editingRoute) return;
+    setCredentialsError('');
+    setSavingCredentials(true);
+    try {
+      const res = await apiJson(`/api/bus-routes/${editingRoute.id}/credentials`, {
+        method: 'PUT',
+        body: JSON.stringify({ username: newLoginUsername.trim(), password: newLoginPassword }),
+      });
+      setCurrentLoginUsername(res.data.username);
+      setNewLoginUsername('');
+      setNewLoginPassword('');
+    } catch (err: any) {
+      setCredentialsError(err.message || 'Error al guardar el acceso.');
+    } finally {
+      setSavingCredentials(false);
+    }
   };
 
   const handleSaveRoute = async () => {
@@ -489,6 +527,50 @@ export function BusRoutesPanel() {
                     })}
                 </div>
               </div>
+
+              {editingRoute && (
+                <div className="border-t border-slate-100 pt-5">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Acceso para el encargado del bus
+                  </label>
+                  <p className="text-[11px] text-slate-400 font-medium mb-3 ml-1 leading-relaxed">
+                    Con esto, la persona que viaja en el bus puede anunciar la llegada ella misma desde su celular, igual que un padre. No hace falta correo real — solo un usuario inventado y una contraseña.
+                  </p>
+
+                  {currentLoginUsername && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 mb-3">
+                      <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Usuario actual</p>
+                      <p className="text-sm font-bold text-emerald-800 break-all">{currentLoginUsername}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      value={newLoginUsername}
+                      onChange={(e) => setNewLoginUsername(e.target.value)}
+                      placeholder="usuario (ej. bus5monitor)"
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                    />
+                    <input
+                      value={newLoginPassword}
+                      onChange={(e) => setNewLoginPassword(e.target.value)}
+                      placeholder="contraseña (mín. 6)"
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                  {credentialsError && (
+                    <p className="text-xs text-rose-500 font-bold mt-2 ml-1">{credentialsError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSaveCredentials}
+                    disabled={savingCredentials || !newLoginUsername.trim() || newLoginPassword.length < 6}
+                    className="w-full mt-2 bg-slate-800 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {savingCredentials ? <Loader2 className="w-4 h-4 animate-spin" /> : (currentLoginUsername ? 'Cambiar Acceso' : 'Crear Acceso')}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="p-6 pt-0 shrink-0 space-y-2">
