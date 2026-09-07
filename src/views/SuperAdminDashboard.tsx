@@ -287,6 +287,9 @@ export function SuperAdminDashboard() {
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨‍👩‍👦 {stats[tenant.id].parents} Padres</span>
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨🏽‍🏫 {stats[tenant.id].staff} Staff</span>
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">🚪 {stats[tenant.id].doors} Puertas</span>
+                            <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
+                              🟢 {stats[tenant.id].parentsLoggedToday ?? 0} Logeados Hoy
+                            </span>
                             {(stats[tenant.id].latitude && stats[tenant.id].longitude) && (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded">
                                 📍 {stats[tenant.id].latitude}, {stats[tenant.id].longitude}

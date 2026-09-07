@@ -128,26 +128,56 @@ app.post(
   }),
 );
 
+// Los dos colegios operan en Panamá (UTC-5, sin horario de verano). GoTrue
+// guarda last_sign_in_at en UTC, así que para saber si un login cayó "hoy"
+// hay que correr el reloj a hora de Panamá antes de sacar la fecha, y
+// convertir esa fecha de vuelta al instante UTC en que empezó ese día allá
+// (medianoche en Panamá = 05:00 UTC).
+function startOfTodayInPanamaUTC(): Date {
+  const PANAMA_OFFSET_HOURS = 5;
+  const panamaNow = new Date(Date.now() - PANAMA_OFFSET_HOURS * 3600_000);
+  const panamaDateStr = panamaNow.toISOString().slice(0, 10);
+  return new Date(`${panamaDateStr}T${String(PANAMA_OFFSET_HOURS).padStart(2, '0')}:00:00.000Z`);
+}
+
+// admin.auth.admin.listUsers() pagina de a 50 por defecto — con perPage alto
+// se trae todo en 1-2 vueltas. No hay forma de pedirle a GoTrue solo
+// last_sign_in_at por tenant (esa columna vive en auth.users, fuera del
+// alcance de PostgREST), así que se trae la lista completa una vez y se
+// cruza en memoria contra profiles.tenant_id.
+async function fetchAllAuthUsersLastSignIn(): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const perPage = 1000;
+  for (let page = 1; ; page++) {
+    const {data, error} = await admin.auth.admin.listUsers({page, perPage});
+    if (error) throw error;
+    for (const u of data.users) map.set(u.id, u.last_sign_in_at ?? null);
+    if (data.users.length < perPage) break;
+  }
+  return map;
+}
+
 /**
  * Estadísticas por colegio para el panel de super_admin.
  *
  * SuperAdminDashboard.tsx las indexa como `stats[tenant.id].students`,
- * `.parents`, `.staff`, `.doors`, `.latitude/.longitude` — no es un conteo
- * global, es un objeto por tenant. `staff` replica el criterio de
- * StaffManagement.tsx: role='admin' Y el flag is_staff dentro del JSON de
- * additional_tutor_name (así no cuenta doble a los admins fundadores).
+ * `.parents`, `.staff`, `.doors`, `.latitude/.longitude`, `.parentsLoggedToday`
+ * — no es un conteo global, es un objeto por tenant. `staff` replica el
+ * criterio de StaffManagement.tsx: role='admin' Y el flag is_staff dentro del
+ * JSON de additional_tutor_name (así no cuenta doble a los admins fundadores).
  */
 app.get(
   '/api/tenants/stats',
   requireAuth,
   requireSuperAdmin,
   wrap(async (_req, res) => {
-    const [tenants, students, profiles, doors, settings] = await Promise.all([
+    const [tenants, students, profiles, doors, settings, lastSignIns] = await Promise.all([
       admin.from('tenants').select('id'),
       admin.from('students').select('tenant_id'),
       admin.from('profiles').select('id, tenant_id, role, first_name, last_name, email, phone, additional_tutor_name, created_at'),
       admin.from('exit_doors').select('tenant_id'),
       admin.from('school_settings').select('tenant_id, latitude, longitude'),
+      fetchAllAuthUsersLastSignIn(),
     ]);
 
     for (const [name, r] of Object.entries({tenants, students, profiles, doors, settings})) {
@@ -166,14 +196,14 @@ app.get(
     const stats: Record<
       string,
       {
-        students: number; parents: number; staff: number; doors: number;
+        students: number; parents: number; staff: number; doors: number; parentsLoggedToday: number;
         latitude: number | null; longitude: number | null;
         admin: {id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null} | null;
       }
     > = {};
 
     for (const t of tenants.data ?? []) {
-      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, latitude: null, longitude: null, admin: null};
+      stats[t.id] = {students: 0, parents: 0, staff: 0, doors: 0, parentsLoggedToday: 0, latitude: null, longitude: null, admin: null};
     }
     for (const s of students.data ?? []) {
       if (s.tenant_id && stats[s.tenant_id]) stats[s.tenant_id].students++;
@@ -182,11 +212,16 @@ app.get(
     // (el que se da de alta junto con el tenant en /api/tenants/register) —
     // mismo criterio que ya usa /api/tenants/reset-admin-password.
     const earliestAdminAt: Record<string, string> = {};
+    const todayStartUTC = startOfTodayInPanamaUTC();
     for (const p of profiles.data ?? []) {
       if (!p.tenant_id || !stats[p.tenant_id]) continue;
-      if (p.role === 'parent') stats[p.tenant_id].parents++;
-      else if (isStaff(p)) stats[p.tenant_id].staff++;
-      else if (p.role === 'admin') {
+      if (p.role === 'parent') {
+        stats[p.tenant_id].parents++;
+        const lastSignIn = lastSignIns.get(p.id);
+        if (lastSignIn && new Date(lastSignIn) >= todayStartUTC) stats[p.tenant_id].parentsLoggedToday++;
+      } else if (isStaff(p)) {
+        stats[p.tenant_id].staff++;
+      } else if (p.role === 'admin') {
         const current = earliestAdminAt[p.tenant_id];
         if (!current || p.created_at < current) {
           earliestAdminAt[p.tenant_id] = p.created_at;
