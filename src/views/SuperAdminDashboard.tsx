@@ -289,7 +289,7 @@ export function SuperAdminDashboard() {
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨🏽‍🏫 {stats[tenant.id].staff} Staff</span>
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded">🚪 {stats[tenant.id].doors} Puertas</span>
                             <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                              🟢 {stats[tenant.id].parentsLoggedToday ?? 0} Padres Logeados Hoy
+                              🟢 {stats[tenant.id].parentsActiveToday ?? 0} Padres Activos Hoy
                             </span>
                             <button
                               type="button"

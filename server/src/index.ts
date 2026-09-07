@@ -157,30 +157,56 @@ async function fetchAllAuthUsersLastSignIn(): Promise<Map<string, string | null>
   return map;
 }
 
+// "Padres logeados hoy" (por auth.users.last_sign_in_at) resultó subestimar
+// poco pero de forma real: un padre puede seguir logueado en la app de días
+// anteriores y aun así usarla hoy sin que ese campo se actualice (no es un
+// refresh de sesión lo que lo cambia, solo un login nuevo). Se cuenta en
+// cambio quién anunció una recogida hoy de verdad (pickup_events.announced_at)
+// — señal directa de uso, sin depender de si volvió a iniciar sesión.
+async function fetchActiveParentIdsToday(): Promise<Map<string, Set<string>>> {
+  const todayLocalStart = startOfTodayInPanamaUTC().toISOString();
+  const {data, error} = await admin
+    .from('pickup_events')
+    .select('tenant_id, parent_id')
+    .gte('announced_at', todayLocalStart);
+  if (error) throw error;
+  const map = new Map<string, Set<string>>();
+  for (const row of data ?? []) {
+    if (!row.tenant_id || !row.parent_id) continue;
+    const set = map.get(row.tenant_id) ?? new Set<string>();
+    set.add(row.parent_id);
+    map.set(row.tenant_id, set);
+  }
+  return map;
+}
+
 /**
  * Estadísticas por colegio para el panel de super_admin.
  *
  * SuperAdminDashboard.tsx las indexa como `stats[tenant.id].students`,
- * `.parents`, `.staff`, `.doors`, `.latitude/.longitude`, `.parentsLoggedToday`,
- * `.staffLoggedToday` — no es un conteo global, es un objeto por tenant.
+ * `.parents`, `.staff`, `.doors`, `.latitude/.longitude`, `.parentsActiveToday`,
+ * `.staffActiveToday` — no es un conteo global, es un objeto por tenant.
  * `staff` replica el criterio de StaffManagement.tsx: role='admin' Y el flag
  * is_staff dentro del JSON de additional_tutor_name (así no cuenta doble a
- * los admins fundadores). `staffLoggedToday` en cambio junta a TODO el que
- * tiene acceso de personal en el colegio (fundador + is_staff) — es una
- * lista para mostrar quién entró hoy, no un conteo de "cuántos hay".
+ * los admins fundadores).
  *
- * `staffActiveToday` NO usa last_sign_in_at: el staff (maestros, recepción)
- * deja su tablet/computadora logueada por semanas, así que casi nunca
- * "inicia sesión" de nuevo aunque trabaje todos los días — con un colegio
- * de ~60 personas de staff eso hacía que el conteo por login mostrara 1
- * aunque 21 personas distintas hubieran autorizado salidas ese mismo día.
- * En cambio, se cuentan actores distintos en audit_logs (PICKUP/SECURITY)
- * de hoy — actor_name es texto libre (no hay actor_id), así que es una
- * aproximación: dos personas con el mismo nombre de pila cuentan como una.
+ * Ni `parentsActiveToday` ni `staffActiveToday` usan auth.users.last_sign_in_at
+ * — ese campo solo se actualiza con un login NUEVO, no con seguir usando una
+ * sesión ya abierta. Para el staff (deja la tablet/computadora logueada por
+ * semanas) eso hacía que el conteo por login mostrara 1 aunque 21 personas
+ * distintas hubieran autorizado salidas ese mismo día; para los padres el
+ * efecto es menor pero real (36 "logueados" contra 40 que de verdad anunciaron
+ * una recogida el mismo día). Ambos se calculan ahora por actividad real:
+ * `staffActiveToday` cuenta actores distintos en audit_logs de tipo SECURITY
+ * (el único tipo que en este código SIEMPRE lo escribe personal, nunca un
+ * padre — PICKUP lo usan ambos según la pantalla, así que se excluye del
+ * todo) de hoy, con una lista corta de etiquetas genéricas descartadas;
+ * `parentsActiveToday` cuenta padres distintos que anunciaron una recogida
+ * hoy (pickup_events.announced_at), sin pasar por audit_logs.
  */
 const GENERIC_AUDIT_ACTORS = new Set([
-  'sistema', 'sistema auto', 'sistema qr', 'sistema facial',
-  'personal de puerta', 'recepcionista', 'recepción', 'admin',
+  'sistema', 'sistema auto', 'sistema qr', 'sistema facial', 'personal',
+  'personal de puerta', 'recepcionista', 'recepción', 'admin', 'administrador de salida',
 ]);
 
 app.get(
@@ -189,17 +215,17 @@ app.get(
   requireSuperAdmin,
   wrap(async (_req, res) => {
     const todayLocalStart = startOfTodayInPanamaUTC().toISOString();
-    const [tenants, students, profiles, doors, settings, lastSignIns, todayLogs] = await Promise.all([
+    const [tenants, students, profiles, doors, settings, activeParentIds, todayLogs] = await Promise.all([
       admin.from('tenants').select('id'),
       admin.from('students').select('tenant_id'),
       admin.from('profiles').select('id, tenant_id, role, first_name, last_name, email, phone, additional_tutor_name, created_at'),
       admin.from('exit_doors').select('tenant_id'),
       admin.from('school_settings').select('tenant_id, latitude, longitude'),
-      fetchAllAuthUsersLastSignIn(),
+      fetchActiveParentIdsToday(),
       admin
         .from('audit_logs')
         .select('tenant_id, actor_name, event_type, created_at')
-        .in('event_type', ['PICKUP', 'SECURITY'])
+        .eq('event_type', 'SECURITY')
         .gte('created_at', todayLocalStart),
     ]);
 
@@ -214,12 +240,18 @@ app.get(
         return false;
       }
     };
-    const isStaff = (p: {role: string; additional_tutor_name: string | null}) => p.role === 'admin' && isStaffFlag(p);
+    const isBusRoute = (p: {additional_tutor_name: string | null}) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
 
     const stats: Record<
       string,
       {
-        students: number; parents: number; staff: number; doors: number; parentsLoggedToday: number;
+        students: number; parents: number; staff: number; doors: number; parentsActiveToday: number;
         latitude: number | null; longitude: number | null;
         admin: {id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null} | null;
         staffActiveToday: {name: string; action_count: number; last_action_at: string}[];
@@ -228,9 +260,18 @@ app.get(
 
     for (const t of tenants.data ?? []) {
       stats[t.id] = {
-        students: 0, parents: 0, staff: 0, doors: 0, parentsLoggedToday: 0,
+        students: 0, parents: 0, staff: 0, doors: 0, parentsActiveToday: 0,
         latitude: null, longitude: null, admin: null, staffActiveToday: [],
       };
+    }
+
+    // Los "padres" de las rutas de bus (BusRoutesPanel) también anuncian
+    // pickup_events al llegar el bus — no son padres reales, así que no
+    // deben inflar este conteo.
+    const busRouteIds = new Set((profiles.data ?? []).filter(isBusRoute).map((p) => p.id));
+    for (const [tenantId, ids] of activeParentIds.entries()) {
+      if (!stats[tenantId]) continue;
+      stats[tenantId].parentsActiveToday = [...ids].filter((id) => !busRouteIds.has(id)).length;
     }
 
     const activeByTenant: Record<string, Map<string, {action_count: number; last_action_at: string}>> = {};
@@ -256,13 +297,10 @@ app.get(
     // (el que se da de alta junto con el tenant en /api/tenants/register) —
     // mismo criterio que ya usa /api/tenants/reset-admin-password.
     const earliestAdminAt: Record<string, string> = {};
-    const todayStartUTC = startOfTodayInPanamaUTC();
     for (const p of profiles.data ?? []) {
       if (!p.tenant_id || !stats[p.tenant_id]) continue;
       if (p.role === 'parent') {
         stats[p.tenant_id].parents++;
-        const lastSignIn = lastSignIns.get(p.id);
-        if (lastSignIn && new Date(lastSignIn) >= todayStartUTC) stats[p.tenant_id].parentsLoggedToday++;
       } else if (p.role === 'admin') {
         const isFounder = !isStaffFlag(p);
         if (!isFounder) stats[p.tenant_id].staff++;
@@ -293,9 +331,10 @@ app.get(
 );
 
 /**
- * Padres logeados hoy de UN colegio, para el dashboard normal (no
- * super_admin). Mismo cálculo que parentsLoggedToday en /api/tenants/stats,
- * pero accesible a cualquier staff de su propio colegio (o con acceso
+ * Padres activos hoy de UN colegio, para el dashboard normal (no
+ * super_admin). Mismo cálculo que parentsActiveToday en /api/tenants/stats
+ * (quién anunció una recogida hoy, no quién "inició sesión"), pero
+ * accesible a cualquier staff de su propio colegio (o con acceso
  * concedido), no solo al super_admin.
  */
 app.get(
@@ -305,17 +344,24 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error}, lastSignIns] = await Promise.all([
-      admin.from('profiles').select('id').eq('tenant_id', tenantId).eq('role', 'parent'),
-      fetchAllAuthUsersLastSignIn(),
+    const [{data: busRouteProfiles, error}, activeParentIds] = await Promise.all([
+      admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
+      fetchActiveParentIdsToday(),
     ]);
     if (error) return fail(res, 500, error.message);
 
-    const todayStartUTC = startOfTodayInPanamaUTC();
-    const count = (parents ?? []).filter((p) => {
-      const lastSignIn = lastSignIns.get(p.id);
-      return lastSignIn && new Date(lastSignIn) >= todayStartUTC;
-    }).length;
+    const busRouteIds = new Set(
+      (busRouteProfiles ?? [])
+        .filter((p) => {
+          try {
+            return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+          } catch {
+            return false;
+          }
+        })
+        .map((p) => p.id),
+    );
+    const count = [...(activeParentIds.get(tenantId) ?? [])].filter((id) => !busRouteIds.has(id)).length;
 
     return ok(res, {count});
   }),

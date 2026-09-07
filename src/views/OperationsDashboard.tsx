@@ -49,7 +49,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [selectedDoor, setSelectedDoor] = useState('puerta_1');
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '', parentsLoggedToday: 0 });
+  const [stats, setStats] = useState({ totalChildren: 0, totalParents: 0, topGrade: '', parentsActiveToday: 0 });
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   // Interruptor temporal para desactivar el límite de las 11am de
@@ -355,21 +355,21 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     setStats((prev) => ({ ...prev, totalChildren: childrenCount || 0, totalParents: parentsCount || 0, topGrade }));
   };
 
-  // last_sign_in_at vive en auth.users, fuera del alcance de PostgREST sobre
-  // profiles — se pide al backend (service_role) igual que en el panel de
-  // SuperAdmin. Aparte de fetchStats() y con su propio intervalo, más
-  // espaciado: el dashboard entero refresca cada 10s, pero esto trae la
-  // lista completa de usuarios del proyecto (admin.auth.admin.listUsers)
-  // en el backend — meterlo en el poll de 10s multiplicaría innecesariamente
-  // esa carga sobre Supabase Auth en cada refresco.
+  // Cuenta padres que de verdad anunciaron una recogida hoy
+  // (pickup_events.announced_at), no quién "inició sesión" — auth.users
+  // .last_sign_in_at solo se actualiza con un login nuevo, no con seguir
+  // usando una sesión que ya estaba abierta, así que subestimaba la
+  // actividad real. Se pide al backend igual que en el panel de SuperAdmin.
+  // Aparte de fetchStats() y con su propio intervalo, más espaciado: no
+  // hace falta que esto se actualice cada 10s como el resto del dashboard.
   const fetchParentsLoggedToday = async () => {
     if (!profile?.tenant_id) return;
     try {
       const res = await apiFetch(`/api/tenants/${profile.tenant_id}/parents-logged-today`);
       const json = await res.json();
-      if (json.success) setStats((prev) => ({ ...prev, parentsLoggedToday: json.data.count || 0 }));
+      if (json.success) setStats((prev) => ({ ...prev, parentsActiveToday: json.data.count || 0 }));
     } catch (e) {
-      console.error('Error fetching parentsLoggedToday:', e);
+      console.error('Error fetching parentsActiveToday:', e);
     }
   };
 
@@ -874,8 +874,8 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               <p className="text-xl font-black text-slate-800">{stats.topGrade}</p>
             </div>
             <div className="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-100 text-center">
-              <p className="text-[9px] font-black text-emerald-600 uppercase">Logeados Hoy</p>
-              <p className="text-xl font-black text-emerald-700">{stats.parentsLoggedToday}</p>
+              <p className="text-[9px] font-black text-emerald-600 uppercase">Padres Activos Hoy</p>
+              <p className="text-xl font-black text-emerald-700">{stats.parentsActiveToday}</p>
             </div>
           </section>
 
