@@ -520,6 +520,126 @@ app.delete(
   }),
 );
 
+// ════════════════════════════════════════════════════════════════════════════
+// PADRES CON HIJOS EN MÁS DE UN COLEGIO (parent_school_access)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Busca un padre YA EXISTENTE por correo exacto, sin importar a qué colegio
+ * pertenece — es el primer paso para vincularlo a un segundo colegio (ver
+ * POST /api/parents/school-access). Deliberadamente exacto (no ILIKE
+ * parcial ni por nombre): cualquier miembro del staff de CUALQUIER colegio
+ * puede llamar este endpoint, así que es un simple "¿existe esta cuenta?",
+ * no un directorio para buscar padres de otros colegios por curiosidad.
+ */
+app.get(
+  '/api/parents/lookup-by-email',
+  requireAuth,
+  wrap(async (req, res) => {
+    if (!req.caller?.isStaff && req.caller?.role !== 'super_admin') {
+      return fail(res, 403, 'Requiere permisos de personal.');
+    }
+    const email = String(req.query.email ?? '').trim().toLowerCase();
+    if (!email) return fail(res, 400, 'Falta el correo.');
+
+    const {data: found, error} = await admin
+      .from('profiles')
+      .select('id, first_name, last_name, email, tenant_id, photo_url')
+      .eq('role', 'parent')
+      .ilike('email', email)
+      .maybeSingle();
+
+    if (error) return fail(res, 500, error.message);
+    if (!found) return ok(res, null);
+
+    const {data: tenant} = await admin.from('tenants').select('name').eq('id', found.tenant_id).maybeSingle();
+    return ok(res, {...found, tenant_name: tenant?.name ?? null});
+  }),
+);
+
+/**
+ * Da de alta el acceso "prestado" de un padre (ya existente en OTRO
+ * colegio) a este colegio, y lo vincula a los alumnos indicados. No crea
+ * cuenta ni perfil nuevo — solo la fila de parent_school_access y los
+ * parent_students. Ver ESTADO-DEL-PROYECTO.md / migración
+ * add_parent_school_access para el porqué (RLS de students, pickup_events,
+ * etc. cuelga de user_tenant_ids(), que ya incluye esta tabla).
+ */
+app.post(
+  '/api/parents/school-access',
+  requireAuth,
+  wrap(async (req, res) => {
+    const body = req.body ?? {};
+    const tenantId = resolveTenantId(req.caller, body.tenant_id);
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const parentId = String(body.parent_id ?? '');
+    if (!parentId) return fail(res, 400, 'Falta el padre a vincular.');
+
+    const {data: parent} = await admin
+      .from('profiles')
+      .select('id, role, tenant_id')
+      .eq('id', parentId)
+      .maybeSingle();
+    if (!parent || parent.role !== 'parent') return fail(res, 404, 'Padre no encontrado.');
+    if (parent.tenant_id === tenantId) {
+      return fail(res, 400, 'Ese padre ya pertenece a este colegio.');
+    }
+
+    const {error: grantError} = await admin
+      .from('parent_school_access')
+      .upsert({parent_id: parentId, tenant_id: tenantId, granted_by: req.caller!.id}, {onConflict: 'parent_id,tenant_id'});
+    if (grantError) return fail(res, 500, grantError.message);
+
+    const studentIds: string[] = Array.isArray(body.student_ids) ? body.student_ids : [];
+    if (studentIds.length > 0) {
+      // Se comprueba que los alumnos sean REALMENTE de este colegio: si no,
+      // un admin de Costa del Este podría vincular a un padre con un alumno
+      // de Albrook pasando el id a mano.
+      const {data: validStudents} = await admin
+        .from('students')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .in('id', studentIds);
+      const validIds = new Set((validStudents ?? []).map((s) => s.id));
+      const rows = studentIds.filter((id) => validIds.has(id)).map((student_id) => ({parent_id: parentId, student_id}));
+      if (rows.length > 0) {
+        const {error: linkError} = await admin.from('parent_students').upsert(rows, {onConflict: 'parent_id,student_id'});
+        if (linkError) return fail(res, 500, linkError.message);
+      }
+    }
+
+    return ok(res, {parent_id: parentId, tenant_id: tenantId});
+  }),
+);
+
+app.delete(
+  '/api/parents/school-access/:parentId/:tenantId',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {parentId, tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    // Se quitan también los parent_students con alumnos de ESTE colegio —
+    // si no, el vínculo queda huérfano (sin el grant, RLS ya lo esconde,
+    // pero es un dato suelto sin sentido).
+    const {data: studentsHere} = await admin.from('students').select('id').eq('tenant_id', tenantId);
+    const idsHere = (studentsHere ?? []).map((s) => s.id);
+    if (idsHere.length > 0) {
+      await admin.from('parent_students').delete().eq('parent_id', parentId).in('student_id', idsHere);
+    }
+
+    const {error} = await admin
+      .from('parent_school_access')
+      .delete()
+      .eq('parent_id', parentId)
+      .eq('tenant_id', tenantId);
+    if (error) return fail(res, 500, error.message);
+
+    return ok(res, {parent_id: parentId, tenant_id: tenantId});
+  }),
+);
+
 app.post(
   '/api/parents/bulk',
   requireAuth,

@@ -33,6 +33,18 @@ export function GuardiansRegistry() {
     name: string;
   }>({ isOpen: false, id: null, name: '' });
 
+  // Vincular padre de OTRO colegio (parent_school_access) — para familias
+  // con hijos en los dos colegios de la organización, sin crear una
+  // segunda cuenta para el mismo padre.
+  const [showLinkOtherSchoolModal, setShowLinkOtherSchoolModal] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkSearching, setLinkSearching] = useState(false);
+  const [linkFoundParent, setLinkFoundParent] = useState<any>(null);
+  const [linkSearchError, setLinkSearchError] = useState('');
+  const [linkSelectedStudents, setLinkSelectedStudents] = useState<string[]>([]);
+  const [linkStudentSearchTerm, setLinkStudentSearchTerm] = useState('');
+  const [linkSaving, setLinkSaving] = useState(false);
+
   // Form states
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -486,6 +498,62 @@ export function GuardiansRegistry() {
     setStudentSearchTerm('');
   };
 
+  const resetLinkOtherSchoolForm = () => {
+    setLinkEmail('');
+    setLinkFoundParent(null);
+    setLinkSearchError('');
+    setLinkSelectedStudents([]);
+    setLinkStudentSearchTerm('');
+  };
+
+  const handleLookupParentByEmail = async () => {
+    const emailTrimmed = linkEmail.trim();
+    if (!emailTrimmed) return;
+    setLinkSearching(true);
+    setLinkSearchError('');
+    setLinkFoundParent(null);
+    try {
+      const res = await apiFetch(`/api/parents/lookup-by-email?email=${encodeURIComponent(emailTrimmed)}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al buscar.');
+      if (!json.data) {
+        setLinkSearchError('No existe ningún padre con ese correo en el sistema.');
+      } else if (json.data.tenant_id === profile?.tenant_id) {
+        setLinkSearchError('Ese padre ya pertenece a este colegio — edítalo desde la lista normal.');
+      } else {
+        setLinkFoundParent(json.data);
+      }
+    } catch (error: any) {
+      setLinkSearchError(error.message || 'Error al buscar.');
+    } finally {
+      setLinkSearching(false);
+    }
+  };
+
+  const handleGrantSchoolAccess = async () => {
+    if (!linkFoundParent || !profile?.tenant_id) return;
+    setLinkSaving(true);
+    try {
+      const res = await apiFetch('/api/parents/school-access', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: profile.tenant_id,
+          parent_id: linkFoundParent.id,
+          student_ids: linkSelectedStudents,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al vincular.');
+      setShowLinkOtherSchoolModal(false);
+      resetLinkOtherSchoolForm();
+      fetchGuardians();
+    } catch (error: any) {
+      alert('Error al vincular: ' + (error.message || String(error)));
+    } finally {
+      setLinkSaving(false);
+    }
+  };
+
   const filteredGuardians = guardians.filter(g =>
     `${g.first_name} ${g.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     g.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -552,6 +620,15 @@ export function GuardiansRegistry() {
             >
               <Upload className="w-4 h-4" />
               {t('guardiansPage.importBtn')}
+            </button>
+
+            <button
+              onClick={() => { resetLinkOtherSchoolForm(); setShowLinkOtherSchoolModal(true); }}
+              title="Vincular a un padre que ya tiene cuenta en el otro colegio de la organización"
+              className="flex items-center gap-2 bg-surface-container-high text-primary px-4 py-2 rounded-xl font-bold text-sm hover:bg-surface-variant transition-colors shadow-sm"
+            >
+              <Link className="w-4 h-4" />
+              Otro Colegio
             </button>
 
             <button
@@ -677,6 +754,132 @@ export function GuardiansRegistry() {
           onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
           confirmText={t('guardiansPage.deleteTitle')}
         />
+
+        {/* Vincular padre de otro colegio (parent_school_access) */}
+        {showLinkOtherSchoolModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-primary/30 backdrop-blur-md">
+            <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95">
+              <div className="flex justify-between items-center p-6 bg-slate-50 border-b border-slate-100 shrink-0">
+                <div>
+                  <h2 className="text-lg font-black text-primary tracking-tight">Vincular Padre de Otro Colegio</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Para un padre que ya tiene cuenta en el otro colegio de la organización y también tiene un hijo aquí.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setShowLinkOtherSchoolModal(false); resetLinkOtherSchoolForm(); }}
+                  className="p-2 bg-white text-slate-400 hover:text-rose-500 rounded-xl shadow-sm transition-all hover:rotate-90"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5 overflow-y-auto">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Correo del padre (el mismo que usa en el otro colegio)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={linkEmail}
+                      onChange={(e) => { setLinkEmail(e.target.value); setLinkFoundParent(null); setLinkSearchError(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLookupParentByEmail(); } }}
+                      placeholder="padre@correo.com"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-primary focus:bg-white transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLookupParentByEmail}
+                      disabled={linkSearching || !linkEmail.trim()}
+                      className="bg-slate-800 text-white px-5 rounded-2xl font-bold text-xs uppercase tracking-widest disabled:opacity-50 shrink-0"
+                    >
+                      {linkSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar'}
+                    </button>
+                  </div>
+                  {linkSearchError && (
+                    <p className="text-xs text-rose-500 font-bold mt-2 ml-1">{linkSearchError}</p>
+                  )}
+                </div>
+
+                {linkFoundParent && (
+                  <>
+                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+                      {linkFoundParent.photo_url ? (
+                        <img src={linkFoundParent.photo_url} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-emerald-200 flex items-center justify-center shrink-0">
+                          <Users className="w-5 h-5 text-emerald-700" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-800 truncate">
+                          {linkFoundParent.first_name} {linkFoundParent.last_name}
+                        </p>
+                        <p className="text-[10px] font-bold text-emerald-700 uppercase truncate">
+                          Cuenta en {linkFoundParent.tenant_name || 'otro colegio'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                          ¿A cuáles alumnos de ESTE colegio se vincula?
+                        </label>
+                        <div className="relative w-40">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Buscar..."
+                            value={linkStudentSearchTerm}
+                            onChange={(e) => setLinkStudentSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-primary"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-1 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                        {students
+                          .filter((s) => `${s.first_name} ${s.last_name}`.toLowerCase().includes(linkStudentSearchTerm.toLowerCase()))
+                          .map((s) => {
+                            const isSel = linkSelectedStudents.includes(s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setLinkSelectedStudents((prev) => (isSel ? prev.filter((id) => id !== s.id) : [...prev, s.id]))}
+                                className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all ${
+                                  isSel ? 'bg-primary border-primary text-white shadow-md' : 'bg-white border-slate-100 text-slate-600 hover:border-slate-200'
+                                }`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] font-black truncate">{s.first_name} {s.last_name}</p>
+                                  <p className={`text-[9px] font-medium ${isSel ? 'text-white/80' : 'text-slate-400'}`}>{s.grade} · {s.section}</p>
+                                </div>
+                                {isSel && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {linkFoundParent && (
+                <div className="p-6 pt-0 shrink-0">
+                  <button
+                    onClick={handleGrantSchoolAccess}
+                    disabled={linkSaving || linkSelectedStudents.length === 0}
+                    className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {linkSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Vincular a Este Colegio'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Overlay de progreso de importación CSV */}
         {importProgress && (
