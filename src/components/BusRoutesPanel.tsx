@@ -67,11 +67,14 @@ export function BusRoutesPanel() {
   const [newLoginPassword, setNewLoginPassword] = useState('');
   const [savingCredentials, setSavingCredentials] = useState(false);
   const [credentialsError, setCredentialsError] = useState('');
+  const [tenantDomain, setTenantDomain] = useState<string>('');
 
   useEffect(() => {
     if (!profile?.tenant_id) return;
     fetchRoutes();
     fetchDoors();
+    supabase.from('tenants').select('domain').eq('id', profile.tenant_id).maybeSingle()
+      .then(({ data }) => setTenantDomain(data?.domain || profile.tenant_id));
 
     const pollInterval = window.setInterval(fetchActivity, 8000);
     return () => window.clearInterval(pollInterval);
@@ -547,8 +550,12 @@ export function BusRoutesPanel() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       value={newLoginUsername}
-                      onChange={(e) => setNewLoginUsername(e.target.value)}
-                      placeholder="usuario (ej. bus5monitor)"
+                      // Sin arroba ni dominio: eso lo agrega el sistema solo.
+                      // Antes se podía escribir "bus1@loquesea" y el backend
+                      // lo rechazaba sin explicar bien por qué — ahora se
+                      // limpia en el momento, no hay forma de repetir el error.
+                      onChange={(e) => setNewLoginUsername(e.target.value.replace(/@.*$/, '').replace(/[^a-z0-9._-]/gi, '').toLowerCase())}
+                      placeholder="usuario, sin arroba (ej. bus5monitor)"
                       className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                     <input
@@ -558,6 +565,11 @@ export function BusRoutesPanel() {
                       className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                   </div>
+                  {newLoginUsername && (
+                    <p className="text-[11px] text-slate-400 font-medium mt-2 ml-1">
+                      Quedará como: <span className="font-bold text-slate-600">{newLoginUsername}@buses.{tenantDomain || '...'}.internal</span>
+                    </p>
+                  )}
                   {credentialsError && (
                     <p className="text-xs text-rose-500 font-bold mt-2 ml-1">{credentialsError}</p>
                   )}
