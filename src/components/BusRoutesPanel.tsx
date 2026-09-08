@@ -10,6 +10,12 @@ interface BusRoute {
   profile_id: string;
   door_id: string | null;
   student_count: number;
+  // Solo bloquea el botón "Anunciar" de ESTE panel (recepción/dashboard) —
+  // el encargado del bus sigue pudiendo anunciar la llegada desde su propio
+  // login en la app de padres sin importar este valor. Pensado para cuando
+  // el encargado ya tiene su acceso propio y se quiere evitar que recepción
+  // lo anuncie por accidente desde aquí también.
+  reception_can_announce: boolean;
 }
 
 interface ExitDoor {
@@ -68,6 +74,7 @@ export function BusRoutesPanel() {
   const [savingCredentials, setSavingCredentials] = useState(false);
   const [credentialsError, setCredentialsError] = useState('');
   const [tenantDomain, setTenantDomain] = useState<string>('');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile?.tenant_id) return;
@@ -85,7 +92,7 @@ export function BusRoutesPanel() {
     if (!profile?.tenant_id) return;
     const { data: routesData } = await supabase
       .from('bus_routes')
-      .select('id, name, profile_id, door_id')
+      .select('id, name, profile_id, door_id, reception_can_announce')
       .eq('tenant_id', profile.tenant_id)
       .order('name');
 
@@ -254,8 +261,30 @@ export function BusRoutesPanel() {
     fetchRoutes();
   };
 
+  // Solo afecta este botón (recepción) — el encargado del bus anuncia desde
+  // su propio login en la app de padres sin pasar por aquí, así que ese
+  // flujo sigue funcionando aunque esto esté apagado.
+  const handleToggleReceptionCanAnnounce = async (route: BusRoute) => {
+    setTogglingId(route.id);
+    try {
+      const nextValue = !route.reception_can_announce;
+      const { error } = await supabase
+        .from('bus_routes')
+        .update({ reception_can_announce: nextValue })
+        .eq('id', route.id);
+      if (error) throw error;
+      setRoutes((prev) => prev.map((r) => (r.id === route.id ? { ...r, reception_can_announce: nextValue } : r)));
+      routesRef.current = routesRef.current.map((r) => (r.id === route.id ? { ...r, reception_can_announce: nextValue } : r));
+    } catch (err: any) {
+      alert('Error al cambiar el permiso de anuncio: ' + (err.message || String(err)));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const handleAnnounce = async (route: BusRoute) => {
     if (!profile?.tenant_id) return;
+    if (!route.reception_can_announce) return;
     setAnnouncingId(route.id);
     try {
       const { data: links } = await supabase
@@ -369,6 +398,11 @@ export function BusRoutesPanel() {
               // ready: todos los activos ya están autorizados — tocar confirma que el bus se los llevó.
               const stage = total === 0 ? 'idle' : released === total ? 'ready' : 'waiting';
               const flashing = justAnnounced || justConfirmed;
+              // El encargado ya anuncia desde su propio celular — recepción
+              // solo queda bloqueada en el estado "idle" (para no duplicar el
+              // anuncio por accidente); el botón naranja de confirmar salida
+              // sigue funcionando siempre, eso lo sigue haciendo recepción.
+              const blockedIdle = stage === 'idle' && !route.reception_can_announce;
 
               const handleClick = () => {
                 if (stage === 'idle') handleAnnounce(route);
@@ -381,22 +415,25 @@ export function BusRoutesPanel() {
                 ? 'bg-orange-50 border-orange-200 hover:bg-orange-100'
                 : stage === 'waiting'
                 ? 'bg-slate-50 border-slate-200 cursor-default'
+                : blockedIdle
+                ? 'bg-slate-50 border-slate-200 cursor-default'
                 : 'bg-amber-50 border-amber-100 hover:bg-amber-100';
 
-              const iconBgClasses = flashing ? 'bg-emerald-500' : stage === 'ready' ? 'bg-orange-500' : stage === 'waiting' ? 'bg-slate-400' : 'bg-amber-500';
+              const iconBgClasses = flashing ? 'bg-emerald-500' : stage === 'ready' ? 'bg-orange-500' : stage === 'waiting' || blockedIdle ? 'bg-slate-400' : 'bg-amber-500';
 
               let subtitle: string;
               if (justAnnounced) subtitle = 'Llegada anunciada';
               else if (justConfirmed) subtitle = 'Salida confirmada';
               else if (stage === 'ready') subtitle = `Listo — ${released} alumno${released === 1 ? '' : 's'} autorizado${released === 1 ? '' : 's'}, toca para confirmar salida`;
               else if (stage === 'waiting') subtitle = `${released}/${total} autorizados por su salón`;
+              else if (blockedIdle) subtitle = 'El encargado anuncia desde su celular';
               else subtitle = `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''}`;
 
               return (
                 <div key={route.id} className="flex items-stretch gap-1.5">
                   <button
                     onClick={handleClick}
-                    disabled={isAnnouncing || isConfirming || stage === 'waiting'}
+                    disabled={isAnnouncing || isConfirming || stage === 'waiting' || blockedIdle}
                     className={`flex-1 flex items-center gap-3 p-4 rounded-2xl border transition-all text-left disabled:opacity-60 ${cardClasses}`}
                   >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBgClasses} text-white`}>
@@ -530,6 +567,27 @@ export function BusRoutesPanel() {
                     })}
                 </div>
               </div>
+
+              {editingRoute && (
+                <div className="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Botón "Anunciar" en este dashboard
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                      Apágalo si el encargado del bus ya anuncia desde su propio celular, para evitar que recepción lo haga sin querer. No afecta el anuncio del encargado en su app.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleReceptionCanAnnounce(editingRoute).then(() => setEditingRoute((prev) => (prev ? { ...prev, reception_can_announce: !prev.reception_can_announce } : prev)))}
+                    disabled={togglingId === editingRoute.id}
+                    className={`shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${editingRoute.reception_can_announce ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${editingRoute.reception_can_announce ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              )}
 
               {editingRoute && (
                 <div className="border-t border-slate-100 pt-5">
