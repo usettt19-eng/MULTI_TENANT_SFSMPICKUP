@@ -9,6 +9,42 @@ export function getReplacementNameFromNotes(notes: string | null | undefined): s
   return notes.slice(REPLACEMENT_NOTE_PREFIX.length);
 }
 
+// Quién "llegó" a buscar al alumno, para el anuncio por voz en recepción —
+// un bus (BusRoutesPanel) es, por dentro, un perfil de padre fantasma, así
+// que sin este chequeo el anuncio decía "el representante de Fulano ha
+// llegado", como si un padre real hubiera venido, en vez de nombrar el bus.
+export interface ArrivalLabel {
+  isBus: boolean;
+  // Bus: nombre de la ruta (ej. "Bus 1"). Padre: la relación (ej. "el papá").
+  label: string;
+}
+
+export async function resolveArrivalLabel(
+  supabase: any,
+  parentId: string,
+  studentId: string,
+): Promise<ArrivalLabel> {
+  const { data: busRoute } = await supabase
+    .from('bus_routes')
+    .select('name')
+    .eq('profile_id', parentId)
+    .maybeSingle();
+  if (busRoute) return { isBus: true, label: busRoute.name };
+
+  const { data: relData } = await supabase
+    .from('parent_students')
+    .select('relationship')
+    .eq('parent_id', parentId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+
+  let label = 'el representante';
+  if (relData?.relationship === 'father') label = 'el papá';
+  else if (relData?.relationship === 'mother') label = 'la mamá';
+  else if (relData?.relationship === 'guardian') label = 'el tutor';
+  return { isBus: false, label };
+}
+
 // Umbral para marcar un anuncio de llegada como atrasado en las pantallas de
 // personal (no para nada visible al padre).
 export const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutos

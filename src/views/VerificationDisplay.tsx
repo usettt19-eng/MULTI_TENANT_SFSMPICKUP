@@ -8,7 +8,7 @@ import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
-import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
+import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
 
@@ -196,23 +196,13 @@ export function VerificationDisplay() {
               // engañoso para el personal en la puerta.
               const replacementName = getReplacementNameFromNotes(pickup.notes);
               let relLabel: string;
+              let isBusArrival = false;
               if (replacementName) {
                 relLabel = `${replacementName} (autorizado)`;
               } else {
-                // Fetch relationship
-                const { data: relData } = await supabase
-                  .from('parent_students')
-                  .select('relationship')
-                  .eq('parent_id', pickup.parent_id)
-                  .eq('student_id', pickup.student_id)
-                  .maybeSingle();
-
-                relLabel = "el representante";
-                if (relData) {
-                  if (relData.relationship === 'father') relLabel = "el papá";
-                  else if (relData.relationship === 'mother') relLabel = "la mamá";
-                  else if (relData.relationship === 'guardian') relLabel = "el tutor";
-                }
+                const result = await resolveArrivalLabel(supabase, pickup.parent_id, pickup.student_id);
+                isBusArrival = result.isBus;
+                relLabel = result.label;
               }
 
               const gradeName = pickup.students?.grade || '—';
@@ -226,7 +216,11 @@ export function VerificationDisplay() {
               // antes (ver audioManager.ts) para que se entienda bien.
               playGlobalVoiceMessage(`Salida de ${fullName}, grado ${gradeName}, sección ${sectionName}, solicitada.`, 'es');
               playGlobalVoiceMessage(`Dismissal requested for ${fullName}, grade ${gradeName}, section ${sectionName}.`, 'en');
-              setShowArrivalToast(`${relLabel.charAt(0).toUpperCase() + relLabel.slice(1)} de ${fullName}`);
+              setShowArrivalToast(
+                isBusArrival
+                  ? `El ${relLabel} ha llegado para ${fullName}`
+                  : `${relLabel.charAt(0).toUpperCase() + relLabel.slice(1)} de ${fullName}`
+              );
               setTimeout(() => setShowArrivalToast(null), 4000);
             } else {
               // Even if we don't announce it here, we mark it as announced so we don't keep checking
@@ -425,26 +419,20 @@ export function VerificationDisplay() {
         const fullName = `${currentPickup.students?.first_name} ${currentPickup.students?.last_name}`;
         const replacementName = getReplacementNameFromNotes(currentPickup.notes);
         let relLabel: string;
+        let isBusTurn = false;
         if (replacementName) {
           relLabel = `${replacementName} (autorizado)`;
         } else {
-          // Fetch relationship
-          const { data: relData } = await supabase
-            .from('parent_students')
-            .select('relationship')
-            .eq('parent_id', currentPickup.parent_id)
-            .eq('student_id', currentPickup.student_id)
-            .maybeSingle();
-
-          relLabel = "El representante";
-          if (relData) {
-            if (relData.relationship === 'father') relLabel = "El papá";
-            else if (relData.relationship === 'mother') relLabel = "La mamá";
-            else if (relData.relationship === 'guardian') relLabel = "El tutor";
-          }
+          const result = await resolveArrivalLabel(supabase, currentPickup.parent_id, currentPickup.student_id);
+          isBusTurn = result.isBus;
+          relLabel = result.isBus ? result.label : (result.label.charAt(0).toUpperCase() + result.label.slice(1));
         }
 
-        playGlobalVoiceMessage(`Atención, es el turno para ${relLabel} de ${fullName}. Por favor acérquese.`);
+        playGlobalVoiceMessage(
+          isBusTurn
+            ? `Atención, es el turno del ${relLabel} para el estudiante ${fullName}. Por favor acérquese.`
+            : `Atención, es el turno para ${relLabel} de ${fullName}. Por favor acérquese.`
+        );
       };
 
       announceFrontOfQueue();

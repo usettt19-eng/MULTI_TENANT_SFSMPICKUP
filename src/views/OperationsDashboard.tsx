@@ -19,6 +19,7 @@ import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { DailyReportModal } from '../components/DailyReportModal';
 import { BusRoutesPanel } from '../components/BusRoutesPanel';
+import { resolveArrivalLabel } from '../lib/pickupHelpers';
 import type { TranslationKey } from '../i18n/translations';
 
 // carpool_authorizations.day_of_week: 0=domingo...6=sábado (igual que
@@ -160,24 +161,15 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
           if (pickup.status === 'announced' && !announcedPickupIds.current.has(pickup.id)) {
             announcedPickupIds.current.add(pickup.id);
             
-            // Fetch relationship
-            const { data: relData } = await supabase
-              .from('parent_students')
-              .select('relationship')
-              .eq('parent_id', pickup.parent_id)
-              .eq('student_id', pickup.student_id)
-              .maybeSingle();
-
             const fullName = `${pickup.student?.first_name} ${pickup.student?.last_name}`;
-            let relLabel = "el representante";
-            if (relData) {
-              if (relData.relationship === 'father') relLabel = "el papá";
-              else if (relData.relationship === 'mother') relLabel = "la mamá";
-              else if (relData.relationship === 'guardian') relLabel = "el tutor";
-            }
+            const { isBus, label } = await resolveArrivalLabel(supabase, pickup.parent_id, pickup.student_id);
 
-            console.log(`OperationsDashboard Auto-announcing: ${fullName} (${relLabel})`);
-            playGlobalVoiceMessage(`Atención, ${relLabel} de ${fullName} ha llegado.`);
+            console.log(`OperationsDashboard Auto-announcing: ${fullName} (${label})`);
+            playGlobalVoiceMessage(
+              isBus
+                ? `Atención, el ${label} ha llegado para el estudiante ${fullName}.`
+                : `Atención, ${label} de ${fullName} ha llegado.`
+            );
           }
         });
       }
