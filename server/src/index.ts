@@ -1339,6 +1339,47 @@ app.put(
   }),
 );
 
+/**
+ * Prender/apagar, para un admin o staff-admin puntual, si recibe la
+ * Alerta Discreta / Solicitud de Ayuda (ver notifyTenantAdmins). Endpoint
+ * aparte del PUT de arriba porque ese reconstruye additional_tutor_name
+ * desde cero con una lista fija de campos (permissions, notify_all_arrivals)
+ * — reusarlo aquí borraría ese flag cada vez que alguien solo tocara
+ * permisos, o viceversa.
+ */
+app.put(
+  '/api/staff/:id/discrete-alert',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {id} = req.params;
+
+    const {data: target} = await admin
+      .from('profiles')
+      .select('id, tenant_id, additional_tutor_name')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!target) return fail(res, 404, 'Usuario no encontrado.');
+    if (!isAdminOf(req.caller, target.tenant_id)) return fail(res, 403, 'Sin permisos sobre ese usuario.');
+
+    let current: Record<string, unknown> = {};
+    try {
+      current = JSON.parse(target.additional_tutor_name || '{}');
+    } catch {
+      current = {};
+    }
+
+    const receive = req.body?.receive_discrete_alert !== false;
+    const {error} = await admin
+      .from('profiles')
+      .update({additional_tutor_name: JSON.stringify({...current, receive_discrete_alert: receive})})
+      .eq('id', id);
+
+    if (error) return fail(res, 500, error.message);
+    return ok(res, {receive_discrete_alert: receive});
+  }),
+);
+
 app.delete(
   '/api/staff/:id',
   requireAuth,
@@ -2010,10 +2051,26 @@ async function validateCarpoolActors(
  */
 async function notifyTenantAdmins(tenantId: string, title: string, message: string) {
   try {
-    const {data: admins} = await admin.from('profiles').select('id').eq('tenant_id', tenantId).eq('role', 'admin');
+    const {data: admins} = await admin
+      .from('profiles')
+      .select('id, additional_tutor_name')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'admin');
     if (!admins || admins.length === 0) return;
+    // Ajustes > "Quién recibe la Alerta Discreta" deja marcar a cada
+    // admin/staff-admin como excluido de este aviso puntual — ausente o
+    // cualquier valor que no sea `false` se trata como "sí recibe", para no
+    // cambiarle el comportamiento a nadie que nunca tocó ese interruptor.
+    const recipients = admins.filter((a) => {
+      try {
+        return JSON.parse(a.additional_tutor_name || '{}').receive_discrete_alert !== false;
+      } catch {
+        return true;
+      }
+    });
+    if (recipients.length === 0) return;
     await admin.from('notifications').insert(
-      admins.map((a) => ({user_id: a.id, title, message, type: 'info', tenant_id: tenantId})),
+      recipients.map((a) => ({user_id: a.id, title, message, type: 'info', tenant_id: tenantId})),
     );
   } catch (err) {
     console.error('Error al notificar a administradores:', err);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import {
@@ -37,7 +38,8 @@ export function Settings() {
   // ascendido a admin desde Gestión de Personal — sin filtrar por permisos
   // de módulo, así que aunque alguien no tenga el permiso "security"
   // igual le llega esta alerta si tiene rol de admin.
-  const [alertRecipients, setAlertRecipients] = useState<{ id: string; name: string; isFounder: boolean }[]>([]);
+  const [alertRecipients, setAlertRecipients] = useState<{ id: string; name: string; isFounder: boolean; receives: boolean }[]>([]);
+  const [togglingAlertId, setTogglingAlertId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -52,14 +54,29 @@ export function Settings() {
       .eq('tenant_id', profile.tenant_id)
       .eq('role', 'admin');
     const list = (data || []).map((p: any) => {
-      let isStaff = false;
+      let parsed: any = {};
       try {
-        isStaff = JSON.parse(p.additional_tutor_name || '{}').is_staff === true;
+        parsed = JSON.parse(p.additional_tutor_name || '{}');
       } catch {}
       const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'Sin nombre';
-      return { id: p.id, name, isFounder: !isStaff };
+      return { id: p.id, name, isFounder: parsed.is_staff !== true, receives: parsed.receive_discrete_alert !== false };
     }).sort((a, b) => Number(b.isFounder) - Number(a.isFounder) || a.name.localeCompare(b.name));
     setAlertRecipients(list);
+  };
+
+  const handleToggleAlertRecipient = async (person: { id: string; receives: boolean }) => {
+    setTogglingAlertId(person.id);
+    try {
+      await apiJson(`/api/staff/${person.id}/discrete-alert`, {
+        method: 'PUT',
+        body: JSON.stringify({ receive_discrete_alert: !person.receives }),
+      });
+      setAlertRecipients((prev) => prev.map((r) => (r.id === person.id ? { ...r, receives: !person.receives } : r)));
+    } catch (err: any) {
+      alert('Error al cambiar el destinatario: ' + (err.message || String(err)));
+    } finally {
+      setTogglingAlertId(null);
+    }
   };
 
   const fetchSettings = async () => {
@@ -385,28 +402,39 @@ export function Settings() {
                     <BellRing className="w-5 h-5 text-indigo-500" /> Quién recibe la Alerta Discreta
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Cuando alguien de recepción activa "Alerta Discreta" (Monitor Externo) o "Necesito ayuda" (Check-In), estas son las personas que reciben la notificación. Es automático según quién tiene rol de administrador — no depende de los permisos de módulo que le hayas dado en Gestión de Personal.
+                    Cuando alguien de recepción activa "Alerta Discreta" (Monitor Externo) o "Necesito ayuda" (Check-In), estas son las personas que pueden recibir la notificación. Solo aparece quien tiene rol de administrador — para agregar o quitar a alguien de esta lista en sí, dale o quítale ese rol desde Gestión de Personal. Aquí solo decides, de esta lista, quién la recibe de verdad.
                   </p>
                   {alertRecipients.length === 0 ? (
                     <p className="text-[11px] text-slate-400 font-medium italic">Nadie recibiría esta alerta todavía.</p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-2">
                       {alertRecipients.map((r) => (
-                        <div
+                        <button
                           key={r.id}
-                          className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2"
+                          type="button"
+                          onClick={() => handleToggleAlertRecipient(r)}
+                          disabled={togglingAlertId === r.id}
+                          className={`w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 border transition-all text-left disabled:opacity-50 ${
+                            r.receives ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200'
+                          }`}
                         >
-                          <span className="text-xs font-black text-indigo-900">{r.name}</span>
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-400">
-                            {r.isFounder ? 'Admin' : 'Staff'}
-                          </span>
-                        </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-xs font-black truncate ${r.receives ? 'text-indigo-900' : 'text-slate-400'}`}>{r.name}</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-widest shrink-0 ${r.receives ? 'text-indigo-400' : 'text-slate-300'}`}>
+                              {r.isFounder ? 'Admin' : 'Staff'}
+                            </span>
+                          </div>
+                          {togglingAlertId === r.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />
+                          ) : (
+                            <span className={`shrink-0 w-11 h-6 rounded-full transition-colors relative ${r.receives ? 'bg-indigo-500' : 'bg-slate-300'}`}>
+                              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${r.receives ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </span>
+                          )}
+                        </button>
                       ))}
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-400 font-medium italic">
-                    Para agregar o quitar a alguien de esta lista, dale o quítale el rol de administrador desde Gestión de Personal.
-                  </p>
                 </section>
 
                 {/* Geolocation Parameters */}
