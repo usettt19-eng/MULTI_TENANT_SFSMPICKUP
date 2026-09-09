@@ -3,10 +3,11 @@ import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
   X, FileBarChart, Loader2, Download, Clock, Users, Car, Footprints,
-  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History,
+  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { resolveResponsibleStaffIds } from '../lib/dismissalSchedule';
 
 // Formato yyyy-mm-dd en hora local (no UTC) — el mismo patrón que ya usa
 // VisitorsLog.tsx para su selector de fecha.
@@ -75,6 +76,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       { data: school },
       { data: pickupsAnnounced },
       { data: pickupsCompleted },
+      { data: pickupsUnauthorizedRaw },
       { data: selfDismissals },
       { data: visitors },
       { data: replacementRequests },
@@ -97,6 +99,20 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .eq('status', 'completed')
         .gte('completed_at', startIso)
         .lt('completed_at', endIso),
+      // "Sin autorizar" = se anunció la llegada pero, al momento de generar
+      // este reporte, ningún maestro/staff la había autorizado todavía
+      // (nunca llegó a 'released' ni a 'completed') — es una foto del
+      // instante en que se genera, no del final del día: para un día ya
+      // pasado, quedarse acá es una falla real; para hoy, puede que solo
+      // esté en curso todavía.
+      supabase
+        .from('pickup_events')
+        .select('id, announced_at, student:students(first_name, last_name, grade, section)')
+        .eq('tenant_id', profile.tenant_id)
+        .in('status', ['announced', 'in_queue'])
+        .gte('announced_at', startIso)
+        .lt('announced_at', endIso)
+        .order('announced_at', { ascending: true }),
       supabase
         .from('self_dismissal_events')
         .select('id, method, created_at, student:students(first_name, last_name, grade, section)')
@@ -158,6 +174,53 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       else if (r.status === 'rejected') repByStatus.rejected++;
     });
 
+    // Para cada recogida sin autorizar, a quién le tocaba autorizarla —
+    // mismo criterio de "Mi Salón" (dismissal_assignments/overrides del
+    // grado+sección para ese día, turno 'regular'). Se resuelve grado+
+    // sección único (no por cada fila) para no repetir la misma consulta
+    // decenas de veces si varios alumnos comparten salón.
+    const uniqueGradeSections = new Map<string, { grade: string; section: string | null }>();
+    (pickupsUnauthorizedRaw || []).forEach((p: any) => {
+      const grade = p.student?.grade || '';
+      const section = p.student?.section || '';
+      if (!grade) return;
+      const key = `${grade}::${section}`;
+      if (!uniqueGradeSections.has(key)) uniqueGradeSections.set(key, { grade, section: section || null });
+    });
+    const reportDate = new Date(`${selectedDate}T00:00:00`);
+    const staffByGradeSection = new Map<string, string[]>();
+    await Promise.all(
+      Array.from(uniqueGradeSections.entries()).map(async ([key, { grade, section }]) => {
+        const staffIds = await resolveResponsibleStaffIds(profile.tenant_id, grade, section, 'regular', reportDate);
+        staffByGradeSection.set(key, staffIds);
+      }),
+    );
+    const allStaffIds = Array.from(new Set(Array.from(staffByGradeSection.values()).flat()));
+    const { data: staffProfiles } = allStaffIds.length > 0
+      ? await supabase.from('profiles').select('id, first_name, last_name').in('id', allStaffIds)
+      : { data: [] as any[] };
+    const staffNameById = new Map((staffProfiles || []).map((s: any) => [s.id, `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Sin nombre']));
+
+    const pickupsUnauthorized = (pickupsUnauthorizedRaw || []).map((p: any) => {
+      const grade = p.student?.grade || '';
+      const section = p.student?.section || '';
+      const staffIds = grade ? (staffByGradeSection.get(`${grade}::${section}`) || []) : [];
+      const staffNames = staffIds.map((id) => staffNameById.get(id) || 'Sin nombre');
+      return { ...p, responsibleStaffNames: staffNames };
+    });
+
+    // Cuenta por persona responsable, para el resumen — una recogida sin
+    // asignación conocida (grado/sección sin nadie en dismissal_assignments)
+    // cuenta aparte, como "Sin asignación", en vez de desaparecer del total.
+    const unauthorizedByStaffMap = new Map<string, number>();
+    pickupsUnauthorized.forEach((p: any) => {
+      const names = p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames : ['Sin asignación'];
+      names.forEach((name: string) => unauthorizedByStaffMap.set(name, (unauthorizedByStaffMap.get(name) || 0) + 1));
+    });
+    const unauthorizedByStaff = Array.from(unauthorizedByStaffMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
     setSummary({
       pickupsAnnounced: (pickupsAnnounced || []).length,
       pickupsCompleted: (pickupsCompleted || []).length,
@@ -169,6 +232,8 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       incidents: (incidents || []).length,
       healthAlerts: (healthAlerts || []).length,
       formResponses: (formResponses || []).length,
+      unauthorizedPickups: pickupsUnauthorized.length,
+      unauthorizedByStaff,
     });
 
     setAnnexes({
@@ -177,6 +242,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       visitors: visitors || [],
       replacementRequests: replacementRequests || [],
       incidents: incidents || [],
+      unauthorizedPickups: pickupsUnauthorized,
     });
 
     setLoading(false);
@@ -199,6 +265,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       body: [
         ['Recogidas anunciadas', String(summary.pickupsAnnounced)],
         ['Recogidas completadas', String(summary.pickupsCompleted)],
+        ['Solicitudes de salida sin autorizar', String(summary.unauthorizedPickups)],
         ['Confirmadas sin GPS', String(summary.noGpsCount)],
         ['Tiempo promedio de recogida', summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'],
         ['Salidas Autónomas', String(summary.selfDismissals)],
@@ -298,6 +365,39 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         theme: 'striped',
         styles: { fontSize: 8 },
       });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
+    }
+
+    if (annexes.unauthorizedPickups.length > 0) {
+      if (nextY > 260) { doc.addPage(); nextY = 16; }
+      doc.setFontSize(12);
+      doc.text('Anexo 6 — Solicitudes de salida sin autorizar, y quién debía hacerlo', 14, nextY);
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Alumno', 'Grado · Sección', 'Solicitado', 'Responsable']],
+        body: annexes.unauthorizedPickups.map((p: any) => [
+          `${p.student?.first_name || ''} ${p.student?.last_name || ''}`.trim(),
+          `${p.student?.grade || '—'}${p.student?.section ? ' · ' + p.student.section : ''}`,
+          fmtTime(p.announced_at),
+          p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames.join(', ') : 'Sin asignación',
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
+
+      if (summary.unauthorizedByStaff.length > 0) {
+        if (nextY > 260) { doc.addPage(); nextY = 16; }
+        doc.setFontSize(11);
+        doc.text('Resumen por persona responsable', 14, nextY);
+        autoTable(doc, {
+          startY: nextY + 4,
+          head: [['Responsable', 'Sin autorizar']],
+          body: summary.unauthorizedByStaff.map((s: any) => [s.name, String(s.count)]),
+          theme: 'striped',
+          styles: { fontSize: 8 },
+        });
+      }
     }
 
     return doc;
@@ -359,13 +459,13 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     setDownloadingId(null);
   };
 
-  const StatCard = ({ icon: Icon, label, value }: { icon: any; label: string; value: string | number }) => (
-    <div className="bg-[#f8fafc] rounded-xl p-4 border border-slate-100">
+  const StatCard = ({ icon: Icon, label, value, warn }: { icon: any; label: string; value: string | number; warn?: boolean }) => (
+    <div className={`rounded-xl p-4 border ${warn ? 'bg-rose-50 border-rose-100' : 'bg-[#f8fafc] border-slate-100'}`}>
       <div className="flex items-center gap-2 mb-1">
-        <Icon className="w-3.5 h-3.5 text-indigo-500" />
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label}</p>
+        <Icon className={`w-3.5 h-3.5 ${warn ? 'text-rose-500' : 'text-indigo-500'}`} />
+        <p className={`text-[9px] font-black uppercase tracking-wider ${warn ? 'text-rose-400' : 'text-slate-400'}`}>{label}</p>
       </div>
-      <p className="text-xl font-black text-[#1e293b]">{value}</p>
+      <p className={`text-xl font-black ${warn ? 'text-rose-700' : 'text-[#1e293b]'}`}>{value}</p>
     </div>
   );
 
@@ -403,6 +503,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <StatCard icon={Clock} label="Recogidas anunciadas" value={summary.pickupsAnnounced} />
                   <StatCard icon={Car} label="Recogidas completadas" value={summary.pickupsCompleted} />
+                  <StatCard icon={UserX} label="Salidas sin autorizar" value={summary.unauthorizedPickups} warn={summary.unauthorizedPickups > 0} />
                   <StatCard icon={ShieldCheck} label="Confirmadas sin GPS" value={summary.noGpsCount} />
                   <StatCard icon={Clock} label="Tiempo prom. de recogida" value={summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'} />
                   <StatCard icon={Footprints} label="Salidas Autónomas" value={summary.selfDismissals} />
@@ -413,9 +514,26 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                 </div>
               </div>
 
+              {summary.unauthorizedByStaff.length > 0 && (
+                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                  <h3 className="text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5">
+                    <UserX className="w-3.5 h-3.5" /> Sin autorizar, por responsable
+                  </h3>
+                  <div className="space-y-1.5">
+                    {summary.unauthorizedByStaff.map((s: any) => (
+                      <div key={s.name} className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-rose-800">{s.name}</span>
+                        <span className="font-black text-rose-600">{s.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-700 font-medium">
                 El PDF incluirá este resumen más los anexos con el detalle del día: recogidas, salidas
-                autónomas, visitantes, solicitudes de reemplazo e incidentes.
+                autónomas, visitantes, solicitudes de reemplazo, incidentes, y las salidas sin autorizar
+                con quién debía hacerlo.
               </div>
 
               <button
