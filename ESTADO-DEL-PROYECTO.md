@@ -2,14 +2,13 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-08-28 (idioma de la app de padres configurable por el admin, panel de
-Estadísticas por colegio, fix del filtro de puerta en Monitor Externo,
-agrupación por grado/sección y buscadores inteligentes en Alumnos y Staff,
-fotos de alumnos importadas desde Google Drive para TCS Albrook secundaria,
-Ajustes responsive para teléfono, alumno vinculado visible en cada solicitud
-de reemplazo, fix del lector QR de Check-In que no detectaba nada y de las
-recogidas por reemplazo que se anunciaban como si hubiera llegado el papá/mamá,
-y fix del reconocimiento facial de Check-In, que nunca había funcionado).
+2026-09-09 (padres con hijos en dos colegios vía `parent_school_access`, fix de
+seguridad para que un reemplazo autorizado aplique solo a los hijos elegidos,
+métricas de "Staff/Padres Activos Hoy" basadas en actividad real en vez de
+login, Rutas de Bus completas —incluido login propio para el encargado de cada
+bus—, interruptor para apagar el bloqueo de emergencia por colegio, fix de
+Monitor Externo quedándose pegado en bloqueo activo, y selección de quién
+recibe la Alerta Discreta).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -35,8 +34,9 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
 |---|---|---|---|
 | Colegio Loyola | `3cc8eb07-a7f8-40bd-9886-23ae86bf505f` | — | Pruebas |
 | Colegio Loyola 2 | `11d93213-5e22-430c-beb8-2f730cba3a97` | `loyola` | Pruebas |
-| The Casco School | `9543ac45-f058-4596-a7ee-e29191494190` | `The_Casco_School` | **Activo** |
-| TCS Albrook | `65221dec-d0d2-448c-a3e2-64a899e380c4` | `tcsalbrook` | En implementación |
+| The Casco School | `9543ac45-f058-4596-a7ee-e29191494190` | `The_Casco_School` | Pruebas |
+| TCS Albrook | `65221dec-d0d2-448c-a3e2-64a899e380c4` | `tcsalbrook` | **Activo** (operando en producción, ver §3) |
+| TCS Costa del Este | `f51150be-8d11-42e2-9d12-58fe9634b0eb` | `tcscostadeleste` | **Activo** (operando en producción, ver §3) |
 
 ---
 
@@ -1813,6 +1813,248 @@ user-scalable=no` al meta `viewport` — como la app nativa carga el sitio
 en vivo (no un bundle empaquetado, ver `capacitor.config.ts`), este
 cambio llega a la app de iOS con el mismo deploy del sitio web, sin
 generar un build nuevo para la App Store.
+
+### Llegadas Diarias: registro matutino por sección (2026-09-03)
+Pantalla nueva para el registro de llegada de la mañana (quién llegó al
+colegio, no quién se retira) separado por sección, con su propio flujo —
+antes esto se colaba como si fuera una "recogida" en el panel de
+Perímetro, mezclando llegadas matutinas con salidas de la tarde en el
+mismo conteo. Ahora una llegada de la mañana ya no aparece en el panel de
+Perímetro como si fuera un pickup.
+
+### Aviso de voz a recepción cuando llega una solicitud nueva (2026-09-03)
+El badge de "Solicitudes Pendientes" cambia a naranja (antes pasaba
+desapercibido) y, además, recepción escucha un aviso de voz apenas un
+padre manda una solicitud nueva (reemplazo, mensaje, etc.), sin tener que
+estar revisando la pantalla de Solicitudes a cada rato.
+
+### Fix: notificaciones violaban RLS por tenant_id faltante o poco confiable (2026-09-03)
+Varios `insert` a `notifications` no mandaban `tenant_id`, o lo mandaban
+tomado de un valor que podía no coincidir con el del destinatario real —
+la política RLS de esa tabla lo exige y rechazaba el insert en silencio
+en algunos flujos. Corregido para que siempre viaje el `tenant_id`
+correcto del destinatario.
+
+### Fix: alumnos duplicados en Tránsito/Monitor Externo por doble anuncio de llegada (2026-09-03)
+Un alumno podía aparecer dos veces en la cola si su llegada se anunciaba
+por dos caminos casi al mismo tiempo (ej. doble tap, o dos pantallas
+distintas reaccionando al mismo evento). Se cerró la condición de carrera
+que permitía el doble `insert` en `pickup_events`.
+
+### Reemplazo de recogida: días de la semana recurrentes o un solo uso (2026-09-04)
+Antes, autorizar a un reemplazo (alguien distinto al papá/mamá/tutor)
+quedaba válido para siempre, cualquier día, una vez aprobado. Ahora el
+padre elige entre **recurrente** (válido indefinidamente, pero solo los
+días de semana que marque) o **de un solo uso** (válido una vez,
+cualquier día, se consume al escanearse). Esta es la base sobre la que
+más adelante (7 de septiembre) se agregó la restricción por alumno — ver
+más abajo.
+
+### Otras mejoras de esta semana (2026-09-04)
+- Banner de descarga de la app (Android/iOS) en el login y en el
+  Dashboard de padres.
+- Validación de PIN único **por colegio** al crear/editar un padre (antes
+  se podía repetir sin aviso, lo que causaba colisiones al hacer Check-In
+  por PIN).
+- Pantalla de instalación a pantalla completa para padres que abren el
+  sitio desde el navegador del celular (guía para "agregar a inicio").
+- Fix: los anexos del Reporte del Día no venían ordenados por hora.
+
+### Rutas de Bus: primera versión (2026-09-04)
+Se agrega el módulo de **Rutas de Bus**: un botón por ruta para anunciar
+la llegada de todos sus alumnos de una sola vez, en vez de uno por uno.
+Por dentro, cada bus es un perfil de padre "fantasma"
+(`profiles.role='parent'`, sin login real todavía en esta primera
+versión, marcado con `additional_tutor_name.is_bus_route`) que agrupa a
+sus alumnos vía `parent_students` — reutiliza toda la cadena ya existente
+de Monitor Externo, En Tránsito y notificaciones sin tocarla.
+
+### Rutas de Bus: puerta fija, confirmar salida y orden en el dashboard (2026-09-06)
+- Cada ruta puede fijar una puerta de salida propia (si no se fija, cada
+  alumno sale por la puerta de su grado, como siempre).
+- Nuevo botón naranja "confirmar salida", igual que el que ya tiene el
+  padre en su panel, para cerrar el ciclo cuando todos los alumnos de la
+  ruta ya fueron autorizados por su salón.
+- La tarjeta de Buses se sube arriba en el Dashboard, antes de "Live
+  Pickup Queue" — es lo primero que recepción necesita ver a la hora de
+  salida.
+
+### Mi Salón: botón "No vino hoy" (2026-09-06)
+El maestro puede cerrar el anuncio de un alumno sin autorizar su salida,
+para los casos donde el alumno simplemente no asistió ese día y el
+anuncio quedaría "colgado" esperando una autorización que nunca va a
+llegar.
+
+### Fix: crear rutas de bus con auth.users real (2026-09-07)
+La primera versión de Rutas de Bus (4 de septiembre) creaba el perfil
+fantasma solo en `profiles`, sin fila correspondiente en `auth.users`.
+Como `notifications.user_id` tiene una relación (`FOREIGN KEY`) real
+contra `auth.users` (a diferencia de `profiles.id`, que no la tiene),
+cualquier intento de notificar sobre una recogida de bus fallaba con
+`23503` (violación de llave foránea) — error visible en los logs cada
+vez que un bus anunciaba llegada. Se corrigió de raíz: `POST
+/api/bus-routes` ahora crea el perfil fantasma vía
+`admin.auth.admin.createUser()` (con `email_confirm` y sin mandar
+correo), generando también su fila de `auth.users` correctamente. Se
+repararon retroactivamente los perfiles de bus ya existentes en
+producción insertándoles su fila de `auth.users` a mano.
+
+### Padres con hijos en dos colegios: cuenta compartida (`parent_school_access`) (2026-09-07)
+Un padre con hijos en ambos colegios de la misma organización (TCS
+Albrook y TCS Costa del Este) solo podía operar desde el colegio "de
+casa" de su cuenta (`profiles.tenant_id`) — no veía ni podía autorizar
+recogidas del otro. Se agrega la tabla `parent_school_access
+(parent_id, tenant_id, granted_by, created_at)`, que le da a un padre
+acceso de **lectura y uso normal** (no de staff) a un segundo colegio sin
+duplicar su cuenta. `user_tenant_ids()` — la función de la que dependen
+casi todas las políticas RLS de cara al padre (`students`,
+`pickup_events`, `vehicles`, `notifications`, `replacement_requests`,
+etc.) — ahora también incluye los colegios otorgados por esta tabla,
+así que extender esta única función arregló la visibilidad cruzada en
+todas las pantallas sin tener que tocar cada política una por una.
+
+Se agregó también una UI en Gestión de Guardianes ("Otro Colegio") para
+que el admin busque a un padre existente por correo y le otorgue acceso a
+los alumnos de su colegio, y una sección "Padres de Otro Colegio con
+Acceso Aquí" para verlos.
+
+Nota de seguridad evaluada y descartada: se consideró reusar
+`staff_school_access` (la tabla que ya existía para dar a un miembro del
+staff acceso a un segundo colegio) en vez de crear una tabla nueva, pero
+`isStaffOf()` en el backend concede permisos de **staff completos** a
+cualquier `tenant_id` presente en esa tabla, sin volver a chequear el rol
+real de quien la tiene — reusarla para un padre le habría dado, sin
+querer, permisos de personal en el colegio prestado. Por eso
+`parent_school_access` es una tabla separada, sin relación con
+`isStaffOf()`.
+
+Como consecuencia directa, se corrigió también un **riesgo de
+sobre-autorización real**: los reemplazos autorizados
+(`profiles.additional_tutor_name.replacements[]`) aplicaban a *todos*
+los hijos vinculados al padre sin importar el colegio — un padre con
+hijos en dos colegios que autorizaba un reemplazo para el hijo de un
+colegio quedaba, sin saberlo, autorizándolo también en el otro. Se agregó
+`student_ids?: string[] | null` a cada reemplazo (vacío/ausente = todos
+los hijos, comportamiento igual que antes, para no romper reemplazos ya
+existentes) y el padre ahora elige a cuáles hijos aplica al solicitarlo.
+
+### Reenviar invitación a padres que nunca se han logueado (2026-09-07)
+Nuevo botón en Gestión de Guardianes para reenviar la invitación por
+correo, en bloque, a todos los padres de un colegio que nunca iniciaron
+sesión. Responde de inmediato con el total a enviar y sigue en segundo
+plano (600ms entre cada envío, para no saturar el proveedor de correo),
+dejando un registro de inicio y fin en `audit_logs` (incluida la lista de
+correos que fallaron).
+
+### Métricas de actividad real: "Staff Activo Hoy" y "Padres Activos Hoy" (2026-09-07)
+Primera versión (mismo día): se agregó al Dashboard de SuperAdmin y al de
+cada colegio un conteo de "padres/personal logueados hoy", basado en
+`auth.users.last_sign_in_at`.
+
+Ese mismo día, probando en TCS Albrook, se detectó que el número no
+cuadraba: 50 estudiantes con recogida autorizada, pero solo **1** miembro
+del staff figuraba como logueado — imposible, si cada autorización la dio
+alguien del personal. Causa: `last_sign_in_at` solo se actualiza con una
+autenticación **nueva** (contraseña, enlace mágico, OTP), no con la
+renovación silenciosa de un token de una sesión ya abierta — y el
+personal (maestros, recepción) deja el dispositivo logueado semanas
+enteras, así que casi nunca vuelve a "loguearse" de verdad aunque use la
+app todo el día. A los padres este problema los afecta mucho menos (se
+reautentican más seguido).
+
+Se reemplazó el criterio de ambas métricas por **actividad real**, no
+login:
+- **Staff Activo Hoy**: nombres distintos (`actor_name`) con al menos un
+  registro en `audit_logs` de tipo `SECURITY` en el día — se excluyó
+  a propósito el tipo `PICKUP`, porque ese lo escriben tanto padres
+  (confirmar su propia recogida) como personal (confirmar la salida de
+  un alumno en Tránsito), y mezclarlos habría vuelto a inflar/confundir
+  el número. También se excluyen actores genéricos del sistema
+  (`sistema`, `recepcionista`, `admin`, etc., no personas reales).
+- **Padres Activos Hoy**: padres distintos (`parent_id`) con al menos un
+  `pickup_events.announced_at` en el día, excluyendo los perfiles
+  fantasma de Rutas de Bus.
+
+El Dashboard de SuperAdmin además ganó un modal, al tocar el badge de
+staff activo, con el detalle de quién hizo qué y cuándo.
+
+### Login para el encargado de cada bus (2026-09-07/08)
+El colegio tiene el nombre de la persona a cargo de cada bus, pero sin
+correo — pidieron una forma de darle usuario y contraseña para que use la
+app como un padre más, viendo solo a los alumnos de su ruta. Como el
+perfil fantasma de cada bus (ver arriba) ya es una cuenta
+`role: 'parent'`, se agregaron endpoints (`GET`/`PUT
+/api/bus-routes/:id/credentials`) que le ponen un correo y contraseña
+reales usables vía `admin.auth.admin.updateUserById()`. Supabase Auth
+exige un identificador con formato de correo (no necesariamente real), así
+que se construye uno sintético:
+`<usuario>@buses.<dominio-del-colegio>.internal` — el encargado entra por
+la pantalla normal de login con contraseña y llega directo a su
+Dashboard de padre, viendo exactamente los alumnos de su bus.
+
+Al probarlo, un usuario escribió un correo inventado completo (con
+arroba y dominio) en el campo de "usuario", y el sistema lo rechazó sin
+explicar bien por qué. Se corrigió limpiando el campo en tiempo real
+(quita arroba y caracteres inválidos mientras se escribe) y agregando una
+vista previa ("Quedará como: usuario@buses.colegio.internal") para que el
+formato esperado quede claro antes de guardar.
+
+De paso, se corrigió que los anuncios de llegada de un bus decían "el
+representante de Fulano ha llegado" (como si hubiera venido un padre
+real) — ahora se detecta si quien anuncia es un bus y se dice el nombre
+de la ruta en su lugar (ej. "el Bus 5 ha llegado").
+
+### Interruptor para bloquear "Anunciar" de bus solo en el dashboard (2026-09-08)
+Con el encargado de cada bus ya anunciando desde su propio celular, quedó
+el riesgo de que recepción presionara el mismo botón por accidente desde
+el Dashboard, duplicando el anuncio. Se agrega
+`bus_routes.reception_can_announce` (boolean, default `true`) con un
+interruptor en "Editar Ruta": apagado, la tarjeta del bus en el
+Dashboard queda gris e inactiva ("El encargado anuncia desde su
+celular"), sin afectar en nada el anuncio que hace el encargado desde su
+propia app, ni el botón naranja de confirmar salida (que sigue siendo
+trabajo de recepción).
+
+### Interruptor para apagar el bloqueo de emergencia del colegio (2026-09-09)
+Cuatro miembros del staff de TCS Albrook activaron el bloqueo de
+emergencia (el botón rojo/verde al final del menú lateral) casi al mismo
+tiempo, aparentemente sin saber que los demás ya lo habían hecho —
+Ruben Dario lo levantó segundos después. El colegio pidió poder
+desactivar esta función a voluntad. Se agrega
+`school_settings.emergency_lockdown_enabled` (boolean, default `true`)
+con un interruptor en Ajustes → General: apagado, el botón desaparece
+por completo del menú para todo el personal de ese colegio (no solo se
+deshabilita) hasta que un admin lo vuelva a encender ahí mismo. Si el
+bloqueo estaba activo justo al apagar la función, se levanta
+automáticamente al guardar, para no dejar al colegio bloqueado sin
+ningún botón para levantarlo.
+
+### Fix: Monitor Externo quedaba pegado mostrando el bloqueo de emergencia activo (2026-09-09)
+Al probar el interruptor de arriba, aunque el bloqueo ya estaba
+desactivado en la base de datos, la pantalla de Monitor Externo (la que
+muestra "RESTRICTED EXIT" en rojo) seguía mostrándolo activo. Causa:
+`VerificationDisplay.tsx` nunca consultaba `school_settings.lockdown_mode`
+directamente — solo le preguntaba a **otras pestañas abiertas** (el
+Sidebar) por un canal de broadcast en tiempo real. Si esa pantalla es la
+única conectada en ese momento (un monitor de puerta sin nadie logueado
+al lado), nunca recibía respuesta y quedaba pegada en el último estado
+que vio, indefinidamente. Se corrigió para que consulte la tabla
+directamente al cargar y en cada poll de 10 segundos, igual que ya
+hacían `TopNav.tsx` y `MyClassroom.tsx` — el broadcast sigue reaccionando
+al instante cuando sí hay otra pestaña activa.
+
+### Selección de quién recibe la Alerta Discreta (2026-09-09)
+La Alerta Discreta (botón de Monitor Externo para avisar de algo
+sospechoso sin alertar al público que ve la pantalla) y "Necesito ayuda"
+(Check-In) le llegaban automáticamente a **todo** perfil con `role:
+'admin'` del colegio — el dueño de la cuenta y cualquier staff ascendido
+a admin desde Gestión de Personal, sin importar sus permisos de módulo.
+Se agregó en Ajustes → General una lista de quién recibiría esta alerta
+hoy, y luego un interruptor por persona
+(`profiles.additional_tutor_name.receive_discrete_alert`, endpoint `PUT
+/api/staff/:id/discrete-alert`, ausente = sigue recibiéndola) para poder
+excluir a alguien puntual sin tocarle sus permisos ni la configuración de
+"notificar todas las llegadas".
 
 ---
 
