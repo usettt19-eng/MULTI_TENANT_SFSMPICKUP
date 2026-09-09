@@ -140,6 +140,15 @@ function startOfTodayInPanamaUTC(): Date {
   return new Date(`${panamaDateStr}T${String(PANAMA_OFFSET_HOURS).padStart(2, '0')}:00:00.000Z`);
 }
 
+// "HH:MM" de la hora actual en Panamá, para comparar contra
+// school_settings.auto_release_after_time (ver autoReleaseAfterHours) sin
+// tener que lidiar con zonas horarias en cada comparación.
+function panamaTimeOfDayHHMM(): string {
+  const PANAMA_OFFSET_HOURS = 5;
+  const panamaNow = new Date(Date.now() - PANAMA_OFFSET_HOURS * 3600_000);
+  return panamaNow.toISOString().slice(11, 16);
+}
+
 // admin.auth.admin.listUsers() pagina de a 50 por defecto — con perPage alto
 // se trae todo en 1-2 vueltas. No hay forma de pedirle a GoTrue solo
 // last_sign_in_at por tenant (esa columna vive en auth.users, fuera del
@@ -2471,9 +2480,85 @@ setInterval(() => {
   autoCompleteStalePickups().catch((err) => console.error('Error en autoCompleteStalePickups:', err));
 }, 60_000);
 
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Autorización automática por horario: después de cierta hora (configurable
+ * por colegio en Ajustes, apagado por defecto), el personal que queda para
+ * despachar alumnos normalmente ya no usa la app — coordina por teléfono
+ * directamente y no necesita que un maestro autorice cada salida desde Mi
+ * Salón. Pasada esa hora, toda solicitud pendiente ('announced'/'in_queue',
+ * el mismo criterio de "sin autorizar" que usa el Reporte del Día) se
+ * autoriza sola, quedando lista para que recepción/Monitor Externo confirme
+ * la salida igual que si un maestro la hubiera aprobado.
+ */
+async function autoReleaseAfterHours() {
+  const nowHHMM = panamaTimeOfDayHHMM();
+  const {data: settings, error} = await admin
+    .from('school_settings')
+    .select('tenant_id, auto_release_after_time')
+    .eq('auto_release_enabled', true);
+
+  if (error) {
+    console.error('Error buscando colegios con autorización automática:', error);
+    return;
+  }
+  if (!settings || settings.length === 0) return;
+
+  const dueTenantIds = settings
+    .filter((s: any) => nowHHMM >= String(s.auto_release_after_time).slice(0, 5))
+    .map((s: any) => s.tenant_id);
+  if (dueTenantIds.length === 0) return;
+
+  const {data: pending, error: pendingError} = await admin
+    .from('pickup_events')
+    .select('id, tenant_id, students:student_id(first_name, last_name)')
+    .in('tenant_id', dueTenantIds)
+    .in('status', ['announced', 'in_queue']);
+
+  if (pendingError) {
+    console.error('Error buscando recogidas pendientes para autorización automática:', pendingError);
+    return;
+  }
+  if (!pending || pending.length === 0) return;
+
+  const {error: updateError} = await admin
+    .from('pickup_events')
+    .update({status: 'released'})
+    .in('id', pending.map((p: any) => p.id));
+
+  if (updateError) {
+    console.error('Error autorizando automáticamente por horario:', updateError);
+    return;
+  }
+
+  const byTenant = new Map<string, any[]>();
+  for (const p of pending as any[]) {
+    if (!byTenant.has(p.tenant_id)) byTenant.set(p.tenant_id, []);
+    byTenant.get(p.tenant_id)!.push(p);
+  }
+  for (const [tenantId, rows] of byTenant) {
+    const names = rows.map((r: any) =>
+      r.students ? `${r.students.first_name ?? ''} ${r.students.last_name ?? ''}`.trim() : 'alumno',
+    );
+    await admin.from('audit_logs').insert({
+      event_type: 'SECURITY',
+      description: `AUTORIZACIÓN AUTOMÁTICA POR HORARIO: ${rows.length} solicitud(es) de salida autorizada(s) sin pasar por un maestro (${names.join(', ')}).`,
+      actor_name: 'Sistema',
+      metadata: {auto_released: true, count: rows.length, pickup_ids: rows.map((r: any) => r.id)},
+      tenant_id: tenantId,
+    });
+  }
+}
+
+setInterval(() => {
+  autoReleaseAfterHours().catch((err) => console.error('Error en autoReleaseAfterHours:', err));
+}, 60_000);
+
 app.use('/api', (_req, res) => fail(res, 404, 'Endpoint no encontrado.'));
 
 app.listen(PORT, () => {
   console.log(`API de Safe Smart Pickup escuchando en el puerto ${PORT}`);
   autoCompleteStalePickups().catch((err) => console.error('Error en autoCompleteStalePickups:', err));
+  autoReleaseAfterHours().catch((err) => console.error('Error en autoReleaseAfterHours:', err));
 });

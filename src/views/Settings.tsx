@@ -29,6 +29,8 @@ export function Settings() {
     logo_url: '',
     primary_dismissal_mode: 'teacher' as 'teacher' | 'staff',
     emergency_lockdown_enabled: true,
+    auto_release_enabled: false,
+    auto_release_after_time: '16:30',
   });
   const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -96,7 +98,9 @@ export function Settings() {
     ]);
 
     if (data) {
-      setSettings(data);
+      // Postgres devuelve `time` como "HH:MM:SS" — el <input type="time">
+      // espera "HH:MM".
+      setSettings({ ...data, auto_release_after_time: String(data.auto_release_after_time || '16:30').slice(0, 5) });
     }
     if (tenantData?.default_language === 'en' || tenantData?.default_language === 'es') {
       setDefaultLanguage(tenantData.default_language);
@@ -393,6 +397,60 @@ export function Settings() {
                     <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">
                       Al guardar, si el bloqueo estaba activo se levanta automáticamente.
                     </p>
+                  )}
+                </section>
+
+                {/* Autorización automática por horario */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <CalendarClock className="w-5 h-5 text-amber-500" /> Autorización Automática por Horario
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Después de la hora que elijas, toda solicitud de salida que quede pendiente se autoriza
+                    sola, sin esperar a que un maestro la apruebe desde Mi Salón — pensado para el personal
+                    que queda al cierre y normalmente ya no usa la app, porque coordina por teléfono
+                    directamente con quien viene a buscar al alumno.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, auto_release_enabled: true })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        settings.auto_release_enabled
+                          ? 'bg-amber-500 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Activado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, auto_release_enabled: false })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        !settings.auto_release_enabled
+                          ? 'bg-rose-600 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Desactivado
+                    </button>
+                  </div>
+                  {settings.auto_release_enabled && (
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                        Autorizar automáticamente después de las
+                      </label>
+                      <input
+                        type="time"
+                        value={settings.auto_release_after_time}
+                        onChange={(e) => setSettings({ ...settings, auto_release_after_time: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                        Se revisa cada minuto — no hace falta que nadie esté con la app abierta para que
+                        funcione.
+                      </p>
+                    </div>
                   )}
                 </section>
 
