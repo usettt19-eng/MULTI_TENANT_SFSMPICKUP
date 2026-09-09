@@ -38,6 +38,12 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
   const [lockdownActive, setLockdownActive] = React.useState(false);
   const lockdownActiveRef = React.useRef(false);
   const [settingsId, setSettingsId] = React.useState<string | null>(null);
+  // Interruptor de Ajustes > General: si el colegio no quiere que el
+  // personal pueda activar el bloqueo de emergencia, este botón desaparece
+  // por completo (no solo se deshabilita) — es la única pantalla que
+  // escribe lockdown_mode/emite el broadcast, así que ocultarlo aquí basta
+  // para "apagar" la función en todo el sistema.
+  const [lockdownFeatureEnabled, setLockdownFeatureEnabled] = React.useState(true);
   const [schoolInfo, setSchoolInfo] = React.useState<{ name: string, logo: string | null }>({ name: 'THE GUARDIAN', logo: null });
   const channelRef = React.useRef<any>(null);
 
@@ -50,11 +56,12 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
       if (!profile?.tenant_id) return;
       const { data } = await supabase
         .from('school_settings')
-        .select('id, school_name, logo_url')
+        .select('id, school_name, logo_url, emergency_lockdown_enabled')
         .eq('tenant_id', profile.tenant_id)
         .maybeSingle();
       if (data) {
         setSettingsId(data.id);
+        setLockdownFeatureEnabled(data.emergency_lockdown_enabled !== false);
         if (data.school_name) {
           setSchoolInfo({ name: data.school_name, logo: data.logo_url });
         }
@@ -234,13 +241,15 @@ export function Sidebar({ currentView, setCurrentView, isOpen, onClose }: Sideba
       </nav>
 
       <div className="mt-auto pt-6 border-t border-slate-200 space-y-1">
-        <button 
-          onClick={handleLockdownToggle}
-          className={`w-full mb-4 py-3 ${lockdownActive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-error hover:bg-red-700'} text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg`}
-        >
-          {lockdownActive ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-          {lockdownActive ? t('sidebar.lockdownActive') : t('sidebar.lockdownInactive')}
-        </button>
+        {lockdownFeatureEnabled && (
+          <button
+            onClick={handleLockdownToggle}
+            className={`w-full mb-4 py-3 ${lockdownActive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-error hover:bg-red-700'} text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg`}
+          >
+            {lockdownActive ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+            {lockdownActive ? t('sidebar.lockdownActive') : t('sidebar.lockdownInactive')}
+          </button>
+        )}
         {canSeeSettingsButton && (
           <button
             onClick={() => {

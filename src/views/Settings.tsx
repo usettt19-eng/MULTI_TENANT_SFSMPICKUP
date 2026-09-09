@@ -27,6 +27,7 @@ export function Settings() {
     pickup_radius_meters: 65,
     logo_url: '',
     primary_dismissal_mode: 'teacher' as 'teacher' | 'staff',
+    emergency_lockdown_enabled: true,
   });
   const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -101,6 +102,14 @@ export function Settings() {
       }
     }
 
+    // Si se apaga el sistema, el botón que lo enciende/apaga desde el
+    // sidebar desaparece — así que si por casualidad quedaba activo, hay
+    // que liberarlo aquí mismo o el colegio se queda bloqueado sin forma de
+    // levantarlo hasta que alguien vuelva a prender el interruptor.
+    if (!currentSettings.emergency_lockdown_enabled) {
+      currentSettings.lockdown_mode = false;
+    }
+
     const [{ error }, { error: langError }] = await Promise.all([
       supabase.from('school_settings').upsert(currentSettings),
       profile?.tenant_id
@@ -110,6 +119,15 @@ export function Settings() {
 
     if (error || langError) alert(t('settings.saveErrorPrefix') + (error?.message || langError?.message));
     else {
+      if (!currentSettings.emergency_lockdown_enabled) {
+        const channel = supabase.channel('system_state');
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({ type: 'broadcast', event: 'lockdown', payload: { active: false } });
+            setTimeout(() => supabase.removeChannel(channel), 500);
+          }
+        });
+      }
       alert(t('settings.saveSuccess'));
       setLogoFile(null); // Clear the selected file
       fetchSettings();
@@ -294,6 +312,45 @@ export function Settings() {
                       {t('settings.assignedStaff')}
                     </button>
                   </div>
+                </section>
+
+                {/* Sistema de Bloqueo de Emergencia */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <Shield className="w-5 h-5 text-rose-500" /> Sistema de Bloqueo de Emergencia
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Es el botón rojo/verde que aparece al final del menú del personal para activar o levantar un bloqueo general del colegio. Apágalo si el colegio no quiere usar esta función — el botón deja de aparecer para todo el personal hasta que lo vuelvas a encender aquí.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, emergency_lockdown_enabled: true })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        settings.emergency_lockdown_enabled
+                          ? 'bg-emerald-600 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Activado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, emergency_lockdown_enabled: false })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        !settings.emergency_lockdown_enabled
+                          ? 'bg-rose-600 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Desactivado
+                    </button>
+                  </div>
+                  {!settings.emergency_lockdown_enabled && (
+                    <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">
+                      Al guardar, si el bloqueo estaba activo se levanta automáticamente.
+                    </p>
+                  )}
                 </section>
 
                 {/* Geolocation Parameters */}
