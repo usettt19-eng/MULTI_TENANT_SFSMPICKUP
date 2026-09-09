@@ -2,13 +2,14 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-09 (padres con hijos en dos colegios vía `parent_school_access`, fix de
-seguridad para que un reemplazo autorizado aplique solo a los hijos elegidos,
-métricas de "Staff/Padres Activos Hoy" basadas en actividad real en vez de
-login, Rutas de Bus completas —incluido login propio para el encargado de cada
-bus—, interruptor para apagar el bloqueo de emergencia por colegio, fix de
-Monitor Externo quedándose pegado en bloqueo activo, y selección de quién
-recibe la Alerta Discreta).
+2026-09-09 (**las apps de iOS y Android ya están publicadas y públicas en el
+App Store y Google Play**, padres con hijos en dos colegios vía
+`parent_school_access`, fix de seguridad para que un reemplazo autorizado
+aplique solo a los hijos elegidos, métricas de "Staff/Padres Activos Hoy"
+basadas en actividad real en vez de login, Rutas de Bus completas —incluido
+login propio para el encargado de cada bus—, interruptor para apagar el
+bloqueo de emergencia por colegio, fix de Monitor Externo quedándose pegado en
+bloqueo activo, y selección de quién recibe la Alerta Discreta).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -304,7 +305,9 @@ es **por pertenencia** (`tenant_id IN user_tenant_ids()`), no por igualdad de un
     América Latina y el Caribe (39 países) — sin Europa ni Asia-Pacífico.
   - Publicación: manual (no automática al aprobarse), para controlar el
     momento exacto del lanzamiento público.
-  **Estado: en cola de revisión de Apple, hasta 48 horas.**
+  **Estado: ~~en cola de revisión de Apple, hasta 48 horas~~ Publicada y
+  disponible al público en el App Store — ver confirmación del
+  2026-09-09 más abajo en §3.**
 - **2026-08-21 — App Android enviada a Google Play, pista de Prueba
   interna**. Workflow nuevo `android-deploy.yml` (`workflow_dispatch` manual,
   nunca automático en cada push): compila el AAB firmado con
@@ -2056,6 +2059,29 @@ hoy, y luego un interruptor por persona
 excluir a alguien puntual sin tocarle sus permisos ni la configuración de
 "notificar todas las llegadas".
 
+### Confirmado: ambas apps ya están publicadas al público (2026-09-09)
+El admin confirmó con capturas de pantalla, directo desde cada tienda, que
+las dos apps ya están **live y públicas** (no en pista de prueba):
+
+- **iOS**: `apps.apple.com/us/app/safe-smart-pickup/id6803200144` —
+  página normal de App Store, botón "Share" (no "Get TestFlight"),
+  visible para cualquier usuario sin invitación.
+- **Android**: `play.google.com/store/apps/details?id=com.safesmartpickup.app`
+  — ficha pública de Google Play, botón "Instalar en más dispositivos"
+  (ya instalada, listado abierto), no la pantalla de pista interna/cerrada
+  con enlace de invitación.
+
+Esto reemplaza el estado anterior registrado en este documento (iOS "en
+cola de revisión", Android "en pistas de Prueba interna/cerrada, no en
+producción todavía").
+
+**Sin confirmar todavía** (no verificado en esta sesión, revisar antes de
+promocionar la publicación): si ya se sacó a los ~410 padres de prueba de
+las listas de Prueba interna/cerrada de Google Play y del grupo externo
+"Test Casco" de TestFlight — este era, según el pendiente anterior, el
+paso previo obligatorio antes de abrir cualquiera de las dos apps al
+público, para no dejarlos mezclados con usuarios reales.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -2195,15 +2221,18 @@ relevantes de cara a producción:
   terceros sin mantenimiento desde 2020).
 - Registrar el acceso cruzado del `super_admin` (hoy no deja rastro propio
   más allá de lo que cada endpoint ya audita).
-- App iOS: build 1.0 enviado a revisión de Apple el 2026-08-20, sigue
-  "Pendiente de revisión" en App Store Connect (verificado el 2026-08-25).
-- App Android: build publicado en las pistas de Prueba interna y Prueba
-  cerrada de Google Play (no en producción todavía).
-- **Pendiente antes de publicar cualquiera de las dos apps al público**:
-  sacar a los 410 padres de prueba (Android: listas de Prueba interna/cerrada
-  en Google Play; iOS: grupo externo "Test Casco" de TestFlight) para no
-  dejarlos mezclados con usuarios reales — ver el detalle en "Apps móviles"
-  §3.
+- ~~App iOS: build 1.0 enviado a revisión de Apple, sigue "Pendiente de
+  revisión"~~ **Resuelto 2026-09-09**: publicada y pública en el App
+  Store (`apps.apple.com/us/app/safe-smart-pickup/id6803200144`).
+- ~~App Android: build publicado en las pistas de Prueba interna y Prueba
+  cerrada de Google Play (no en producción todavía)~~ **Resuelto
+  2026-09-09**: publicada y pública en Google Play
+  (`play.google.com/store/apps/details?id=com.safesmartpickup.app`).
+- **Pendiente de verificar** (no confirmado en esta sesión): si ya se sacó
+  a los ~410 padres de prueba de las listas de Prueba interna/cerrada de
+  Google Play y del grupo externo "Test Casco" de TestFlight antes de la
+  publicación pública de arriba — para no dejarlos mezclados con usuarios
+  reales. Ver el detalle en "Apps móviles" §3.
 - Notificación push nativa (aunque la app esté cerrada) para avisos/formularios
   y llegadas — hoy solo suena si el padre tiene la app abierta (Realtime +
   `notifications`). Requiere certificados APNs/FCM y backend que dispare el
