@@ -76,9 +76,29 @@ export function VerificationDisplay() {
     console.log('VerificationDisplay: lockdownActive changed to:', lockdownActive);
   }, [lockdownActive]);
 
+  // Fuente de verdad real del bloqueo: la fila en school_settings. El
+  // broadcast de abajo solo sirve para reaccionar YA cuando alguien
+  // presiona el botón mientras esta pantalla está abierta — pero si esta
+  // pantalla es la única conectada en ese momento (un monitor sin nadie
+  // logueado al lado), nunca recibe esa respuesta y se queda pegada en lo
+  // último que vio (bug real: una escuela apagó el bloqueo desde Ajustes y
+  // este monitor siguió mostrando "RESTRICTED EXIT" indefinidamente). Por
+  // eso también se consulta la tabla directamente, igual que ya hacen
+  // TopNav y Mi Salón.
+  const fetchLockdownState = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('school_settings')
+      .select('lockdown_mode')
+      .eq('tenant_id', profile.tenant_id)
+      .maybeSingle();
+    setLockdownActive(!!data?.lockdown_mode);
+  };
+
   useEffect(() => {
     fetchDoorsAndGrades();
     fetchPickups();
+    fetchLockdownState();
 
     // pickup_events, school_settings, camera_detections y audit_logs nunca
     // estuvieron en la publicación de Realtime de Supabase (solo
@@ -95,20 +115,13 @@ export function VerificationDisplay() {
       })
       .subscribe((status) => {
         console.log('Monitor channel status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Requesting initial lockdown status...');
-          channelRef.current.send({
-            type: 'broadcast',
-            event: 'request_lockdown_status',
-            payload: {}
-          });
-        }
       });
 
     // Polling every 10 seconds — mecanismo real de refresco de esta pantalla
     const pollInterval = window.setInterval(() => {
       console.log('VerificationDisplay polling...');
       fetchPickups();
+      fetchLockdownState();
     }, 10000);
 
     return () => {
