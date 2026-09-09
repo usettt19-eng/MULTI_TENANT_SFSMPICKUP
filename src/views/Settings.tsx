@@ -5,7 +5,7 @@ import { TopNav } from '../components/TopNav';
 import {
   Settings as SettingsIcon, MapPin, Building, Shield,
   Map as MapIcon, Save, Navigation, RefreshCcw,
-  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users
+  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users, BellRing
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
 import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
@@ -31,10 +31,36 @@ export function Settings() {
   });
   const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  // Quién recibe la Alerta Discreta / Solicitud de Ayuda (server/src/index.ts
+  // notifyTenantAdmins): TODO perfil con role='admin' de este colegio, sea
+  // el administrador dueño de la cuenta o cualquier miembro del staff
+  // ascendido a admin desde Gestión de Personal — sin filtrar por permisos
+  // de módulo, así que aunque alguien no tenga el permiso "security"
+  // igual le llega esta alerta si tiene rol de admin.
+  const [alertRecipients, setAlertRecipients] = useState<{ id: string; name: string; isFounder: boolean }[]>([]);
 
   useEffect(() => {
     fetchSettings();
+    fetchAlertRecipients();
   }, [profile?.tenant_id]);
+
+  const fetchAlertRecipients = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, additional_tutor_name')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('role', 'admin');
+    const list = (data || []).map((p: any) => {
+      let isStaff = false;
+      try {
+        isStaff = JSON.parse(p.additional_tutor_name || '{}').is_staff === true;
+      } catch {}
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'Sin nombre';
+      return { id: p.id, name, isFounder: !isStaff };
+    }).sort((a, b) => Number(b.isFounder) - Number(a.isFounder) || a.name.localeCompare(b.name));
+    setAlertRecipients(list);
+  };
 
   const fetchSettings = async () => {
     if (!profile?.tenant_id) return;
@@ -351,6 +377,36 @@ export function Settings() {
                       Al guardar, si el bloqueo estaba activo se levanta automáticamente.
                     </p>
                   )}
+                </section>
+
+                {/* Quién recibe la Alerta Discreta */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <BellRing className="w-5 h-5 text-indigo-500" /> Quién recibe la Alerta Discreta
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Cuando alguien de recepción activa "Alerta Discreta" (Monitor Externo) o "Necesito ayuda" (Check-In), estas son las personas que reciben la notificación. Es automático según quién tiene rol de administrador — no depende de los permisos de módulo que le hayas dado en Gestión de Personal.
+                  </p>
+                  {alertRecipients.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 font-medium italic">Nadie recibiría esta alerta todavía.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {alertRecipients.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2"
+                        >
+                          <span className="text-xs font-black text-indigo-900">{r.name}</span>
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-400">
+                            {r.isFounder ? 'Admin' : 'Staff'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 font-medium italic">
+                    Para agregar o quitar a alguien de esta lista, dale o quítale el rol de administrador desde Gestión de Personal.
+                  </p>
                 </section>
 
                 {/* Geolocation Parameters */}
