@@ -24,6 +24,38 @@ docker compose up -d
 
 ---
 
+## 2026-09-10 — `2de0c8a41f206a6101c2eaf21c1f4e87f9f20213`
+
+**Fix "Marcar como leído" + "Hoy no va en bus" + idioma de avisos de voz + Android en producción**
+
+Confirmado funcionando en producción. Incluye:
+
+- Fix de seguridad: "Marcar como leído" en un mensaje libre (`[MENSAJE]`)
+  ya no crea una autorización de reemplazo falsa con QR — solo marca
+  leído y audita. Limpieza de 20 entradas falsas ya creadas en 15 padres.
+- Feature "Hoy no va en bus": botón en `ParentDashboard` para excluir a
+  un alumno del anuncio automático de su ruta ese día
+  (`bus_daily_exclusions`), visible también en Ajustes de Rutas de Bus y
+  registrado en el Inbox de Solicitudes del colegio.
+- Fix de RLS: endpoint `GET /api/parents/bus-info` (service_role) para
+  que un padre real pueda ver la ruta de bus de su hijo — la consulta
+  directa fallaba en silencio por la política `parent_read_own_links`.
+- Setting `school_settings.voice_announcement_language` (es/en/both) en
+  Ajustes, aplicado a todos los avisos de voz (Dashboard, Monitor
+  Externo, Tránsito, Verificación) vía `audioManager.announceBilingual`.
+- Tres fixes encadenados en el aviso de voz de autorización de la app de
+  padres: desbloqueo de `speechSynthesis` por gesto del usuario, conexión
+  al setting de idioma, y fix de closure obsoleta (`voiceLangSettingRef`)
+  que lo dejaba pegado siempre en español.
+- Publicación exitosa de la app de Android al track de **producción** de
+  Google Play (run de GitHub Actions `34542605595`) — primera vez que el
+  plugin nativo de voz (`@capacitor-community/text-to-speech`, agregado
+  el 3 de sept.) llega a usuarios reales. Requirió que el admin del
+  cliente le diera permiso de "Lanzar a producción" a la cuenta de
+  servicio de CI en Play Console → Usuarios y permisos.
+
+---
+
 ## 2026-09-09 — `d65bf9623c49402363390c28fe66884155065617`
 
 **Permitir elegir quién recibe la Alerta Discreta en Ajustes**

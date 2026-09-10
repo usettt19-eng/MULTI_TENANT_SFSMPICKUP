@@ -2,9 +2,13 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-10 (**las apps de iOS y Android ya están publicadas y públicas en el
-App Store y Google Play**, autorización automática de salidas después de
-cierto horario, el Reporte del Día ahora muestra las salidas sin autorizar y
+2026-09-10 (**la app de Android ya se publicó al track de producción de Play
+Store con el plugin nativo de voz incluido**, feature "Hoy no va en bus" para
+excluir un alumno del anuncio automático de su ruta, setting de idioma de los
+avisos de voz por colegio —español/inglés/ambos— con su cadena de fixes en la
+app de padres, fix de seguridad de "Marcar como leído" que creaba
+autorizaciones de reemplazo falsas, autorización automática de salidas después
+de cierto horario, el Reporte del Día ahora muestra las salidas sin autorizar y
 quién debía hacerlo, selección consciente de puerta obligatoria en el panel
 de padres antes de anunciar la llegada, enlaces de restablecer contraseña
 resaltados en el login, padres con hijos en dos colegios vía
@@ -2142,6 +2146,94 @@ el mensaje de error visible para cuando el padre reabra la app). Nuevo
 checkbox "Guardar como mi puerta habitual": antes, cada toque se
 guardaba solo en `localStorage` sin preguntar; ahora solo se recuerda
 para la próxima vez si el padre lo marca explícitamente.
+
+### Fix de seguridad: "Marcar como leído" en un mensaje libre creaba una autorización falsa (2026-09-10)
+Los mensajes de texto libre de un padre (p.ej. "hoy no va en bus, yo lo
+recojo") se guardan en `replacement_requests.replacement_name` con el
+prefijo `[MENSAJE] `, reutilizando la misma tabla/Inbox de las
+solicitudes reales de reemplazo (diseño heredado, no se cambia). El bug:
+`RequestsCenter.tsx` corría la MISMA lógica al aprobar una solicitud real
+que al hacer clic en "Marcar como leído" sobre uno de estos mensajes —
+creaba una entrada falsa en `additional_tutor_name.replacements[]` del
+perfil (usando el mensaje completo como "nombre" del autorizado, con un
+QR válido y casi siempre `is_recurring: true`, o sea autorización
+permanente) y mandaba una notificación sin sentido de "tu solicitud fue
+aprobada". Se agregó un corte temprano en `handleProcessRequest` para los
+mensajes `[MENSAJE]`: solo marca el registro como leído y deja auditoría,
+sin tocar reemplazos ni QR. Se limpiaron en producción 20 entradas falsas
+ya creadas en 15 padres (verificado: 0 restantes, entradas reales
+intactas).
+
+### "Hoy no va en bus" — exclusión diaria del anuncio automático de bus (2026-09-10)
+Hasta ahora, si el hijo de un padre iba en bus escolar y ese día lo iba a
+recoger el propio padre en cambio, no existía ninguna forma de avisarlo
+dentro del sistema — solo el mensaje de texto libre (ver bug de arriba),
+sin ningún efecto real. Nueva tabla `bus_daily_exclusions`
+(`bus_route_id`, `student_id`, `excluded_date`, único por combinación).
+En `ParentDashboard.tsx`, cada alumno que va en bus muestra un botón "Hoy
+no va en bus" / "Deshacer exclusión"; al activarla, el anuncio automático
+de esa ruta (`BusRoutesPanel.tsx` → `handleAnnounce`) excluye a ese
+alumno de los `pickup_events` que crea ese día, y el conteo "N no vienen
+hoy" aparece en la tarjeta de la ruta. También queda registrado en el
+Inbox de Solicitudes del colegio (fila `[MENSAJE]` de solo lectura) para
+que quede constancia de que el colegio se enteró del cambio. Fix de RLS
+en el camino: la consulta de qué ruta de bus tiene cada alumno vinculado
+fallaba en silencio para un padre real (la política `parent_read_own_links`
+de `parent_students` solo deja leer filas donde `parent_id = auth.uid()`,
+y la fila del bus pertenece al perfil fantasma del bus, no al padre) — se
+resolvió con un endpoint nuevo (`GET /api/parents/bus-info`) con el
+cliente `service_role`.
+
+### Setting de idioma de los avisos de voz, por colegio (2026-09-10)
+Nuevo `school_settings.voice_announcement_language` (`'es'` / `'en'` /
+`'both'`, default `'es'`), configurable en Ajustes. Antes cada aviso de
+voz (Dashboard, Monitor Externo, Tránsito, Verificación) sonaba siempre
+en español y en inglés sin importar el colegio. Se centralizó en
+`audioManager.ts` (`announceBilingual`) y se aplicó a todos los avisos de
+esas pantallas. `resolveArrivalLabel` ahora también devuelve la etiqueta
+en inglés (`labelEn`) para los anuncios de llegada.
+
+En la app de padres apareció una cadena de tres bugs separados sobre el
+mismo aviso (autorización liberada, `speakReleasedAnnouncement` en
+`ParentDashboard.tsx`, un mecanismo de voz aparte del de
+`audioManager.ts`):
+1. No sonaba nada en absoluto en iOS/web — `speechSynthesis.speak()` se
+   dispara desde el polling en segundo plano (sin gesto del usuario), y
+   el navegador lo descarta en silencio si nunca hubo un gesto real en
+   esa sesión. Fix: un listener de `click`/`touchstart` que "desbloquea"
+   el motor con una `SpeechSynthesisUtterance('')` vacía la primera vez
+   (no aplica a Android nativo, que usa el plugin `TextToSpeech`).
+2. Al arreglar eso, sonaba en español Y en inglés siempre, ignorando el
+   setting — faltaba conectar `speakReleasedAnnouncement` con
+   `voice_announcement_language`.
+3. Al conectarlo, sonaba SIEMPRE en español aunque el colegio tuviera
+   `'en'` — closure obsoleta: el `useEffect` que arma el `setInterval`
+   del polling tiene dependencias `[isInside, isLocationEnabled]` que no
+   cambian en la sesión, así que el intervalo quedó congelado con el
+   valor de idioma que existía en el primer render, antes de que
+   terminara de cargar el de Supabase. Fix con el mismo patrón ya usado
+   para `selectedDoorIdRef`: un `voiceLangSettingRef` sincronizado por
+   `useEffect`, leído dentro del intervalo en vez de la variable de
+   estado directamente.
+
+### Publicación de la app de Android al track de producción (2026-09-10)
+El plugin nativo de voz (`@capacitor-community/text-to-speech`,
+agregado el 2026-09-03) nunca había llegado a los usuarios reales de
+Android: el sitio web se actualiza solo (la app carga
+`https://safesmartpickup.com` en vivo, ver `capacitor.config.ts`), pero
+un plugin nativo es código Java/Kotlin compilado — necesita un AAB nuevo
+subido a Play Store. La última publicación al track de producción había
+sido el 21 de agosto, antes de que existiera el plugin. Se disparó
+`android-deploy.yml` con `track: production`; falló la primera vez en el
+paso final ("Subir a Google Play") con `The caller does not have
+permission` — a la cuenta de servicio de CI
+(`github-actions-play@...gserviceaccount.com`) le faltaba el permiso
+"Lanzar a producción" en Play Console → Usuarios y permisos (solo tenía
+permiso para tracks de prueba interna/cerrada). Una vez que el admin
+del cliente le agregó ese permiso, se volvió a disparar el workflow y
+esta vez terminó con éxito (run `34542605595`, subida a producción
+confirmada). Play Store puede tardar horas en escalonar la actualización
+a todos los usuarios que ya tienen la app instalada.
 
 ---
 
