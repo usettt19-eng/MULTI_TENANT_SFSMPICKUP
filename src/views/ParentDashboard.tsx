@@ -1012,6 +1012,38 @@ export function ParentDashboard() {
     setPendingForms(matchingForms.filter(f => !answeredIds.includes(f.id)));
   };
 
+  // "Desbloquea" speechSynthesis con el primer toque real del padre en la
+  // pantalla — en iOS Safari (y algunos Android en navegador, no la app
+  // nativa) speak() se ignora en silencio si nunca hubo ANTES un gesto real
+  // del usuario en esa sesión. speakReleasedAnnouncement() de abajo se
+  // dispara sola desde un sondeo en segundo plano (no de un clic), así que
+  // sin este desbloqueo previo el aviso simplemente nunca sonaba en esos
+  // navegadores — el padre no tenía ninguna señal de que algo había
+  // fallado, el ciclo seguía funcionando bien, solo sin voz. Un utterance
+  // vacío basta para "abrir" el motor para el resto de la sesión.
+  useEffect(() => {
+    if (Capacitor.getPlatform() === 'android') return;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
+      try {
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+      } catch (e) {
+        console.error('No se pudo desbloquear speechSynthesis:', e);
+      }
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+    };
+    document.addEventListener('click', unlock);
+    document.addEventListener('touchstart', unlock);
+    return () => {
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+    };
+  }, []);
+
   // Anuncio de voz DENTRO de la app del padre (no en el monitor externo del
   // colegio): cuando el maestro autoriza la salida, se lee en voz alta que
   // el alumno va camino al vehículo y se recuerda pulsar el botón de
