@@ -96,6 +96,9 @@ export function ParentDashboard() {
   // Dashboard (ej. durante una implementación) — ver
   // announce_arrival_restriction_enabled en school_settings.
   const [announceRestrictionEnabled, setAnnounceRestrictionEnabled] = useState(true);
+  // Ajustes > Idioma de los Avisos de Voz — controla speakReleasedAnnouncement()
+  // más abajo, igual que ya controla los avisos del lado del colegio.
+  const [voiceLangSetting, setVoiceLangSetting] = useState<'es' | 'en' | 'both'>('es');
   const canAnnounceArrivalNow = !announceRestrictionEnabled || now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR;
 
   // School selector state
@@ -802,6 +805,11 @@ export function ParentDashboard() {
       // puede venir null/undefined — se trata como "activo" (el
       // comportamiento de siempre), no como "desactivado".
       setAnnounceRestrictionEnabled(data.announce_arrival_restriction_enabled !== false);
+      // Mismo ajuste que ya usan Dashboard/Monitor Externo/Tránsito
+      // (Ajustes > Idioma de los Avisos de Voz) — antes este aviso puntual
+      // (autorización de salida) ignoraba el ajuste y siempre hablaba los
+      // dos idiomas sin importar lo configurado.
+      setVoiceLangSetting(data.voice_announcement_language === 'en' || data.voice_announcement_language === 'both' ? data.voice_announcement_language : 'es');
     }
   };
 
@@ -1056,24 +1064,30 @@ export function ParentDashboard() {
     const name = studentFirstName || (language === 'en' ? 'your child' : 'tu hijo');
     const esText = `Atención, ${name} fue autorizado para salir del salón y va en camino al vehículo. No olvides pulsar el botón de confirmación cuando ya lo tengas contigo.`;
     const enText = `Attention, ${name} has been authorized to leave the classroom and is on the way to the vehicle. Don't forget to tap the confirmation button once you have them with you.`;
+    const speakEs = voiceLangSetting !== 'en';
+    const speakEn = voiceLangSetting !== 'es';
 
     if (Capacitor.getPlatform() === 'android') {
-      TextToSpeech.speak({ text: esText, lang: 'es-ES', rate: 0.9 })
-        .then(() => TextToSpeech.speak({ text: enText, lang: 'en-US', rate: 0.9 }))
-        .catch(e => console.error('No se pudo anunciar la autorización por voz (Android):', e));
+      const playEs = () => (speakEs ? TextToSpeech.speak({ text: esText, lang: 'es-ES', rate: 0.9 }) : Promise.resolve());
+      const playEn = () => (speakEn ? TextToSpeech.speak({ text: enText, lang: 'en-US', rate: 0.9 }) : Promise.resolve());
+      playEs().then(playEn).catch(e => console.error('No se pudo anunciar la autorización por voz (Android):', e));
       return;
     }
 
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
-      const esUtterance = new SpeechSynthesisUtterance(esText);
-      esUtterance.lang = 'es-ES';
-      esUtterance.rate = 0.9;
       const enUtterance = new SpeechSynthesisUtterance(enText);
       enUtterance.lang = 'en-US';
       enUtterance.rate = 0.9;
-      esUtterance.onend = () => window.speechSynthesis.speak(enUtterance);
-      window.speechSynthesis.speak(esUtterance);
+      if (speakEs) {
+        const esUtterance = new SpeechSynthesisUtterance(esText);
+        esUtterance.lang = 'es-ES';
+        esUtterance.rate = 0.9;
+        if (speakEn) esUtterance.onend = () => window.speechSynthesis.speak(enUtterance);
+        window.speechSynthesis.speak(esUtterance);
+      } else if (speakEn) {
+        window.speechSynthesis.speak(enUtterance);
+      }
     } catch (e) {
       console.error('No se pudo anunciar la autorización por voz:', e);
     }
