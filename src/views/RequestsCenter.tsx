@@ -128,6 +128,26 @@ export function RequestsCenter() {
     try {
       const parentId = req.parent_id;
 
+      // Un "[MENSAJE]" es texto libre del padre (ej. "hoy no viene en bus"),
+      // no una autorización de reemplazo — reusa esta misma tabla solo para
+      // aparecer en el Inbox. "Mark as Read" solo debe sacarlo de pendiente;
+      // antes de este fix corría el mismo código de abajo, que creaba una
+      // autorización de reemplazo falsa usando el mensaje completo como
+      // "nombre" de la persona autorizada, con QR y todo, y le mandaba al
+      // padre un aviso de "tu solicitud fue aprobada" sin sentido.
+      if (req.replacement_name?.startsWith('[MENSAJE]')) {
+        await supabase.from('replacement_requests').update({ status: 'approved' }).eq('id', req.id);
+        await logActivity(
+          'SECURITY',
+          `MENSAJE LEÍDO: de ${req.parent?.first_name || 'un padre'} — "${req.replacement_name.replace('[MENSAJE] ', '')}"`,
+          'Recepcionista',
+          {},
+          req.parent?.tenant_id
+        );
+        fetchRequests();
+        return;
+      }
+
       if (status === 'approved' && parentId) {
         // 1. Fetch parent profile
         const { data: profile } = await supabase
