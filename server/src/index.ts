@@ -735,6 +735,72 @@ app.put(
   }),
 );
 
+/**
+ * El padre marca "hoy no va en bus" desde su panel (bus_daily_exclusions,
+ * insertado directo por el cliente — RLS ya lo permite para el padre real
+ * del alumno). Este endpoint solo dispara el aviso al encargado del bus
+ * (que ya tiene su propio login, ver /api/bus-routes/:id/credentials) —
+ * el padre no puede insertarle una notificación a OTRO usuario por RLS,
+ * así que pasa por acá, igual que /api/pickup/notify-staff.
+ */
+app.post(
+  '/api/bus/exclusion-notify',
+  requireAuth,
+  wrap(async (req, res) => {
+    const tenantId = req.caller!.tenantId;
+    const {student_id} = req.body ?? {};
+    if (!tenantId || !student_id) return fail(res, 400, 'Falta el alumno.');
+
+    const {data: link} = await admin
+      .from('parent_students')
+      .select('student_id')
+      .eq('parent_id', req.caller!.id)
+      .eq('student_id', student_id)
+      .maybeSingle();
+    if (!link && !isStaffOf(req.caller, tenantId)) {
+      return fail(res, 403, 'No tienes autorización sobre ese alumno.');
+    }
+
+    const [{data: student}, {data: routes}] = await Promise.all([
+      admin.from('students').select('first_name, last_name').eq('id', student_id).eq('tenant_id', tenantId).maybeSingle(),
+      admin.from('bus_routes').select('id, name, profile_id').eq('tenant_id', tenantId),
+    ]);
+    if (!student) return fail(res, 404, 'Alumno no encontrado.');
+
+    const routeProfileIds = (routes ?? []).map((r) => r.profile_id);
+    const {data: busLink} = routeProfileIds.length > 0
+      ? await admin
+          .from('parent_students')
+          .select('parent_id')
+          .in('parent_id', routeProfileIds)
+          .eq('student_id', student_id)
+          .maybeSingle()
+      : {data: null};
+    const route = (routes ?? []).find((r) => r.profile_id === busLink?.parent_id);
+    if (!route) return ok(res, {notified: false});
+
+    const studentName = `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim();
+
+    await admin.from('notifications').insert({
+      user_id: route.profile_id,
+      title: 'Alumno no viene hoy en bus',
+      message: `${studentName} no viene hoy en la ruta — no lo esperes, un padre lo va a recoger directamente.`,
+      type: 'info',
+      tenant_id: tenantId,
+    });
+
+    await admin.from('audit_logs').insert({
+      event_type: 'SECURITY',
+      description: `EXCLUSIÓN DE BUS HOY: ${studentName} no va en "${route.name}" — avisado por ${req.caller!.email ?? 'un padre'}.`,
+      actor_name: req.caller!.email ?? 'Padre',
+      metadata: {student_id, bus_route_id: route.id},
+      tenant_id: tenantId,
+    });
+
+    return ok(res, {notified: true});
+  }),
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // PADRES CON HIJOS EN MÁS DE UN COLEGIO (parent_school_access)
 // ════════════════════════════════════════════════════════════════════════════

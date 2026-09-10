@@ -19,7 +19,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle, Check
+  HelpCircle, Check, Bus
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -122,6 +122,21 @@ export function ParentDashboard() {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState('');
   const [deliveryLink, setDeliveryLink] = useState('');
+
+  // Qué hijos propios (no de carpool) van en bus, y si ya se marcó "hoy no
+  // va en bus" para alguno — antes esto solo se avisaba por un mensaje de
+  // texto libre que nadie procesaba de verdad (ver bus_daily_exclusions):
+  // el bus lo seguía anunciando igual, sin importar lo que dijera el
+  // mensaje. Ahora es un botón real que excluye al alumno del próximo
+  // anuncio de esa ruta ese día.
+  const [busInfoByStudent, setBusInfoByStudent] = useState<Record<string, { busRouteId: string; busName: string; busProfileId: string }>>({});
+  const [busExclusionsToday, setBusExclusionsToday] = useState<Record<string, string>>({});
+  const [togglingBusExclusion, setTogglingBusExclusion] = useState<string | null>(null);
+  // true cuando quien inició sesión es el propio perfil fantasma del bus
+  // (el encargado, ver BusRoutesPanel) — solo en ese caso una exclusión de
+  // hoy debe saltarse al anunciar; para el padre real, la exclusión es
+  // información para EL BUS, no una razón para no poder anunciar él mismo.
+  const [isBusMonitorAccount, setIsBusMonitorAccount] = useState(false);
 
   // Vehículo: antes solo lo podía cargar el colegio al dar de alta al padre
   // (GuardiansRegistry.tsx) — el colegio pidió que el padre también lo
@@ -259,6 +274,7 @@ export function ParentDashboard() {
   const initDashboard = async () => {
     setLoading(true);
     await fetchStudents();
+    await fetchBusInfo();
     await fetchSchoolSettings();
     await fetchDoors();
     await checkActivePickups();
@@ -804,6 +820,115 @@ export function ParentDashboard() {
     if (data) setStudents(data.map(d => d.students).filter(Boolean));
   };
 
+  // Detecta si alguno de los hijos PROPIOS del padre (no aplica a hijos de
+  // carpool) va en una ruta de bus — cruzando sus propios parent_students
+  // contra los de los perfiles fantasma de bus_routes del mismo colegio —
+  // y si ya hay una exclusión guardada para hoy.
+  const fetchBusInfo = async () => {
+    if (!profile?.id || !profile?.tenant_id) return;
+    const { data: links } = await supabase
+      .from('parent_students')
+      .select('student_id')
+      .eq('parent_id', profile.id);
+    const studentIds = (links || []).map((l: any) => l.student_id);
+    if (studentIds.length === 0) {
+      setBusInfoByStudent({});
+      setBusExclusionsToday({});
+      return;
+    }
+
+    const { data: routes } = await supabase
+      .from('bus_routes')
+      .select('id, name, profile_id')
+      .eq('tenant_id', profile.tenant_id);
+    const routeProfileIds = (routes || []).map((r: any) => r.profile_id);
+    setIsBusMonitorAccount(routeProfileIds.includes(profile.id));
+    if (routeProfileIds.length === 0) {
+      setBusInfoByStudent({});
+      setBusExclusionsToday({});
+      return;
+    }
+
+    const { data: busLinks } = await supabase
+      .from('parent_students')
+      .select('parent_id, student_id')
+      .in('parent_id', routeProfileIds)
+      .in('student_id', studentIds);
+
+    const routeByProfileId = new Map((routes || []).map((r: any) => [r.profile_id, r]));
+    const busMap: Record<string, { busRouteId: string; busName: string; busProfileId: string }> = {};
+    (busLinks || []).forEach((l: any) => {
+      const route = routeByProfileId.get(l.parent_id);
+      if (route) busMap[l.student_id] = { busRouteId: route.id, busName: route.name, busProfileId: route.profile_id };
+    });
+    setBusInfoByStudent(busMap);
+
+    const busStudentIds = Object.keys(busMap);
+    if (busStudentIds.length === 0) {
+      setBusExclusionsToday({});
+      return;
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const { data: exclusions } = await supabase
+      .from('bus_daily_exclusions')
+      .select('id, student_id')
+      .in('student_id', busStudentIds)
+      .eq('excluded_date', todayStr);
+    const exclMap: Record<string, string> = {};
+    (exclusions || []).forEach((e: any) => { exclMap[e.student_id] = e.id; });
+    setBusExclusionsToday(exclMap);
+  };
+
+  const handleToggleBusExclusion = async (student: { id: string; first_name?: string; last_name?: string }) => {
+    const busInfo = busInfoByStudent[student.id];
+    if (!busInfo || !profile?.id || !profile?.tenant_id) return;
+    setTogglingBusExclusion(student.id);
+    try {
+      const existingId = busExclusionsToday[student.id];
+      if (existingId) {
+        const { error } = await supabase.from('bus_daily_exclusions').delete().eq('id', existingId);
+        if (error) throw error;
+        setBusExclusionsToday((prev) => {
+          const next = { ...prev };
+          delete next[student.id];
+          return next;
+        });
+      } else {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabase
+          .from('bus_daily_exclusions')
+          .insert({
+            tenant_id: profile.tenant_id,
+            bus_route_id: busInfo.busRouteId,
+            student_id: student.id,
+            excluded_date: todayStr,
+            created_by: profile.id,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        setBusExclusionsToday((prev) => ({ ...prev, [student.id]: data.id }));
+
+        // Avisa al encargado del bus (que ya tiene su propio login, ver
+        // BusRoutesPanel) para que no lo espere en la parada — el padre no
+        // puede insertarle una notificación a otro usuario por RLS, así
+        // que esto pasa por el backend.
+        try {
+          await apiFetch('/api/bus/exclusion-notify', {
+            method: 'POST',
+            body: JSON.stringify({ student_id: student.id }),
+          });
+        } catch (notifyErr) {
+          console.error('Error al avisar al encargado del bus:', notifyErr);
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || String(err));
+    } finally {
+      setTogglingBusExclusion(null);
+    }
+  };
+
   // notifications no está en la publicación de Realtime de Supabase, así
   // que el beep y el banner de "en camino/autorizado" se detectan comparando
   // cada poll contra los ids ya vistos, en vez de por WebSocket.
@@ -1311,6 +1436,12 @@ export function ParentDashboard() {
     setLoading(true);
     try {
       for (const student of pickupStudents) {
+        // Si quien anuncia es el propio encargado del bus (no el padre
+        // real) y este alumno ya se marcó "hoy no va en bus", se salta —
+        // el padre real SÍ debe poder seguir anunciando su propia llegada
+        // sin que la exclusión se lo impida, es información para el bus,
+        // no una restricción sobre él.
+        if (isBusMonitorAccount && busExclusionsToday[student.id]) continue;
         // El pickup_events queda con el tenant_id del ALUMNO, no el del
         // perfil del padre: para la enorme mayoría son el mismo colegio,
         // pero un padre con hijos en dos colegios (parent_school_access)
@@ -1967,6 +2098,32 @@ export function ParentDashboard() {
                   <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border border-emerald-100 flex items-center gap-1">
                     <Car className="w-3 h-3" /> {t('parent.carpool.todayBadge')}
                   </span>
+                )}
+                {busInfoByStudent[s.id] && (
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border flex items-center gap-1 ${
+                      busExclusionsToday[s.id]
+                        ? 'bg-amber-50 text-amber-600 border-amber-100'
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    }`}>
+                      <Bus className="w-3 h-3" />
+                      {busExclusionsToday[s.id] ? t('parent.bus.excludedTodayBadge') : busInfoByStudent[s.id].busName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleBusExclusion(s)}
+                      disabled={togglingBusExclusion === s.id}
+                      className={`text-[9px] font-black uppercase underline disabled:opacity-50 ${
+                        busExclusionsToday[s.id] ? 'text-indigo-500' : 'text-amber-600'
+                      }`}
+                    >
+                      {togglingBusExclusion === s.id
+                        ? '···'
+                        : busExclusionsToday[s.id]
+                          ? t('parent.bus.undoExclusionBtn')
+                          : t('parent.bus.excludeTodayBtn')}
+                    </button>
+                  </div>
                 )}
              </div>
            ))}

@@ -10,6 +10,11 @@ interface BusRoute {
   profile_id: string;
   door_id: string | null;
   student_count: number;
+  // Cuántos de esos alumnos su padre ya marcó "hoy no va en bus" — no se
+  // restan de student_count (ese sigue siendo el roster completo de la
+  // ruta), solo se muestran aparte para que recepción sepa que el próximo
+  // anuncio va a traer menos gente de la esperada.
+  excluded_today: number;
   // Solo bloquea el botón "Anunciar" de ESTE panel (recepción/dashboard) —
   // el encargado del bus sigue pudiendo anunciar la llegada desde su propio
   // login en la app de padres sin importar este valor. Pensado para cuando
@@ -102,14 +107,28 @@ export function BusRoutesPanel() {
     }
 
     const profileIds = routesData.map((r) => r.profile_id);
-    const { data: links } = profileIds.length > 0
-      ? await supabase.from('parent_students').select('parent_id').in('parent_id', profileIds)
-      : { data: [] as { parent_id: string }[] };
+    const routeIds = routesData.map((r) => r.id);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [{ data: links }, { data: exclusions }] = await Promise.all([
+      profileIds.length > 0
+        ? supabase.from('parent_students').select('parent_id').in('parent_id', profileIds)
+        : Promise.resolve({ data: [] as { parent_id: string }[] }),
+      routeIds.length > 0
+        ? supabase.from('bus_daily_exclusions').select('bus_route_id').in('bus_route_id', routeIds).eq('excluded_date', todayStr)
+        : Promise.resolve({ data: [] as { bus_route_id: string }[] }),
+    ]);
 
     const counts = new Map<string, number>();
     (links || []).forEach((l: any) => counts.set(l.parent_id, (counts.get(l.parent_id) || 0) + 1));
 
-    const withCounts = routesData.map((r) => ({ ...r, student_count: counts.get(r.profile_id) || 0 }));
+    const excludedCounts = new Map<string, number>();
+    (exclusions || []).forEach((e: any) => excludedCounts.set(e.bus_route_id, (excludedCounts.get(e.bus_route_id) || 0) + 1));
+
+    const withCounts = routesData.map((r) => ({
+      ...r,
+      student_count: counts.get(r.profile_id) || 0,
+      excluded_today: excludedCounts.get(r.id) || 0,
+    }));
     setRoutes(withCounts);
     routesRef.current = withCounts;
     setLoading(false);
@@ -291,10 +310,29 @@ export function BusRoutesPanel() {
         .from('parent_students')
         .select('student_id')
         .eq('parent_id', route.profile_id);
-      const studentIds = (links || []).map((l: any) => l.student_id);
+      const allStudentIds = (links || []).map((l: any) => l.student_id);
+
+      // Alumnos que su padre ya marcó "hoy no va en bus" (ver ParentDashboard)
+      // — se saltan del anuncio, no hace falta que recepción sepa la lista
+      // de memoria.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const { data: exclusions } = allStudentIds.length > 0
+        ? await supabase
+            .from('bus_daily_exclusions')
+            .select('student_id')
+            .eq('bus_route_id', route.id)
+            .eq('excluded_date', todayStr)
+            .in('student_id', allStudentIds)
+        : { data: [] as { student_id: string }[] };
+      const excludedIds = new Set((exclusions || []).map((e: any) => e.student_id));
+      const studentIds = allStudentIds.filter((id) => !excludedIds.has(id));
 
       if (studentIds.length === 0) {
-        alert(`La ruta "${route.name}" no tiene alumnos asignados todavía.`);
+        alert(
+          excludedIds.size > 0
+            ? `Todos los alumnos de "${route.name}" fueron marcados como "hoy no va en bus" por sus padres.`
+            : `La ruta "${route.name}" no tiene alumnos asignados todavía.`,
+        );
         return;
       }
 
@@ -427,7 +465,7 @@ export function BusRoutesPanel() {
               else if (stage === 'ready') subtitle = `Listo — ${released} alumno${released === 1 ? '' : 's'} autorizado${released === 1 ? '' : 's'}, toca para confirmar salida`;
               else if (stage === 'waiting') subtitle = `${released}/${total} autorizados por su salón`;
               else if (blockedIdle) subtitle = 'El encargado anuncia desde su celular';
-              else subtitle = `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''}`;
+              else subtitle = `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${route.excluded_today > 0 ? ` · ${route.excluded_today} no viene${route.excluded_today === 1 ? '' : 'n'} hoy` : ''}${route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''}`;
 
               return (
                 <div key={route.id} className="flex items-stretch gap-1.5">
