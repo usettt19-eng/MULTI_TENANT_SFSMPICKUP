@@ -97,8 +97,19 @@ export function ParentDashboard() {
   // announce_arrival_restriction_enabled en school_settings.
   const [announceRestrictionEnabled, setAnnounceRestrictionEnabled] = useState(true);
   // Ajustes > Idioma de los Avisos de Voz — controla speakReleasedAnnouncement()
-  // más abajo, igual que ya controla los avisos del lado del colegio.
+  // más abajo, igual que ya controla los avisos del lado del colegio. El
+  // sondeo que dispara ese aviso (más abajo, checkActivePickups) se arma
+  // dentro de un useEffect con deps [isInside, isLocationEnabled] — si esos
+  // dos no cambian durante la sesión, ese efecto corre una sola vez, muy
+  // temprano, y su closure queda "congelada" con el valor de este estado
+  // en ESE momento (normalmente el 'es' por defecto, antes de que
+  // fetchSchoolSettings() termine de traer el real) — nunca se entera de
+  // actualizaciones posteriores. Un ref sí se lee "en vivo" en cada llamada.
   const [voiceLangSetting, setVoiceLangSetting] = useState<'es' | 'en' | 'both'>('es');
+  const voiceLangSettingRef = useRef<'es' | 'en' | 'both'>('es');
+  useEffect(() => {
+    voiceLangSettingRef.current = voiceLangSetting;
+  }, [voiceLangSetting]);
   const canAnnounceArrivalNow = !announceRestrictionEnabled || now.getHours() >= ANNOUNCE_ARRIVAL_MIN_HOUR;
 
   // School selector state
@@ -1064,8 +1075,8 @@ export function ParentDashboard() {
     const name = studentFirstName || (language === 'en' ? 'your child' : 'tu hijo');
     const esText = `Atención, ${name} fue autorizado para salir del salón y va en camino al vehículo. No olvides pulsar el botón de confirmación cuando ya lo tengas contigo.`;
     const enText = `Attention, ${name} has been authorized to leave the classroom and is on the way to the vehicle. Don't forget to tap the confirmation button once you have them with you.`;
-    const speakEs = voiceLangSetting !== 'en';
-    const speakEn = voiceLangSetting !== 'es';
+    const speakEs = voiceLangSettingRef.current !== 'en';
+    const speakEn = voiceLangSettingRef.current !== 'es';
 
     if (Capacitor.getPlatform() === 'android') {
       const playEs = () => (speakEs ? TextToSpeech.speak({ text: esText, lang: 'es-ES', rate: 0.9 }) : Promise.resolve());
