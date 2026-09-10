@@ -2,8 +2,12 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-09 (**las apps de iOS y Android ya están publicadas y públicas en el
-App Store y Google Play**, padres con hijos en dos colegios vía
+2026-09-10 (**las apps de iOS y Android ya están publicadas y públicas en el
+App Store y Google Play**, autorización automática de salidas después de
+cierto horario, el Reporte del Día ahora muestra las salidas sin autorizar y
+quién debía hacerlo, selección consciente de puerta obligatoria en el panel
+de padres antes de anunciar la llegada, enlaces de restablecer contraseña
+resaltados en el login, padres con hijos en dos colegios vía
 `parent_school_access`, fix de seguridad para que un reemplazo autorizado
 aplique solo a los hijos elegidos, métricas de "Staff/Padres Activos Hoy"
 basadas en actividad real en vez de login, Rutas de Bus completas —incluido
@@ -2081,6 +2085,63 @@ las listas de Prueba interna/cerrada de Google Play y del grupo externo
 "Test Casco" de TestFlight — este era, según el pendiente anterior, el
 paso previo obligatorio antes de abrir cualquiera de las dos apps al
 público, para no dejarlos mezclados con usuarios reales.
+
+### Reporte del Día: salidas sin autorizar y quién debía hacerlo (2026-09-09)
+El admin pidió poder ver, en el Reporte del Día, qué solicitudes de
+salida se quedaron sin autorizar y de qué miembro del staff era
+responsabilidad. Se agrega una consulta de `pickup_events` con status
+`'announced'`/`'in_queue'` (nunca llegaron a `'released'` ni
+`'completed'`) en el rango del día, resolviendo el responsable de cada
+una con el mismo criterio de asignación por grado+sección que ya usa Mi
+Salón (`resolveResponsibleStaffIds`). Nueva tarjeta "Salidas sin
+autorizar" en la vista previa (en rojo si hay alguna), desglose por
+responsable, y un Anexo 6 en el PDF. Importante: es una foto del momento
+en que se genera el reporte, no del cierre del día — para que sea
+confiable como "quién de verdad dejó de autorizar", hay que generarlo de
+un día ya pasado, no del día en curso.
+
+### Autorización automática de salidas después de cierto horario (2026-09-09)
+Los colegios cierran a las 5pm y el personal que queda para despachar
+alumnos normalmente ya no usa la app — coordina por teléfono directamente
+con quien viene a buscar al alumno, así que esperar a que alguien lo
+autorice desde Mi Salón no tiene sentido a esa hora. Se agregan
+`school_settings.auto_release_enabled` (default `false`) y
+`auto_release_after_time` (default 16:30, solo aplica si está activado) y
+un job en el backend (`autoReleaseAfterHours`, mismo patrón que
+`autoCompleteStalePickups` — corre cada 60s, no depende de que nadie
+tenga la app abierta) que, pasada esa hora, autoriza automáticamente
+(`status → 'released'`) toda solicitud de salida pendiente del colegio,
+dejando un registro en `audit_logs` con el detalle de a quién se le
+autorizó. Nueva sección "Autorización Automática por Horario" en Ajustes
+> General, por colegio. Confirmado funcionando en producción el mismo
+día: 23 solicitudes de TCS Albrook se autorizaron solas a las 5:22pm —
+se verificó que esos mismos 23 padres seguían contando correctamente en
+"Padres Activos Hoy" (la métrica se basa en cuándo anunciaron, no en
+cuándo se autorizó).
+
+### Enlaces de restablecer/pedir contraseña resaltados en el login (2026-09-10)
+Los dos enlaces ("¿No tienes contraseña? Pide un enlace de acceso" /
+"¿No tienes contraseña o la olvidaste? Establécela aquí") eran texto gris
+de 12px, casi invisibles debajo del botón negro de "Ingresar" — varios
+padres no los veían y por eso no lograban entrar nunca. Ahora son texto
+azul índigo (el azul clásico de un hipervínculo, no el teal del
+branding) subrayado de 14px, con un separador "¿Problemas para entrar?"
+arriba para que salten a la vista.
+
+### Selección consciente de puerta antes de anunciar la llegada (2026-09-10)
+Con más de una puerta de salida configurada, `ParentDashboard.tsx`
+preseleccionaba la primera en orden alfabético sin que el padre la
+eligiera — un padre podía anunciar por la puerta equivocada sin darse
+cuenta, y el personal de la puerta correcta nunca se enteraba. Ahora:
+sin una puerta guardada como habitual, ninguna queda preseleccionada
+(el padre debe elegirla a conciencia); mientras no la elija, no puede
+anunciar la llegada ni a mano (ambos botones quedan deshabilitados, con
+aviso) ni por el rastreo automático en segundo plano
+(`handleAnnounceArrival` corta antes de crear el `pickup_event` y deja
+el mensaje de error visible para cuando el padre reabra la app). Nuevo
+checkbox "Guardar como mi puerta habitual": antes, cada toque se
+guardaba solo en `localStorage` sin preguntar; ahora solo se recuerda
+para la próxima vez si el padre lo marca explícitamente.
 
 ---
 
