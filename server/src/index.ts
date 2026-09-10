@@ -736,6 +736,49 @@ app.put(
 );
 
 /**
+ * Para cada hijo propio del padre (no de carpool), si va en una ruta de
+ * bus, con qué ruta. RLS en `parent_students` solo deja leer filas donde
+ * `parent_id = auth.uid()` — el padre puede ver sus propios vínculos, pero
+ * no los del perfil fantasma del bus (que es OTRO "padre"), así que ese
+ * cruce no se puede hacer desde el cliente con supabase-js directo; pasa
+ * por acá con el cliente de service_role.
+ */
+app.get(
+  '/api/parents/bus-info',
+  requireAuth,
+  wrap(async (req, res) => {
+    const parentId = req.caller!.id;
+    const {data: links} = await admin.from('parent_students').select('student_id').eq('parent_id', parentId);
+    const studentIds = (links ?? []).map((l) => l.student_id);
+    if (studentIds.length === 0) return ok(res, {byStudent: {}, isBusMonitorAccount: false});
+
+    const {data: students} = await admin.from('students').select('id, tenant_id').in('id', studentIds);
+    const tenantIds = Array.from(new Set((students ?? []).map((s) => s.tenant_id)));
+    const {data: routes} = tenantIds.length > 0
+      ? await admin.from('bus_routes').select('id, name, profile_id').in('tenant_id', tenantIds)
+      : {data: [] as {id: string; name: string; profile_id: string}[]};
+    const routeProfileIds = (routes ?? []).map((r) => r.profile_id);
+
+    const {data: busLinks} = routeProfileIds.length > 0
+      ? await admin
+          .from('parent_students')
+          .select('parent_id, student_id')
+          .in('parent_id', routeProfileIds)
+          .in('student_id', studentIds)
+      : {data: [] as {parent_id: string; student_id: string}[]};
+
+    const routeByProfileId = new Map((routes ?? []).map((r) => [r.profile_id, r]));
+    const byStudent: Record<string, {busRouteId: string; busName: string; busProfileId: string}> = {};
+    (busLinks ?? []).forEach((l) => {
+      const route = routeByProfileId.get(l.parent_id);
+      if (route) byStudent[l.student_id] = {busRouteId: route.id, busName: route.name, busProfileId: route.profile_id};
+    });
+
+    return ok(res, {byStudent, isBusMonitorAccount: routeProfileIds.includes(parentId)});
+  }),
+);
+
+/**
  * El padre marca "hoy no va en bus" desde su panel (bus_daily_exclusions,
  * insertado directo por el cliente — RLS ya lo permite para el padre real
  * del alumno). Este endpoint solo dispara el aviso al encargado del bus

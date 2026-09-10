@@ -821,47 +821,25 @@ export function ParentDashboard() {
   };
 
   // Detecta si alguno de los hijos PROPIOS del padre (no aplica a hijos de
-  // carpool) va en una ruta de bus — cruzando sus propios parent_students
-  // contra los de los perfiles fantasma de bus_routes del mismo colegio —
-  // y si ya hay una exclusión guardada para hoy.
+  // carpool) va en una ruta de bus, y si ya hay una exclusión guardada para
+  // hoy. El cruce contra los vínculos del perfil fantasma del bus (que es
+  // OTRO "padre" en parent_students) no se puede hacer con supabase-js
+  // directo — RLS solo deja leer ahí filas donde parent_id = auth.uid(),
+  // así que ese cruce vive en el backend (GET /api/parents/bus-info).
   const fetchBusInfo = async () => {
     if (!profile?.id || !profile?.tenant_id) return;
-    const { data: links } = await supabase
-      .from('parent_students')
-      .select('student_id')
-      .eq('parent_id', profile.id);
-    const studentIds = (links || []).map((l: any) => l.student_id);
-    if (studentIds.length === 0) {
+    let busMap: Record<string, { busRouteId: string; busName: string; busProfileId: string }> = {};
+    try {
+      const res = await apiJson('/api/parents/bus-info');
+      busMap = res.data?.byStudent || {};
+      setBusInfoByStudent(busMap);
+      setIsBusMonitorAccount(!!res.data?.isBusMonitorAccount);
+    } catch (err) {
+      console.error('Error al traer info de bus:', err);
       setBusInfoByStudent({});
       setBusExclusionsToday({});
       return;
     }
-
-    const { data: routes } = await supabase
-      .from('bus_routes')
-      .select('id, name, profile_id')
-      .eq('tenant_id', profile.tenant_id);
-    const routeProfileIds = (routes || []).map((r: any) => r.profile_id);
-    setIsBusMonitorAccount(routeProfileIds.includes(profile.id));
-    if (routeProfileIds.length === 0) {
-      setBusInfoByStudent({});
-      setBusExclusionsToday({});
-      return;
-    }
-
-    const { data: busLinks } = await supabase
-      .from('parent_students')
-      .select('parent_id, student_id')
-      .in('parent_id', routeProfileIds)
-      .in('student_id', studentIds);
-
-    const routeByProfileId = new Map((routes || []).map((r: any) => [r.profile_id, r]));
-    const busMap: Record<string, { busRouteId: string; busName: string; busProfileId: string }> = {};
-    (busLinks || []).forEach((l: any) => {
-      const route = routeByProfileId.get(l.parent_id);
-      if (route) busMap[l.student_id] = { busRouteId: route.id, busName: route.name, busProfileId: route.profile_id };
-    });
-    setBusInfoByStudent(busMap);
 
     const busStudentIds = Object.keys(busMap);
     if (busStudentIds.length === 0) {
