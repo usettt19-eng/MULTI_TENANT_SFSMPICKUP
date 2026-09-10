@@ -6,7 +6,7 @@ import { TopNav } from '../components/TopNav';
 import {
   Settings as SettingsIcon, MapPin, Building, Shield,
   Map as MapIcon, Save, Navigation, RefreshCcw,
-  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users, BellRing
+  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users, BellRing, Volume2
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
 import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
@@ -31,6 +31,7 @@ export function Settings() {
     emergency_lockdown_enabled: true,
     auto_release_enabled: false,
     auto_release_after_time: '16:30',
+    voice_announcement_language: 'es' as 'es' | 'en' | 'both',
   });
   const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -452,6 +453,33 @@ export function Settings() {
                       </p>
                     </div>
                   )}
+                </section>
+
+                {/* Idioma de los avisos de voz */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <Volume2 className="w-5 h-5 text-indigo-500" /> Idioma de los Avisos de Voz
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    En qué idioma(s) se anuncian por voz las llegadas, los turnos de la fila, y los
+                    mensajes nuevos de los padres — en el Dashboard, Monitor Externo y Tránsito.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['es', 'en', 'both'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSettings({ ...settings, voice_announcement_language: opt })}
+                        className={`py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                          settings.voice_announcement_language === opt
+                            ? 'bg-indigo-600 text-white shadow-lg'
+                            : 'bg-slate-50 text-slate-400 border border-slate-200'
+                        }`}
+                      >
+                        {opt === 'es' ? 'Español' : opt === 'en' ? 'English' : 'Ambos'}
+                      </button>
+                    ))}
+                  </div>
                 </section>
 
                 {/* Quién recibe la Alerta Discreta */}

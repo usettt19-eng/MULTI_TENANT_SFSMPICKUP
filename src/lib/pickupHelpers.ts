@@ -17,6 +17,10 @@ export interface ArrivalLabel {
   isBus: boolean;
   // Bus: nombre de la ruta (ej. "Bus 1"). Padre: la relación (ej. "el papá").
   label: string;
+  // Mismo dato en inglés, para el ajuste de idioma de los avisos de voz
+  // (Ajustes > Idioma de los Avisos de Voz) — un bus usa el mismo nombre en
+  // los dos idiomas, es un nombre propio.
+  labelEn: string;
 }
 
 export async function resolveArrivalLabel(
@@ -29,7 +33,7 @@ export async function resolveArrivalLabel(
     .select('name')
     .eq('profile_id', parentId)
     .maybeSingle();
-  if (busRoute) return { isBus: true, label: busRoute.name };
+  if (busRoute) return { isBus: true, label: busRoute.name, labelEn: busRoute.name };
 
   const { data: relData } = await supabase
     .from('parent_students')
@@ -39,10 +43,11 @@ export async function resolveArrivalLabel(
     .maybeSingle();
 
   let label = 'el representante';
-  if (relData?.relationship === 'father') label = 'el papá';
-  else if (relData?.relationship === 'mother') label = 'la mamá';
-  else if (relData?.relationship === 'guardian') label = 'el tutor';
-  return { isBus: false, label };
+  let labelEn = 'the representative';
+  if (relData?.relationship === 'father') { label = 'el papá'; labelEn = 'the father'; }
+  else if (relData?.relationship === 'mother') { label = 'la mamá'; labelEn = 'the mother'; }
+  else if (relData?.relationship === 'guardian') { label = 'el tutor'; labelEn = 'the guardian'; }
+  return { isBus: false, label, labelEn };
 }
 
 // Umbral para marcar un anuncio de llegada como atrasado en las pantallas de

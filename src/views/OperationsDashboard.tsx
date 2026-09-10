@@ -15,7 +15,7 @@ import {
   FileBarChart, Car, Menu, X
 } from 'lucide-react';
 
-import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
+import { subscribeToAudioState, enableGlobalAudio, announceBilingual, setVoiceLanguageSetting } from '../lib/audioManager';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { DailyReportModal } from '../components/DailyReportModal';
 import { BusRoutesPanel } from '../components/BusRoutesPanel';
@@ -86,7 +86,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
 
   const enableAudio = () => {
     enableGlobalAudio().then(() => {
-      playGlobalVoiceMessage("Audio activado correctamente");
+      announceBilingual('Audio activado correctamente', 'Audio activated successfully');
     });
   };
 
@@ -162,13 +162,16 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             announcedPickupIds.current.add(pickup.id);
             
             const fullName = `${pickup.student?.first_name} ${pickup.student?.last_name}`;
-            const { isBus, label } = await resolveArrivalLabel(supabase, pickup.parent_id, pickup.student_id);
+            const { isBus, label, labelEn } = await resolveArrivalLabel(supabase, pickup.parent_id, pickup.student_id);
 
             console.log(`OperationsDashboard Auto-announcing: ${fullName} (${label})`);
-            playGlobalVoiceMessage(
+            announceBilingual(
               isBus
                 ? `Atención, el ${label} ha llegado para el estudiante ${fullName}.`
-                : `Atención, ${label} de ${fullName} ha llegado.`
+                : `Atención, ${label} de ${fullName} ha llegado.`,
+              isBus
+                ? `Attention, ${labelEn} has arrived for student ${fullName}.`
+                : `Attention, ${labelEn} of ${fullName} has arrived.`,
             );
           }
         });
@@ -310,7 +313,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       // las pantallas que dependen del polling en vez de Realtime.
       const seen = seenPendingRequestIdsRef.current;
       if (seen && data.some(r => !seen.has(r.id))) {
-        playGlobalVoiceMessage('Atención, tienen un nuevo mensaje de los padres.');
+        announceBilingual('Atención, tienen un nuevo mensaje de los padres.', 'Attention, you have a new message from parents.');
       }
       seenPendingRequestIdsRef.current = new Set(data.map(r => r.id));
       setPendingRequests(data);
@@ -369,7 +372,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('school_settings')
-      .select('logo_url, announce_arrival_restriction_enabled')
+      .select('logo_url, announce_arrival_restriction_enabled, voice_announcement_language')
       .eq('tenant_id', profile.tenant_id)
       .maybeSingle();
 
@@ -379,6 +382,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       // migración puede venir null/undefined — se trata como "activo"
       // (el comportamiento de siempre), no como "desactivado".
       setAnnounceRestrictionEnabled(data.announce_arrival_restriction_enabled !== false);
+      setVoiceLanguageSetting(data.voice_announcement_language);
     }
   };
 

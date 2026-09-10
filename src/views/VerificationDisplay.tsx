@@ -7,7 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
-import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, getAudioContext } from '../lib/audioManager';
+import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, announceBilingual, setVoiceLanguageSetting, getAudioContext } from '../lib/audioManager';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
@@ -68,7 +68,7 @@ export function VerificationDisplay() {
 
   const enableAudio = () => {
     enableGlobalAudio().then(() => {
-      playGlobalVoiceMessage("Audio activado correctamente");
+      announceBilingual('Audio activado correctamente', 'Audio activated successfully');
     });
   };
 
@@ -89,10 +89,11 @@ export function VerificationDisplay() {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('school_settings')
-      .select('lockdown_mode')
+      .select('lockdown_mode, voice_announcement_language')
       .eq('tenant_id', profile.tenant_id)
       .maybeSingle();
     setLockdownActive(!!data?.lockdown_mode);
+    setVoiceLanguageSetting(data?.voice_announcement_language);
   };
 
   useEffect(() => {
@@ -225,10 +226,11 @@ export function VerificationDisplay() {
               // bocinas del salón, no para el padre) dice el alumno, su
               // grado y su sección, no quién lo retira — eso ya se ve en la
               // tarjeta y en el toast, que sí siguen mostrando quién llegó.
-              // Se anuncia en español y después en inglés, más despacio que
-              // antes (ver audioManager.ts) para que se entienda bien.
-              playGlobalVoiceMessage(`Salida de ${fullName}, grado ${gradeName}, sección ${sectionName}, solicitada.`, 'es');
-              playGlobalVoiceMessage(`Dismissal requested for ${fullName}, grade ${gradeName}, section ${sectionName}.`, 'en');
+              // Idioma(s) según Ajustes > Idioma de los Avisos de Voz.
+              announceBilingual(
+                `Salida de ${fullName}, grado ${gradeName}, sección ${sectionName}, solicitada.`,
+                `Dismissal requested for ${fullName}, grade ${gradeName}, section ${sectionName}.`,
+              );
               setShowArrivalToast(
                 isBusArrival
                   ? `El ${relLabel} ha llegado para ${fullName}`
@@ -432,19 +434,25 @@ export function VerificationDisplay() {
         const fullName = `${currentPickup.students?.first_name} ${currentPickup.students?.last_name}`;
         const replacementName = getReplacementNameFromNotes(currentPickup.notes);
         let relLabel: string;
+        let relLabelEn: string;
         let isBusTurn = false;
         if (replacementName) {
           relLabel = `${replacementName} (autorizado)`;
+          relLabelEn = `${replacementName} (authorized)`;
         } else {
           const result = await resolveArrivalLabel(supabase, currentPickup.parent_id, currentPickup.student_id);
           isBusTurn = result.isBus;
           relLabel = result.isBus ? result.label : (result.label.charAt(0).toUpperCase() + result.label.slice(1));
+          relLabelEn = result.isBus ? result.labelEn : (result.labelEn.charAt(0).toUpperCase() + result.labelEn.slice(1));
         }
 
-        playGlobalVoiceMessage(
+        announceBilingual(
           isBusTurn
             ? `Atención, es el turno del ${relLabel} para el estudiante ${fullName}. Por favor acérquese.`
-            : `Atención, es el turno para ${relLabel} de ${fullName}. Por favor acérquese.`
+            : `Atención, es el turno para ${relLabel} de ${fullName}. Por favor acérquese.`,
+          isBusTurn
+            ? `Attention, it's ${relLabelEn}'s turn for student ${fullName}. Please come forward.`
+            : `Attention, it's ${fullName}'s turn for ${relLabelEn}. Please come forward.`,
         );
       };
 

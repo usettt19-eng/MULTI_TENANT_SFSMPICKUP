@@ -6,7 +6,7 @@ import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Footprints, DoorOpen, Car, User, ShieldCheck, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt } from '../lib/pickupHelpers';
-import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage } from '../lib/audioManager';
+import { subscribeToAudioState, enableGlobalAudio, announceBilingual, setVoiceLanguageSetting } from '../lib/audioManager';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 
 /**
@@ -64,12 +64,16 @@ export function TransitMonitor() {
     if (!profile?.tenant_id) return;
     fetchDoors();
     fetchTransit();
+    fetchVoiceLanguageSetting();
 
     // pickup_events nunca estuvo en la publicación de Realtime de Supabase
     // (solo parent_presence lo está) — el .on('postgres_changes', ...) que
     // había acá nunca recibía nada, solo sumaba una conexión sin beneficio.
     // El polling de abajo es, y siempre fue, el mecanismo real de refresco.
-    const pollInterval = window.setInterval(fetchTransit, 10000);
+    const pollInterval = window.setInterval(() => {
+      fetchTransit();
+      fetchVoiceLanguageSetting();
+    }, 10000);
 
     return () => {
       clearInterval(pollInterval);
@@ -83,6 +87,16 @@ export function TransitMonitor() {
       setDoors(data);
       doorsRef.current = data;
     }
+  };
+
+  const fetchVoiceLanguageSetting = async () => {
+    if (!profile?.tenant_id) return;
+    const { data } = await supabase
+      .from('school_settings')
+      .select('voice_announcement_language')
+      .eq('tenant_id', profile.tenant_id)
+      .maybeSingle();
+    setVoiceLanguageSetting(data?.voice_announcement_language);
   };
 
   const fetchTransit = async () => {
@@ -119,12 +133,14 @@ export function TransitMonitor() {
           const door = doorsRef.current.find(d => d.id === pickup.door_id)?.name;
 
           // Aviso para el personal de entrega final (puerta de salida): el
-          // alumno ya fue aprobado por el profesor y viene en camino. En
-          // español y después en inglés, igual que el anuncio del profesor.
+          // alumno ya fue aprobado por el profesor y viene en camino.
+          // Idioma(s) según Ajustes > Idioma de los Avisos de Voz.
           const esDoor = door ? `, hacia la puerta ${door}` : '';
           const enDoor = door ? `, heading to door ${door}` : '';
-          playGlobalVoiceMessage(`Alumno en tránsito: ${fullName}, grado ${gradeName}, sección ${sectionName}${esDoor}.`, 'es');
-          playGlobalVoiceMessage(`Student in transit: ${fullName}, grade ${gradeName}, section ${sectionName}${enDoor}.`, 'en');
+          announceBilingual(
+            `Alumno en tránsito: ${fullName}, grado ${gradeName}, sección ${sectionName}${esDoor}.`,
+            `Student in transit: ${fullName}, grade ${gradeName}, section ${sectionName}${enDoor}.`,
+          );
         });
       }
     }

@@ -250,6 +250,32 @@ const useBrowserFallbackWait = (text: string, lang: 'es' | 'en'): Promise<void> 
   });
 };
 
+// Ajustes > General: en qué idioma(s) suenan TODOS los avisos de voz de la
+// app (Dashboard, Monitor Externo, Tránsito) — un módulo plano, no un hook
+// de React, así que cada pantalla que llama a fetchSchoolSettings() avisa
+// aquí con setVoiceLanguageSetting() en vez de pasarlo por props.
+let voiceLanguageSetting: 'es' | 'en' | 'both' = 'es';
+
+export const setVoiceLanguageSetting = (value: string | null | undefined) => {
+  voiceLanguageSetting = value === 'en' || value === 'both' ? value : 'es';
+};
+
+export const getVoiceLanguageSetting = () => voiceLanguageSetting;
+
+// Punto de entrada recomendado para cualquier aviso nuevo: recibe el texto
+// en los dos idiomas y decide solo, según el ajuste del colegio, cuál(es)
+// encolar — evita que cada pantalla repita el mismo if/else.
+export const announceBilingual = (esText: string, enText: string) => {
+  if (voiceLanguageSetting === 'es') {
+    playGlobalVoiceMessage(esText, 'es');
+  } else if (voiceLanguageSetting === 'en') {
+    playGlobalVoiceMessage(enText, 'en');
+  } else {
+    playGlobalVoiceMessage(esText, 'es');
+    playGlobalVoiceMessage(enText, 'en');
+  }
+};
+
 export const playGlobalVoiceMessage = async (text: string, lang: 'es' | 'en' = 'es') => {
   console.log('playGlobalVoiceMessage called with:', text, lang);
   if (!isAudioEnabled) {
