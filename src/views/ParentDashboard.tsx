@@ -19,7 +19,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle
+  HelpCircle, Check
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -178,6 +178,14 @@ export function ParentDashboard() {
   // hermanos de distinto grado que salen juntos por la misma puerta).
   const [doors, setDoors] = useState<{ id: string; name: string }[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // Si el padre marcó "guardar como mi puerta habitual" la vez anterior —
+  // controla si handleSelectDoor sigue escribiendo en localStorage o no.
+  const [saveDoorPreference, setSaveDoorPreference] = useState(false);
+  // Habiendo más de una puerta, nunca se preselecciona sola — el padre debe
+  // elegirla a conciencia cada vez que no la tenga guardada como habitual,
+  // y mientras no la elija, no puede anunciar la llegada (ni él a mano ni
+  // el rastreo automático en segundo plano).
+  const doorSelectionRequired = doors.length > 1 && !selectedDoorId;
 
   // Geofencing states from Database
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
@@ -272,15 +280,31 @@ export function ParentDashboard() {
 
     const savedDoorId = localStorage.getItem(`preferred_door_${profile.id}`);
     if (savedDoorId && list.some(d => d.id === savedDoorId)) {
+      // Ya la había guardado como habitual antes — esta sí se preselecciona,
+      // porque fue una elección consciente hecha en su momento, no un
+      // default silencioso.
       setSelectedDoorId(savedDoorId);
-    } else if (list.length > 0) {
+      setSaveDoorPreference(true);
+    } else if (list.length === 1) {
+      // Con una sola puerta no hay nada que elegir de verdad.
       setSelectedDoorId(list[0].id);
     }
   };
 
   const handleSelectDoor = (doorId: string) => {
     setSelectedDoorId(doorId);
-    if (profile?.id) localStorage.setItem(`preferred_door_${profile.id}`, doorId);
+    if (profile?.id && saveDoorPreference) localStorage.setItem(`preferred_door_${profile.id}`, doorId);
+  };
+
+  const handleToggleSaveDoorPreference = () => {
+    const next = !saveDoorPreference;
+    setSaveDoorPreference(next);
+    if (!profile?.id) return;
+    if (next && selectedDoorId) {
+      localStorage.setItem(`preferred_door_${profile.id}`, selectedDoorId);
+    } else if (!next) {
+      localStorage.removeItem(`preferred_door_${profile.id}`);
+    }
   };
 
   const fetchCarpoolData = async () => {
@@ -1278,6 +1302,10 @@ export function ParentDashboard() {
       setErrorMessage(t('parent.pickup.tooEarlyError'));
       return;
     }
+    if (doorSelectionRequired) {
+      setErrorMessage(t('parent.doors.selectRequired'));
+      return;
+    }
     if (isAnnouncingRef.current) return;
     isAnnouncingRef.current = true;
     setLoading(true);
@@ -1488,9 +1516,9 @@ export function ParentDashboard() {
         )}
 
         {doors.length > 1 && (
-          <div className="p-4 rounded-2xl border bg-white/10 border-white/10 mt-3">
+          <div className={`p-4 rounded-2xl border mt-3 transition-colors ${doorSelectionRequired ? 'bg-amber-500/20 border-amber-400/40' : 'bg-white/10 border-white/10'}`}>
             <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-white/20">
+              <div className={`p-2 rounded-lg ${doorSelectionRequired ? 'bg-amber-500 text-white' : 'bg-white/20'}`}>
                 <MapPin className="w-4 h-4" />
               </div>
               <span className="text-xs font-black">{t('parent.doors.question')}</span>
@@ -1511,6 +1539,21 @@ export function ParentDashboard() {
                 </button>
               ))}
             </div>
+            {doorSelectionRequired && (
+              <p className="text-[11px] font-bold text-amber-100 mt-3">
+                {t('parent.doors.selectRequired')}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleToggleSaveDoorPreference}
+              className="flex items-center gap-2 mt-3"
+            >
+              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${saveDoorPreference ? 'bg-emerald-500 border-emerald-500' : 'border-white/40'}`}>
+                {saveDoorPreference && <Check className="w-3 h-3 text-white" />}
+              </span>
+              <span className="text-[11px] font-bold text-indigo-100">{t('parent.doors.savePreference')}</span>
+            </button>
           </div>
         )}
       </div>
@@ -1633,12 +1676,17 @@ export function ParentDashboard() {
               <>
                 <button
                   onClick={() => handleAnnounceArrival()}
-                  disabled={!isInside || loading || !canAnnounceArrivalNow}
-                  className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && canAnnounceArrivalNow ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
+                  disabled={!isInside || loading || !canAnnounceArrivalNow || doorSelectionRequired}
+                  className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && canAnnounceArrivalNow && !doorSelectionRequired ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
                 >
                    <ShieldCheck className="w-10 h-10" />
                    <span className="text-2xl font-black">{t('parent.pickup.announceBtn')}</span>
                 </button>
+                {isInside && canAnnounceArrivalNow && doorSelectionRequired && (
+                  <p className="text-xs font-bold text-amber-600 text-center">
+                    {t('parent.doors.selectRequired')}
+                  </p>
+                )}
                 {isInside && !canAnnounceArrivalNow && (
                   <p className="text-xs font-bold text-slate-500 text-center">
                     {t('parent.pickup.tooEarlyError')}
@@ -1677,6 +1725,11 @@ export function ParentDashboard() {
                         {t('parent.pickup.tooEarlyError')}
                       </p>
                     )}
+                    {canAnnounceArrivalNow && doorSelectionRequired && (
+                      <p className="text-xs font-bold text-amber-600 text-center">
+                        {t('parent.doors.selectRequired')}
+                      </p>
+                    )}
                     <div className="flex gap-3">
                       <button
                         onClick={() => setShowManualArrival(false)}
@@ -1687,7 +1740,7 @@ export function ParentDashboard() {
                       </button>
                       <button
                         onClick={() => handleAnnounceArrival(true)}
-                        disabled={loading || !canAnnounceArrivalNow}
+                        disabled={loading || !canAnnounceArrivalNow || doorSelectionRequired}
                         className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.pickup.confirmArrivalBtn')}
