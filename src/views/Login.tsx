@@ -297,18 +297,23 @@ export function Login() {
               </button>
             </div>
 
-            <div className="text-center pt-2 space-y-2">
+            <div className="pt-3 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">¿Problemas para entrar?</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
               <button
                 type="button"
                 onClick={() => { setShowMagicLink(true); setError(null); }}
-                className="block w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                className="block w-full text-center text-sm font-black text-primary underline decoration-2 underline-offset-2 hover:text-primary-container transition-colors py-1"
               >
                 ¿No tienes contraseña? Pide un enlace de acceso
               </button>
               <button
                 type="button"
                 onClick={() => { setShowForgotPassword(true); setError(null); }}
-                className="block w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                className="block w-full text-center text-sm font-black text-primary underline decoration-2 underline-offset-2 hover:text-primary-container transition-colors py-1"
               >
                 ¿No tienes contraseña o la olvidaste? Establécela aquí
               </button>
