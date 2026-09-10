@@ -46,3 +46,26 @@ Incluye:
 - Selección de quién recibe la Alerta Discreta / Solicitud de Ayuda
   (`profiles.additional_tutor_name.receive_discrete_alert`, endpoint
   `PUT /api/staff/:id/discrete-alert`).
+
+---
+
+## 2026-09-10 — `1e7d8038799ed77e6ca4b5167109229aceca6978`
+
+**Exigir selección consciente de puerta antes de anunciar la llegada**
+
+Confirmado funcionando en producción. Incluye, además de lo del punto
+anterior:
+
+- Autorización automática de salidas después de cierto horario
+  (`school_settings.auto_release_enabled` / `auto_release_after_time`,
+  job `autoReleaseAfterHours` en el backend, corre cada 60s) — para el
+  personal que queda al cierre y ya no usa la app.
+- El Reporte del Día ahora incluye las salidas que quedaron sin autorizar
+  y quién era el responsable de cada grado+sección ese día (Anexo 6).
+- Enlaces de restablecer/pedir contraseña resaltados en azul índigo en el
+  login (antes eran texto gris casi invisible).
+- Con más de una puerta de salida, ninguna queda preseleccionada — el
+  padre debe elegirla a conciencia y no puede anunciar la llegada (ni a
+  mano ni por el rastreo automático en segundo plano) hasta hacerlo.
+  Nuevo checkbox "Guardar como mi puerta habitual" para el que sí quiera
+  que se le recuerde la próxima vez.
