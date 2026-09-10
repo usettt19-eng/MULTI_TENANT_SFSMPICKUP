@@ -840,6 +840,20 @@ app.post(
       tenant_id: tenantId,
     });
 
+    // Además del aviso al bus, queda como mensaje pendiente en el Inbox de
+    // Solicitudes (mismo mecanismo que cualquier "[MENSAJE]" libre) para
+    // que recepción/administración lo vea y lo marque como leído — deja
+    // registro explícito de que el colegio se enteró del cambio, no solo
+    // el encargado del bus.
+    await admin.from('replacement_requests').insert({
+      parent_id: req.caller!.id,
+      replacement_name: `[MENSAJE] ${studentName} no va hoy en el bus "${route.name}" — lo recogen directamente.`,
+      replacement_phone: 'N/A',
+      status: 'pending',
+      tenant_id: tenantId,
+      student_ids: [student_id],
+    });
+
     return ok(res, {notified: true});
   }),
 );
