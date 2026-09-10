@@ -306,14 +306,14 @@ export function Login() {
               <button
                 type="button"
                 onClick={() => { setShowMagicLink(true); setError(null); }}
-                className="block w-full text-center text-sm font-black text-primary underline decoration-2 underline-offset-2 hover:text-primary-container transition-colors py-1"
+                className="block w-full text-center text-sm font-bold text-indigo-600 underline decoration-1 underline-offset-2 hover:text-indigo-800 transition-colors py-1"
               >
                 ¿No tienes contraseña? Pide un enlace de acceso
               </button>
               <button
                 type="button"
                 onClick={() => { setShowForgotPassword(true); setError(null); }}
-                className="block w-full text-center text-sm font-black text-primary underline decoration-2 underline-offset-2 hover:text-primary-container transition-colors py-1"
+                className="block w-full text-center text-sm font-bold text-indigo-600 underline decoration-1 underline-offset-2 hover:text-indigo-800 transition-colors py-1"
               >
                 ¿No tienes contraseña o la olvidaste? Establécela aquí
               </button>
