@@ -21,6 +21,7 @@ import {
   UserCheck,
   Smartphone,
   Building2,
+  MessageCircle,
 } from 'lucide-react';
 
 const ANDROID_URL = 'https://play.google.com/store/apps/details?id=com.safesmartpickup.app';
@@ -283,13 +284,24 @@ export function LandingPage() {
               Contáctanos para configurar tu colegio y empezar a usar Safe Smart Pickup con tu
               equipo y tus familias.
             </p>
-            <a
-              href="mailto:info@safesmartpickup.com"
-              className="bg-white text-indigo-900 rounded-xl px-7 py-3.5 font-bold hover:bg-indigo-50 transition-colors inline-flex items-center gap-2"
-            >
-              <Mail className="w-4 h-4" />
-              info@safesmartpickup.com
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <a
+                href="mailto:info@safesmartpickup.com"
+                className="bg-white text-indigo-900 rounded-xl px-7 py-3.5 font-bold hover:bg-indigo-50 transition-colors inline-flex items-center gap-2"
+              >
+                <Mail className="w-4 h-4" />
+                info@safesmartpickup.com
+              </a>
+              <a
+                href="https://wa.me/5074320507"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-500 text-white rounded-xl px-7 py-3.5 font-bold hover:bg-emerald-400 transition-colors inline-flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                +507 4320507
+              </a>
+            </div>
           </div>
         </section>
       </main>
