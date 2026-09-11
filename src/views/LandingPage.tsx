@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import { useEffect, type ComponentType } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -171,13 +171,79 @@ function renderFeatureCard({ icon: Icon, title, description }: Feature) {
   );
 }
 
+const SEO_TITLE = 'Safe Smart Pickup — Software de Recogida Escolar, Bus y Bienestar para Colegios';
+const SEO_DESCRIPTION =
+  'Plataforma para colegios que digitaliza la recogida escolar: cola en vivo, geocerca automática, control de bus con exclusión diaria, bienestar y medicación, formularios, reportes y app para padres en Android e iOS.';
+const PAGE_URL = 'https://safesmartpickup.com/LandingPage';
+
+// Upsert (en vez de solo insertar) porque index.html ya trae un juego de
+// meta tags por defecto para bots que no ejecutan JS — aquí se reemplazan
+// por unos más específicos de esta página, no se duplican.
+function setMetaTag(attr: 'name' | 'property', key: string, content: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+}
+
 /**
  * Página de marketing pública, servida aparte del flujo normal de sesión
  * (ver App.tsx, ruta /LandingPage) — el gateway real sin sesión sigue siendo
  * Login directo (ver comentario en App.tsx), esta página es solo para
  * explicar todo lo que incluye el sistema a quien la comparta el colegio.
+ *
+ * SEO: como es una SPA sin server-side rendering, el título/meta/JSON-LD
+ * de esta ruta se fijan por JS al montar en vez de vivir en index.html —
+ * Googlebot sí ejecuta JS antes de indexar, así que esto lo toma en cuenta
+ * como contenido propio de /LandingPage (ver también public/robots.txt y
+ * public/sitemap.xml).
  */
 export function LandingPage() {
+  useEffect(() => {
+    document.title = SEO_TITLE;
+    setMetaTag('name', 'description', SEO_DESCRIPTION);
+    setMetaTag('property', 'og:title', SEO_TITLE);
+    setMetaTag('property', 'og:description', SEO_DESCRIPTION);
+    setMetaTag('property', 'og:url', PAGE_URL);
+    setMetaTag('name', 'twitter:title', SEO_TITLE);
+    setMetaTag('name', 'twitter:description', SEO_DESCRIPTION);
+
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', PAGE_URL);
+
+    const jsonLd = document.createElement('script');
+    jsonLd.type = 'application/ld+json';
+    jsonLd.id = 'landing-jsonld';
+    jsonLd.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'Safe Smart Pickup',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Android, iOS, Web',
+      description: SEO_DESCRIPTION,
+      url: PAGE_URL,
+      offers: { '@type': 'Offer', category: 'SaaS' },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Safe Smart Pickup Technology',
+        email: 'info@safesmartpickup.com',
+      },
+    });
+    document.head.appendChild(jsonLd);
+
+    return () => {
+      document.getElementById('landing-jsonld')?.remove();
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
       <header className="relative overflow-hidden bg-indigo-900 text-white">

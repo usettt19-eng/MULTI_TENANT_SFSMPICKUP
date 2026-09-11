@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /LandingPage
+Allow: /privacy.html
+Allow: /support.html
+Disallow: /api/
+Disallow: /external
+
+Sitemap: https://safesmartpickup.com/sitemap.xml
