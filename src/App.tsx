@@ -28,10 +28,12 @@ import { Login } from './views/Login';
 import { SetPassword } from './views/SetPassword';
 import { SharedQRDisplay } from './views/SharedQRDisplay';
 import { AppInstallGate } from './components/AppInstallGate';
+import { LandingPage } from './views/LandingPage';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
+  const [isMarketingLandingRoute, setIsMarketingLandingRoute] = useState(false);
   const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType, error: authError } = useAuth() as any;
 
   useEffect(() => {
@@ -41,7 +43,21 @@ export default function App() {
     if (path === '/external' && params.has('qr')) {
       setIsSharedQRRoute(true);
     }
+    // Página pública de marketing (safesmartpickup.com/LandingPage) — no
+    // requiere sesión, no pasa por el gateway de Login. Se puede compartir
+    // el link libremente con colegios/padres nuevos.
+    if (path.toLowerCase() === '/landingpage') {
+      setIsMarketingLandingRoute(true);
+    }
   }, [session]);
+
+  if (isMarketingLandingRoute) {
+    return (
+      <LanguageProvider>
+        <LandingPage />
+      </LanguageProvider>
+    );
+  }
 
   if (isSharedQRRoute) {
     return (
