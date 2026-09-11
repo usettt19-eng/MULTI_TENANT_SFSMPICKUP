@@ -648,20 +648,14 @@ export function ParentDashboard() {
     setIsSubmittingReplacement(true);
     try {
       // Foto de la persona autorizada: para que recepción la vea al lado del
-      // QR al momento de escanearlo, no solo el nombre.
-      let photoUrl: string | null = null;
-      if (replacementPhotoFile && profile?.tenant_id) {
-        const fileExt = replacementPhotoFile.name.split('.').pop() || 'jpg';
-        const filePath = `${profile.tenant_id}/replacement_${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, replacementPhotoFile);
-        if (uploadError) {
-          throw new Error(t('parent.replacement.photoUploadErrorPrefix') + uploadError.message);
-        }
-        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-        photoUrl = publicUrlData.publicUrl;
-      }
+      // QR al momento de escanearlo, no solo el nombre. Igual que la foto de
+      // perfil del padre (ver comentario más arriba): el padre no es
+      // "staff_of" ningún tenant, así que las políticas del bucket `avatars`
+      // rechazarían la subida directa (era la causa de los "new row violates
+      // row-level security policy for table objects" en producción). Se
+      // reusa el data URL base64 que ya generó handleReplacementPhotoChange
+      // para la vista previa, en vez de subirlo a Storage.
+      const photoUrl: string | null = replacementPhotoFile ? replacementPhotoPreview : null;
 
       // 1. Insert via API to bypass RLS limits for parents
       const response = await apiFetch('/api/requests/replacement', {
