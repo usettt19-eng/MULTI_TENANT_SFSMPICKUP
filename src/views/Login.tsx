@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft } from 'lucide-react';
+import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft, Instagram, Facebook } from 'lucide-react';
 import { MobileAppBanner } from '../components/MobileAppBanner';
 
 export function Login() {
@@ -322,7 +322,28 @@ export function Login() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] animate-pulse">
+        <div className="mt-8 flex items-center justify-center gap-4">
+          <a
+            href="https://www.instagram.com/safesmartpickup/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Instagram de Safe Smart Pickup"
+            className="text-slate-400 hover:text-cyan-600 transition-colors"
+          >
+            <Instagram className="w-5 h-5" />
+          </a>
+          <a
+            href="https://www.facebook.com/people/Safe-Smart-Pickup/61594088620118"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Facebook de Safe Smart Pickup"
+            className="text-slate-400 hover:text-cyan-600 transition-colors"
+          >
+            <Facebook className="w-5 h-5" />
+          </a>
+        </div>
+
+        <p className="mt-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] animate-pulse">
            &copy; 2026 Safe Smart Pickup Technology
         </p>
       </div>
