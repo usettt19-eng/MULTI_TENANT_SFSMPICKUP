@@ -85,6 +85,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       { data: healthAlerts },
       { data: formResponses },
       { data: pendingLoginParentsData },
+      { data: inactiveTodayParentsData },
     ] = await Promise.all([
       supabase.from('school_settings').select('school_name').eq('tenant_id', profile.tenant_id).maybeSingle(),
       supabase
@@ -160,6 +161,11 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       // reenviarle la invitación — ver el endpoint para los criterios de
       // exclusión (cubierto por otro padre, o con hijo en bus).
       apiJson(`/api/tenants/${profile.tenant_id}/pending-login-parents`).catch(() => ({ data: { parents: [] } })),
+      // Ya usaron la app alguna vez, pero no hoy — y nadie los cubrió hoy
+      // (ni el otro padre ni el bus). Grupo distinto al anterior: ese es
+      // "nunca ha entrado", este es "entró antes, pero hoy no hubo señal
+      // de que alguien de esa familia esté al tanto".
+      apiJson(`/api/tenants/${profile.tenant_id}/inactive-today-parents`).catch(() => ({ data: { parents: [] } })),
     ]);
 
     setSchoolName(school?.school_name || 'Colegio');
@@ -229,6 +235,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       .sort((a, b) => b.count - a.count);
 
     const pendingLoginParents = pendingLoginParentsData?.parents || [];
+    const inactiveTodayParents = inactiveTodayParentsData?.parents || [];
 
     setSummary({
       pickupsAnnounced: (pickupsAnnounced || []).length,
@@ -244,6 +251,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       unauthorizedPickups: pickupsUnauthorized.length,
       unauthorizedByStaff,
       pendingLoginParents: pendingLoginParents.length,
+      inactiveTodayParents: inactiveTodayParents.length,
     });
 
     setAnnexes({
@@ -252,6 +260,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       visitors: visitors || [],
       replacementRequests: replacementRequests || [],
       pendingLoginParents,
+      inactiveTodayParents,
       incidents: incidents || [],
       unauthorizedPickups: pickupsUnauthorized,
     });
@@ -286,6 +295,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         ['Alertas de salud', String(summary.healthAlerts)],
         ['Respuestas a formularios/avisos', String(summary.formResponses)],
         ['Padres pendientes de loguearse (a priorizar)', String(summary.pendingLoginParents)],
+        ['Padres inactivos hoy (ya usaron la app antes, sin cobertura hoy)', String(summary.inactiveTodayParents)],
       ],
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59] },
@@ -422,10 +432,33 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
-        head: [['Padre/tutor', 'Correo']],
+        head: [['Padre/tutor', 'Correo', 'Grado · Sección']],
         body: annexes.pendingLoginParents.map((p: any) => [
           `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
           p.email || '—',
+          (p.sections || []).join(', ') || '—',
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
+    }
+
+    if (annexes.inactiveTodayParents.length > 0) {
+      if (nextY > 260) { doc.addPage(); nextY = 16; }
+      doc.setFontSize(12);
+      doc.text('Anexo 8 — Padres inactivos hoy (ya usaron la app antes)', 14, nextY);
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text('Ya se loguearon alguna vez pero no usaron la app hoy — excluye a quienes hoy sí tuvieron a otro padre activo para el mismo alumno, o con un hijo en bus.', 14, nextY + 5);
+      doc.setTextColor(0);
+      autoTable(doc, {
+        startY: nextY + 9,
+        head: [['Padre/tutor', 'Correo', 'Grado · Sección']],
+        body: annexes.inactiveTodayParents.map((p: any) => [
+          `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
+          p.email || '—',
+          (p.sections || []).join(', ') || '—',
         ]),
         theme: 'striped',
         styles: { fontSize: 8 },
@@ -545,6 +578,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                   <StatCard icon={AlertTriangle} label="Incidentes" value={summary.incidents} />
                   <StatCard icon={FileEdit} label="Respuestas a formularios" value={summary.formResponses} />
                   <StatCard icon={UserCog} label="Padres por loguearse" value={summary.pendingLoginParents} warn={summary.pendingLoginParents > 0} />
+                  <StatCard icon={UserCog} label="Padres inactivos hoy" value={summary.inactiveTodayParents} warn={summary.inactiveTodayParents > 0} />
                 </div>
               </div>
 
@@ -558,9 +592,30 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                   </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {annexes.pendingLoginParents.map((p: any) => (
-                      <div key={p.id} className="flex items-center justify-between text-xs bg-white/60 rounded-lg px-3 py-1.5">
-                        <span className="font-bold text-amber-900">{`${p.first_name || ''} ${p.last_name || ''}`.trim() || '—'}</span>
-                        <span className="text-amber-600 font-medium">{p.email || '—'}</span>
+                      <div key={p.id} className="flex items-center justify-between gap-3 text-xs bg-white/60 rounded-lg px-3 py-1.5">
+                        <span className="font-bold text-amber-900 shrink-0">{`${p.first_name || ''} ${p.last_name || ''}`.trim() || '—'}</span>
+                        <span className="text-amber-600 font-medium truncate">{p.email || '—'}</span>
+                        <span className="text-amber-500 font-bold shrink-0">{(p.sections || []).join(', ') || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {annexes.inactiveTodayParents.length > 0 && (
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
+                  <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
+                    <UserCog className="w-3.5 h-3.5" /> Padres inactivos hoy ({annexes.inactiveTodayParents.length})
+                  </h3>
+                  <p className="text-[10px] text-orange-600 font-medium mb-3">
+                    Ya usaron la app alguna vez, pero no hoy — y hoy tampoco la usó el otro padre del mismo alumno, ni va en bus.
+                  </p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {annexes.inactiveTodayParents.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 text-xs bg-white/60 rounded-lg px-3 py-1.5">
+                        <span className="font-bold text-orange-900 shrink-0">{`${p.first_name || ''} ${p.last_name || ''}`.trim() || '—'}</span>
+                        <span className="text-orange-600 font-medium truncate">{p.email || '—'}</span>
+                        <span className="text-orange-500 font-bold shrink-0">{(p.sections || []).join(', ') || '—'}</span>
                       </div>
                     ))}
                   </div>

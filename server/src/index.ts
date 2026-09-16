@@ -392,11 +392,13 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error: parentsError}, lastSignIns] = await Promise.all([
+    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
+      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
+    if (studentsError) return fail(res, 500, studentsError.message);
 
     const isBusRoute = (p: {additional_tutor_name: string | null}) => {
       try {
@@ -410,6 +412,8 @@ app.get(
     const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
     const neverLoggedIds = new Set(realParents.filter((p) => !lastSignIns.get(p.id)).map((p) => p.id));
     if (neverLoggedIds.size === 0) return ok(res, {parents: []});
+
+    const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
 
     // Vínculos padre↔alumno completos (no solo de este colegio): un mismo
     // alumno puede tener un padre de otro tenant vía parent_school_access,
@@ -440,7 +444,91 @@ app.get(
     });
 
     return ok(res, {
-      parents: pending.map((p) => ({id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email})),
+      parents: pending.map((p) => {
+        const sections = Array.from(
+          new Set((studentsByParent.get(p.id) ?? []).map((sid) => sectionByStudentId.get(sid)).filter((s): s is string => !!s)),
+        );
+        return {id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, sections};
+      }),
+    });
+  }),
+);
+
+/**
+ * Padres que SÍ se han logueado alguna vez, pero no usaron la app hoy
+ * (announced_at de hoy, no login) — mismas exclusiones de menor prioridad
+ * que el endpoint anterior, adaptadas al "hoy": no cuenta si algún otro
+ * padre/tutor del mismo alumno SÍ la usó hoy (cubierto por hoy), ni si el
+ * alumno va en bus.
+ */
+app.get(
+  '/api/tenants/:tenantId/inactive-today-parents',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
+      admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
+      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      fetchAllAuthUsersLastSignIn(),
+      fetchActiveParentIdsToday(),
+    ]);
+    if (parentsError) return fail(res, 500, parentsError.message);
+    if (studentsError) return fail(res, 500, studentsError.message);
+
+    const isBusRoute = (p: {additional_tutor_name: string | null}) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+
+    const realParents = (parents ?? []).filter((p) => !isBusRoute(p));
+    const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
+    const activeToday = activeParentIds.get(tenantId) ?? new Set<string>();
+    // "Ya se logueó alguna vez" pero no hoy.
+    const candidateIds = new Set(
+      realParents.filter((p) => !!lastSignIns.get(p.id) && !activeToday.has(p.id)).map((p) => p.id),
+    );
+    if (candidateIds.size === 0) return ok(res, {parents: []});
+
+    const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
+
+    const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
+    if (linksError) return fail(res, 500, linksError.message);
+
+    const studentsByParent = new Map<string, string[]>();
+    const parentsByStudent = new Map<string, string[]>();
+    const busStudentIds = new Set<string>();
+    (links ?? []).forEach((l) => {
+      if (!studentsByParent.has(l.parent_id)) studentsByParent.set(l.parent_id, []);
+      studentsByParent.get(l.parent_id)!.push(l.student_id);
+      if (!parentsByStudent.has(l.student_id)) parentsByStudent.set(l.student_id, []);
+      parentsByStudent.get(l.student_id)!.push(l.parent_id);
+      if (busRouteProfileIds.has(l.parent_id)) busStudentIds.add(l.student_id);
+    });
+
+    const pending = realParents.filter((p) => {
+      if (!candidateIds.has(p.id)) return false;
+      const studentIds = studentsByParent.get(p.id) ?? [];
+      // Cubierto por hoy: otro padre/tutor del mismo alumno SÍ la usó hoy.
+      const coveredToday = studentIds.some((sid) =>
+        (parentsByStudent.get(sid) ?? []).some((otherId) => otherId !== p.id && activeToday.has(otherId)),
+      );
+      if (coveredToday) return false;
+      const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
+      return !hasBusChild;
+    });
+
+    return ok(res, {
+      parents: pending.map((p) => {
+        const sections = Array.from(
+          new Set((studentsByParent.get(p.id) ?? []).map((sid) => sectionByStudentId.get(sid)).filter((s): s is string => !!s)),
+        );
+        return {id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email, sections};
+      }),
     });
   }),
 );
