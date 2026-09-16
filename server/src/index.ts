@@ -376,6 +376,75 @@ app.get(
   }),
 );
 
+/**
+ * Padres del colegio que nunca se han logueado, para el Reporte del Día —
+ * mismo cálculo de "nunca logueado" que /api/parents/resend-invites, pero
+ * excluyendo dos grupos de menor prioridad: (a) padres cuyo alumno ya tiene
+ * a OTRO padre/tutor logueado (el alumno ya está cubierto), y (b) padres
+ * con un alumno en una ruta de bus (se les da seguimiento aparte, vía la
+ * propia función de bus). Lo que queda es el grupo que de verdad conviene
+ * priorizar en el próximo reenvío de invitaciones.
+ */
+app.get(
+  '/api/tenants/:tenantId/pending-login-parents',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const [{data: parents, error: parentsError}, lastSignIns] = await Promise.all([
+      admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
+      fetchAllAuthUsersLastSignIn(),
+    ]);
+    if (parentsError) return fail(res, 500, parentsError.message);
+
+    const isBusRoute = (p: {additional_tutor_name: string | null}) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+
+    const realParents = (parents ?? []).filter((p) => !isBusRoute(p));
+    const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
+    const neverLoggedIds = new Set(realParents.filter((p) => !lastSignIns.get(p.id)).map((p) => p.id));
+    if (neverLoggedIds.size === 0) return ok(res, {parents: []});
+
+    // Vínculos padre↔alumno completos (no solo de este colegio): un mismo
+    // alumno puede tener un padre de otro tenant vía parent_school_access,
+    // y esa fila también cuenta como "cobertura" o como bus.
+    const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
+    if (linksError) return fail(res, 500, linksError.message);
+
+    const studentsByParent = new Map<string, string[]>();
+    const parentsByStudent = new Map<string, string[]>();
+    const busStudentIds = new Set<string>();
+    (links ?? []).forEach((l) => {
+      if (!studentsByParent.has(l.parent_id)) studentsByParent.set(l.parent_id, []);
+      studentsByParent.get(l.parent_id)!.push(l.student_id);
+      if (!parentsByStudent.has(l.student_id)) parentsByStudent.set(l.student_id, []);
+      parentsByStudent.get(l.student_id)!.push(l.parent_id);
+      if (busRouteProfileIds.has(l.parent_id)) busStudentIds.add(l.student_id);
+    });
+
+    const pending = realParents.filter((p) => {
+      if (!neverLoggedIds.has(p.id)) return false;
+      const studentIds = studentsByParent.get(p.id) ?? [];
+      const covered = studentIds.some((sid) =>
+        (parentsByStudent.get(sid) ?? []).some((otherId) => otherId !== p.id && !!lastSignIns.get(otherId)),
+      );
+      if (covered) return false;
+      const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
+      return !hasBusChild;
+    });
+
+    return ok(res, {
+      parents: pending.map((p) => ({id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email})),
+    });
+  }),
+);
+
 app.post(
   '/api/tenants/reset-admin-password',
   requireAuth,

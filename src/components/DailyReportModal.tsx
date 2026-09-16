@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
+import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
 import {
   X, FileBarChart, Loader2, Download, Clock, Users, Car, Footprints,
-  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX,
+  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX, UserCog,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -83,6 +84,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       { data: incidents },
       { data: healthAlerts },
       { data: formResponses },
+      { data: pendingLoginParentsData },
     ] = await Promise.all([
       supabase.from('school_settings').select('school_name').eq('tenant_id', profile.tenant_id).maybeSingle(),
       supabase
@@ -153,6 +155,11 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .eq('tenant_id', profile.tenant_id)
         .gte('created_at', startIso)
         .lt('created_at', endIso),
+      // No es una cifra "del día" (es el estado de login a este instante),
+      // pero es la sección que más ayuda al admin a decidir a quién
+      // reenviarle la invitación — ver el endpoint para los criterios de
+      // exclusión (cubierto por otro padre, o con hijo en bus).
+      apiJson(`/api/tenants/${profile.tenant_id}/pending-login-parents`).catch(() => ({ data: { parents: [] } })),
     ]);
 
     setSchoolName(school?.school_name || 'Colegio');
@@ -221,6 +228,8 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
+    const pendingLoginParents = pendingLoginParentsData?.parents || [];
+
     setSummary({
       pickupsAnnounced: (pickupsAnnounced || []).length,
       pickupsCompleted: (pickupsCompleted || []).length,
@@ -234,6 +243,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       formResponses: (formResponses || []).length,
       unauthorizedPickups: pickupsUnauthorized.length,
       unauthorizedByStaff,
+      pendingLoginParents: pendingLoginParents.length,
     });
 
     setAnnexes({
@@ -241,6 +251,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       selfDismissals: selfDismissals || [],
       visitors: visitors || [],
       replacementRequests: replacementRequests || [],
+      pendingLoginParents,
       incidents: incidents || [],
       unauthorizedPickups: pickupsUnauthorized,
     });
@@ -274,6 +285,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         ['Incidentes reportados', String(summary.incidents)],
         ['Alertas de salud', String(summary.healthAlerts)],
         ['Respuestas a formularios/avisos', String(summary.formResponses)],
+        ['Padres pendientes de loguearse (a priorizar)', String(summary.pendingLoginParents)],
       ],
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59] },
@@ -400,6 +412,27 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       }
     }
 
+    if (annexes.pendingLoginParents.length > 0) {
+      if (nextY > 260) { doc.addPage(); nextY = 16; }
+      doc.setFontSize(12);
+      doc.text('Anexo 7 — Padres pendientes de loguearse (a priorizar)', 14, nextY);
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text('Excluye a quienes ya tienen otro padre/tutor logueado para el mismo alumno, y a quienes tienen un hijo en bus escolar.', 14, nextY + 5);
+      doc.setTextColor(0);
+      autoTable(doc, {
+        startY: nextY + 9,
+        head: [['Padre/tutor', 'Correo']],
+        body: annexes.pendingLoginParents.map((p: any) => [
+          `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
+          p.email || '—',
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
+    }
+
     return doc;
   };
 
@@ -511,8 +544,28 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                   <StatCard icon={MessageSquare} label="Solicitudes de reemplazo" value={summary.replacementRequests.pending + summary.replacementRequests.approved + summary.replacementRequests.rejected} />
                   <StatCard icon={AlertTriangle} label="Incidentes" value={summary.incidents} />
                   <StatCard icon={FileEdit} label="Respuestas a formularios" value={summary.formResponses} />
+                  <StatCard icon={UserCog} label="Padres por loguearse" value={summary.pendingLoginParents} warn={summary.pendingLoginParents > 0} />
                 </div>
               </div>
+
+              {annexes.pendingLoginParents.length > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                  <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
+                    <UserCog className="w-3.5 h-3.5" /> Padres pendientes de loguearse ({annexes.pendingLoginParents.length})
+                  </h3>
+                  <p className="text-[10px] text-amber-600 font-medium mb-3">
+                    Ya se excluyó a quienes tienen a otro padre logueado para el mismo alumno, y a quienes tienen un hijo en bus.
+                  </p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {annexes.pendingLoginParents.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between text-xs bg-white/60 rounded-lg px-3 py-1.5">
+                        <span className="font-bold text-amber-900">{`${p.first_name || ''} ${p.last_name || ''}`.trim() || '—'}</span>
+                        <span className="text-amber-600 font-medium">{p.email || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {summary.unauthorizedByStaff.length > 0 && (
                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
