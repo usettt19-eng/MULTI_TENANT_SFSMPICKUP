@@ -217,21 +217,31 @@ export function ParentDashboard() {
   const doorSelectionRequired = doors.length > 1 && !selectedDoorId;
 
   // Con más de un hijo, cada uno tiene su propio botón de "Anunciar llegada"
-  // (pueden salir a horas distintas). Se pregunta una sola vez si siempre
-  // salen juntos: si dice que sí, tocar el botón de cualquiera de ellos
-  // anuncia a todos (y el rastreo automático por geocerca vuelve a
-  // funcionar como antes); si dice que no, cada botón anuncia solo a ese
-  // hijo y la geocerca deja de anunciar sola (no sabe a cuál está yendo a
-  // buscar), ver `kidsGoTogetherRef` más abajo.
-  const [kidsGoTogether, setKidsGoTogether] = useState<boolean | null>(null);
-  const kidsGoTogetherRef = useRef<boolean | null>(null);
+  // (pueden salir a horas distintas). Se pregunta una sola vez cuáles de
+  // ellos salen siempre juntos — soporta subgrupos (ej. 2 de 3 hijos): los
+  // ids marcados forman UN grupo; tocar el botón de cualquiera de ese grupo
+  // anuncia a todo el grupo. Los que queden fuera del grupo (o si nunca se
+  // marca a nadie) se anuncian cada uno por separado. `kidsGroupAnswered`
+  // distingue "todavía no se preguntó" de "preguntó y la respuesta fue que
+  // nadie sale con nadie" (grupo vacío es una respuesta válida).
+  const [kidsTogetherGroup, setKidsTogetherGroup] = useState<string[]>([]);
+  const [kidsGroupAnswered, setKidsGroupAnswered] = useState(false);
+  const kidsTogetherGroupRef = useRef<string[]>([]);
   useEffect(() => {
-    kidsGoTogetherRef.current = kidsGoTogether;
-  }, [kidsGoTogether]);
+    kidsTogetherGroupRef.current = kidsTogetherGroup;
+  }, [kidsTogetherGroup]);
+  // Selección en curso dentro del modal de "¿quiénes salen juntos?",
+  // separada del valor ya guardado hasta que el padre confirma.
+  const [groupDraft, setGroupDraft] = useState<string[]>([]);
   // `pickupStudents` (más abajo, es un useMemo) se referencia desde el
-  // efecto de geocerca automática, declarado antes en el archivo — este ref
-  // evita la referencia directa hacia adelante.
+  // efecto de geocerca automática, declarado antes en el archivo — estos
+  // refs evitan la referencia directa hacia adelante.
   const pickupStudentsCountRef = useRef(0);
+  // true solo cuando el grupo "salen juntos" cubre a TODOS los hijos del
+  // padre — únicos casos en los que el rastreo automático puede seguir
+  // anunciando solo, sin arriesgarse a anunciar de más a alguien con otro
+  // horario.
+  const allTogetherRef = useRef(false);
   const [showTogetherPrompt, setShowTogetherPrompt] = useState(false);
   const askedTogetherRef = useRef(false);
 
@@ -1371,10 +1381,11 @@ export function ParentDashboard() {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
     wasInsideRef.current = isInside;
-    // Con más de un hijo que NO salen juntos, el rastreo automático no
-    // sabe a cuál está yendo a buscar el padre en este momento — se queda
-    // callado y el padre toca el botón del hijo correcto a mano.
-    const multipleNotTogether = pickupStudentsCountRef.current > 1 && kidsGoTogetherRef.current === false;
+    // Con más de un hijo que no salen TODOS juntos (ninguno marcado, o solo
+    // un subgrupo), el rastreo automático no sabe a cuál está yendo a
+    // buscar el padre en este momento — se queda callado y el padre toca
+    // el botón del hijo correcto a mano.
+    const multipleNotTogether = pickupStudentsCountRef.current > 1 && !allTogetherRef.current;
     if (justEntered && status === 'idle' && !loading && canAnnounceArrivalNow && !multipleNotTogether) {
       handleAnnounceArrival();
     }
@@ -1473,32 +1484,53 @@ export function ParentDashboard() {
     return [...students, ...extra];
   }, [students, carpoolData.todaysCarpoolStudents]);
 
+  // Cubre a TODOS los hijos actuales (no solo un subgrupo) — único caso en
+  // el que el botón combinado y la geocerca automática pueden seguir
+  // anunciando a todos de un tirón sin arriesgarse a adelantar a alguien.
+  const allTogether = kidsGroupAnswered
+    && pickupStudents.length > 1
+    && pickupStudents.every(s => kidsTogetherGroup.includes(s.id));
+
   useEffect(() => {
     pickupStudentsCountRef.current = pickupStudents.length;
-  }, [pickupStudents.length]);
+    allTogetherRef.current = allTogether;
+  }, [pickupStudents.length, allTogether]);
 
   // Carga la preferencia guardada (si la hay) y, si no existe y hay más de
   // un hijo, pregunta una sola vez por sesión.
   useEffect(() => {
     if (!profile?.id || pickupStudents.length <= 1) return;
-    const saved = localStorage.getItem(`kids_together_${profile.id}`);
-    if (saved === 'yes') { setKidsGoTogether(true); return; }
-    if (saved === 'no') { setKidsGoTogether(false); return; }
+    const saved = localStorage.getItem(`kids_together_group_${profile.id}`);
+    if (saved !== null) {
+      try {
+        const ids: string[] = JSON.parse(saved);
+        setKidsTogetherGroup(ids);
+        setKidsGroupAnswered(true);
+      } catch {
+        // Valor corrupto — se trata como si nunca se hubiera guardado.
+      }
+      return;
+    }
     if (!askedTogetherRef.current) {
       askedTogetherRef.current = true;
+      setGroupDraft(pickupStudents.map(s => s.id));
       setShowTogetherPrompt(true);
     }
   }, [profile?.id, pickupStudents.length]);
 
-  // Más de un hijo, y ya dijo que NO salen juntos: se esconde el botón
-  // combinado de "Anunciar llegada" y se usan los botones por hijo de más
-  // abajo — anunciar a todos de un tirón anunciaría de más al que aún no
-  // le toca salir.
-  const multiSeparate = pickupStudents.length > 1 && kidsGoTogether === false;
+  // Más de un hijo y ya se respondió la pregunta, pero el grupo no cubre a
+  // todos: se esconde el botón combinado de "Anunciar llegada" y se usan
+  // los botones por hijo de más abajo — anunciar a todos de un tirón
+  // adelantaría al que no sale a esa hora.
+  const multiSeparate = pickupStudents.length > 1 && kidsGroupAnswered && !allTogether;
 
-  const handleAnswerTogether = (together: boolean) => {
-    setKidsGoTogether(together);
-    if (profile?.id) localStorage.setItem(`kids_together_${profile.id}`, together ? 'yes' : 'no');
+  const handleSaveTogetherGroup = (ids: string[]) => {
+    // Un solo marcado no forma un grupo real — se guarda vacío para que
+    // ese hijo también quede como "por su cuenta".
+    const group = ids.length > 1 ? ids : [];
+    setKidsTogetherGroup(group);
+    setKidsGroupAnswered(true);
+    if (profile?.id) localStorage.setItem(`kids_together_group_${profile.id}`, JSON.stringify(group));
     setShowTogetherPrompt(false);
   };
 
@@ -1517,12 +1549,16 @@ export function ParentDashboard() {
     setLoading(true);
     try {
       // Sin lista específica (botón grande, o el rastreo automático), se
-      // anuncia a todos. Con lista específica (botón de un hijo puntual),
-      // solo se agregan los demás si el padre ya dijo que salen juntos —
-      // así un solo toque cubre a los hermanos que salen a la misma hora.
-      const targets = !onlyStudentIds || (kidsGoTogetherRef.current && pickupStudents.length > 1)
+      // anuncia a todos. Con lista específica (botón de un hijo puntual):
+      // si ese hijo pertenece al grupo "salen juntos", se expande a todo
+      // el grupo (un solo toque cubre a los hermanos con su misma hora);
+      // si no, se anuncia solo a ese hijo.
+      const group = kidsTogetherGroupRef.current;
+      const targets = !onlyStudentIds
         ? pickupStudents
-        : pickupStudents.filter(s => onlyStudentIds.includes(s.id));
+        : onlyStudentIds.length === 1 && group.length > 1 && group.includes(onlyStudentIds[0])
+          ? pickupStudents.filter(s => group.includes(s.id))
+          : pickupStudents.filter(s => onlyStudentIds.includes(s.id));
       for (const student of targets) {
         // Si quien anuncia es el propio encargado del bus (no el padre
         // real) y este alumno ya se marcó "hoy no va en bus", se salta —
@@ -2178,12 +2214,18 @@ export function ParentDashboard() {
         </section>
 
         {pickupStudents.length > 1 && (
-          <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400">
-            {kidsGoTogether === true ? t('parent.together.statusYes') : kidsGoTogether === false ? t('parent.together.statusNo') : t('parent.together.statusUnset')}
+          <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400 text-center">
+            {!kidsGroupAnswered
+              ? t('parent.together.statusUnset')
+              : allTogether
+                ? t('parent.together.statusYes')
+                : kidsTogetherGroup.length > 1
+                  ? `${t('parent.together.statusPartial')} ${pickupStudents.filter(s => kidsTogetherGroup.includes(s.id)).map(s => s.first_name).join(' · ')}`
+                  : t('parent.together.statusNo')}
             <button
               type="button"
-              onClick={() => setShowTogetherPrompt(true)}
-              className="text-indigo-600 underline"
+              onClick={() => { setGroupDraft(kidsTogetherGroup.length ? kidsTogetherGroup : pickupStudents.map(s => s.id)); setShowTogetherPrompt(true); }}
+              className="text-indigo-600 underline shrink-0"
             >
               {t('parent.together.change')}
             </button>
@@ -2349,34 +2391,38 @@ export function ParentDashboard() {
               </div>
               <h3 className="text-lg font-black text-slate-900 leading-tight">{t('parent.together.title')}</h3>
             </div>
-            <div className="flex items-center -space-x-3">
-              {pickupStudents.map(s => (
-                <img
-                  key={s.id}
-                  src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
-                  alt={s.first_name}
-                />
-              ))}
-              <p className="pl-5 text-sm font-bold text-slate-700">
-                {pickupStudents.map(s => s.first_name).join(' · ')}
-              </p>
-            </div>
             <p className="text-xs text-slate-500 font-medium">{t('parent.together.helper')}</p>
-            <div className="space-y-3">
-              <button
-                onClick={() => handleAnswerTogether(true)}
-                className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest"
-              >
-                {t('parent.together.yesBtn')}
-              </button>
-              <button
-                onClick={() => handleAnswerTogether(false)}
-                className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest"
-              >
-                {t('parent.together.noBtn')}
-              </button>
+            <div className="space-y-2">
+              {pickupStudents.map(s => {
+                const checked = groupDraft.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setGroupDraft(prev => checked ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                    className={`w-full flex items-center gap-3 p-3 rounded-2xl border-2 transition-all ${
+                      checked ? 'bg-indigo-50 border-indigo-500' : 'bg-slate-50 border-transparent'
+                    }`}
+                  >
+                    <img
+                      src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"}
+                      className="w-10 h-10 rounded-full object-cover shrink-0"
+                      alt={s.first_name}
+                    />
+                    <span className="flex-1 text-left text-sm font-bold text-slate-800">{s.first_name} {s.last_name}</span>
+                    <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                      {checked && <Check className="w-3 h-3 text-white" />}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <button
+              onClick={() => handleSaveTogetherGroup(groupDraft)}
+              className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest"
+            >
+              {t('parent.together.saveBtn')}
+            </button>
           </div>
         </div>
       )}
