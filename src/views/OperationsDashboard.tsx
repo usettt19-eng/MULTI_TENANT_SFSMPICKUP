@@ -63,7 +63,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
-  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number }[]>([]);
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number }[]>([]);
   // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
   // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
   // hay padre ni vehículo), así que se muestra en su propio panel para no
@@ -189,26 +189,40 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const { data, error } = await supabase
-      .from('pickup_events')
-      .select('student:students(grade, section)')
-      .eq('tenant_id', profile.tenant_id)
-      .eq('status', 'completed')
-      .gte('completed_at', startOfDay.toISOString());
+    // Total matriculado por grado/sección, para poder mostrar la
+    // proporción (ej. "5 / 20") junto a cuántos ya salieron hoy — sin esto
+    // la tarjeta solo mostraba el número absoluto, sin contexto de qué tan
+    // avanzada va la salida de ese salón.
+    const [{ data, error }, { data: allStudents, error: studentsError }] = await Promise.all([
+      supabase
+        .from('pickup_events')
+        .select('student:students(grade, section)')
+        .eq('tenant_id', profile.tenant_id)
+        .eq('status', 'completed')
+        .gte('completed_at', startOfDay.toISOString()),
+      supabase.from('students').select('grade, section').eq('tenant_id', profile.tenant_id),
+    ]);
 
     if (error) {
       console.error('Error cargando salidas del día:', error);
       return;
     }
+    if (studentsError) console.error('Error cargando el total de alumnos por salón:', studentsError);
 
-    const counts = new Map<string, { grade: string; section: string; count: number }>();
+    const totals = new Map<string, number>();
+    (allStudents || []).forEach((s: any) => {
+      const key = `${s.grade || '—'}|${s.section || '—'}`;
+      totals.set(key, (totals.get(key) || 0) + 1);
+    });
+
+    const counts = new Map<string, { grade: string; section: string; count: number; total: number }>();
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
       const key = `${grade}|${section}`;
       const existing = counts.get(key);
       if (existing) existing.count += 1;
-      else counts.set(key, { grade, section, count: 1 });
+      else counts.set(key, { grade, section, count: 1, total: totals.get(key) || 0 });
     });
 
     setDailyDepartures(
@@ -625,7 +639,17 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider truncate">
                         {d.grade}{d.section !== '—' ? ` · ${d.section}` : ''}
                       </p>
-                      <p className="text-xl font-black text-[#1e293b] mt-1">{d.count}</p>
+                      <p className="text-xl font-black text-[#1e293b] mt-1">
+                        {d.count}{d.total > 0 && <span className="text-sm text-slate-400 font-bold"> / {d.total}</span>}
+                      </p>
+                      {d.total > 0 && (
+                        <div className="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: `${Math.min(100, Math.round((d.count / d.total) * 100))}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
