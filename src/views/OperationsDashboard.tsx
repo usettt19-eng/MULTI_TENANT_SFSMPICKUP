@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
-import { apiFetch } from '../lib/apiFetch';
+import { apiFetch, apiJson } from '../lib/apiFetch';
 import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,7 +63,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
-  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number }[]>([]);
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number }[]>([]);
   // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
   // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
   // hay padre ni vehículo), así que se muestra en su propio panel para no
@@ -195,7 +195,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     // avanzada va la salida de ese salón. También cuántos de cada salón van
     // en bus, para separar a los que probablemente no anuncian su propia
     // llegada (los recoge la ruta) de los que sí.
-    const [{ data, error }, { data: allStudents, error: studentsError }, { data: busRoutes }] = await Promise.all([
+    const [{ data, error }, { data: allStudents, error: studentsError }, { data: busRoutes }, pendingLoginRes] = await Promise.all([
       supabase
         .from('pickup_events')
         .select('student:students(grade, section)')
@@ -204,7 +204,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         .gte('completed_at', startOfDay.toISOString()),
       supabase.from('students').select('id, grade, section').eq('tenant_id', profile.tenant_id),
       supabase.from('bus_routes').select('profile_id').eq('tenant_id', profile.tenant_id),
+      // Alumnos sin NINGÚN padre logueado, excluyendo a quienes van en bus
+      // (a su padre no le hace falta la app para la recogida) — ver el
+      // endpoint para el criterio completo de exclusión.
+      apiJson(`/api/tenants/${profile.tenant_id}/pending-login-students-by-section`).catch(() => ({ data: { counts: {} } })),
     ]);
+    const pendingLoginCounts: Record<string, number> = pendingLoginRes?.data?.counts || {};
 
     if (error) {
       console.error('Error cargando salidas del día:', error);
@@ -231,14 +236,19 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       totals.set(key, (totals.get(key) || 0) + 1);
     });
 
-    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number }>();
+    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number }>();
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
       const key = `${grade}|${section}`;
       const existing = counts.get(key);
       if (existing) existing.count += 1;
-      else counts.set(key, { grade, section, count: 1, total: totals.get(key) || 0, busCount: busCounts.get(key) || 0 });
+      else counts.set(key, {
+        grade, section, count: 1,
+        total: totals.get(key) || 0,
+        busCount: busCounts.get(key) || 0,
+        pendingLoginCount: pendingLoginCounts[key] || 0,
+      });
     });
 
     setDailyDepartures(
@@ -669,6 +679,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       {d.busCount > 0 && (
                         <p className="mt-1.5 flex items-center justify-center gap-1 text-[9px] font-bold text-indigo-500">
                           <Bus className="w-3 h-3" /> {d.busCount} {t('dashboard.onBus')}
+                        </p>
+                      )}
+                      {d.pendingLoginCount > 0 && (
+                        <p className="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold text-rose-500">
+                          <AlertTriangle className="w-3 h-3" /> {d.pendingLoginCount} {t('dashboard.pendingLogin')}
                         </p>
                       )}
                     </div>
