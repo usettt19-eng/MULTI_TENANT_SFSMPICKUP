@@ -19,7 +19,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle, Check, Bus
+  HelpCircle, Check, Bus, Users
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -215,6 +215,25 @@ export function ParentDashboard() {
   // y mientras no la elija, no puede anunciar la llegada (ni él a mano ni
   // el rastreo automático en segundo plano).
   const doorSelectionRequired = doors.length > 1 && !selectedDoorId;
+
+  // Con más de un hijo, cada uno tiene su propio botón de "Anunciar llegada"
+  // (pueden salir a horas distintas). Se pregunta una sola vez si siempre
+  // salen juntos: si dice que sí, tocar el botón de cualquiera de ellos
+  // anuncia a todos (y el rastreo automático por geocerca vuelve a
+  // funcionar como antes); si dice que no, cada botón anuncia solo a ese
+  // hijo y la geocerca deja de anunciar sola (no sabe a cuál está yendo a
+  // buscar), ver `kidsGoTogetherRef` más abajo.
+  const [kidsGoTogether, setKidsGoTogether] = useState<boolean | null>(null);
+  const kidsGoTogetherRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    kidsGoTogetherRef.current = kidsGoTogether;
+  }, [kidsGoTogether]);
+  // `pickupStudents` (más abajo, es un useMemo) se referencia desde el
+  // efecto de geocerca automática, declarado antes en el archivo — este ref
+  // evita la referencia directa hacia adelante.
+  const pickupStudentsCountRef = useRef(0);
+  const [showTogetherPrompt, setShowTogetherPrompt] = useState(false);
+  const askedTogetherRef = useRef(false);
 
   // Geofencing states from Database
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
@@ -1352,7 +1371,11 @@ export function ParentDashboard() {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
     wasInsideRef.current = isInside;
-    if (justEntered && status === 'idle' && !loading && canAnnounceArrivalNow) {
+    // Con más de un hijo que NO salen juntos, el rastreo automático no
+    // sabe a cuál está yendo a buscar el padre en este momento — se queda
+    // callado y el padre toca el botón del hijo correcto a mano.
+    const multipleNotTogether = pickupStudentsCountRef.current > 1 && kidsGoTogetherRef.current === false;
+    if (justEntered && status === 'idle' && !loading && canAnnounceArrivalNow && !multipleNotTogether) {
       handleAnnounceArrival();
     }
   }, [isNative, isBackgroundTrackingActive, isInside, status, loading, canAnnounceArrivalNow]);
@@ -1450,7 +1473,36 @@ export function ParentDashboard() {
     return [...students, ...extra];
   }, [students, carpoolData.todaysCarpoolStudents]);
 
-  const handleAnnounceArrival = async (manual: boolean = false) => {
+  useEffect(() => {
+    pickupStudentsCountRef.current = pickupStudents.length;
+  }, [pickupStudents.length]);
+
+  // Carga la preferencia guardada (si la hay) y, si no existe y hay más de
+  // un hijo, pregunta una sola vez por sesión.
+  useEffect(() => {
+    if (!profile?.id || pickupStudents.length <= 1) return;
+    const saved = localStorage.getItem(`kids_together_${profile.id}`);
+    if (saved === 'yes') { setKidsGoTogether(true); return; }
+    if (saved === 'no') { setKidsGoTogether(false); return; }
+    if (!askedTogetherRef.current) {
+      askedTogetherRef.current = true;
+      setShowTogetherPrompt(true);
+    }
+  }, [profile?.id, pickupStudents.length]);
+
+  // Más de un hijo, y ya dijo que NO salen juntos: se esconde el botón
+  // combinado de "Anunciar llegada" y se usan los botones por hijo de más
+  // abajo — anunciar a todos de un tirón anunciaría de más al que aún no
+  // le toca salir.
+  const multiSeparate = pickupStudents.length > 1 && kidsGoTogether === false;
+
+  const handleAnswerTogether = (together: boolean) => {
+    setKidsGoTogether(together);
+    if (profile?.id) localStorage.setItem(`kids_together_${profile.id}`, together ? 'yes' : 'no');
+    setShowTogetherPrompt(false);
+  };
+
+  const handleAnnounceArrival = async (manual: boolean = false, onlyStudentIds?: string[]) => {
     if (!isInside && !manual) return;
     if (!canAnnounceArrivalNow) {
       setErrorMessage(t('parent.pickup.tooEarlyError'));
@@ -1464,7 +1516,14 @@ export function ParentDashboard() {
     isAnnouncingRef.current = true;
     setLoading(true);
     try {
-      for (const student of pickupStudents) {
+      // Sin lista específica (botón grande, o el rastreo automático), se
+      // anuncia a todos. Con lista específica (botón de un hijo puntual),
+      // solo se agregan los demás si el padre ya dijo que salen juntos —
+      // así un solo toque cubre a los hermanos que salen a la misma hora.
+      const targets = !onlyStudentIds || (kidsGoTogetherRef.current && pickupStudents.length > 1)
+        ? pickupStudents
+        : pickupStudents.filter(s => onlyStudentIds.includes(s.id));
+      for (const student of targets) {
         // Si quien anuncia es el propio encargado del bus (no el padre
         // real) y este alumno ya se marcó "hoy no va en bus", se salta —
         // el padre real SÍ debe poder seguir anunciando su propia llegada
@@ -1832,7 +1891,12 @@ export function ParentDashboard() {
           </div>
         ) : (
           <div className="space-y-4">
-            {isLocationEnabled ? (
+            {multiSeparate ? (
+              <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-[3rem] p-6 text-center">
+                <Users className="w-8 h-8 mx-auto mb-2 text-indigo-400" />
+                <p className="text-xs font-bold text-indigo-600">{t('parent.together.chooseHint')}</p>
+              </div>
+            ) : isLocationEnabled ? (
               <>
                 <button
                   onClick={() => handleAnnounceArrival()}
@@ -2113,9 +2177,27 @@ export function ParentDashboard() {
           </div>
         </section>
 
+        {pickupStudents.length > 1 && (
+          <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400">
+            {kidsGoTogether === true ? t('parent.together.statusYes') : kidsGoTogether === false ? t('parent.together.statusNo') : t('parent.together.statusUnset')}
+            <button
+              type="button"
+              onClick={() => setShowTogetherPrompt(true)}
+              className="text-indigo-600 underline"
+            >
+              {t('parent.together.change')}
+            </button>
+          </div>
+        )}
+
         <div className="space-y-4">
-           {pickupStudents.map(s => (
-             <div key={s.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
+           {pickupStudents.map(s => {
+             const canAnnounceThis = status === 'idle' && !loading && canAnnounceArrivalNow && !doorSelectionRequired
+               && (isLocationEnabled ? isInside : true)
+               && !(isBusMonitorAccount && busExclusionsToday[s.id]);
+             return (
+             <div key={s.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-3">
+              <div className="flex items-center gap-4">
                 <img src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"} className="w-16 h-16 rounded-2xl object-cover" />
                 <div className="flex-1">
                    <h5 className="font-bold text-slate-800">{s.first_name} {s.last_name}</h5>
@@ -2154,8 +2236,22 @@ export function ParentDashboard() {
                     </button>
                   </div>
                 )}
+              </div>
+              {pickupStudents.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleAnnounceArrival(!isLocationEnabled, [s.id])}
+                  disabled={!canAnnounceThis}
+                  className={`w-full py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                    canAnnounceThis ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  {t('parent.together.announceOneBtn')} {s.first_name}
+                </button>
+              )}
              </div>
-           ))}
+           );})}
         </div>
       </div>
 
@@ -2238,6 +2334,47 @@ export function ParentDashboard() {
                 className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest"
               >
                 {t('parent.common.notNow')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTogetherPrompt && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 p-8 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
+                <Users className="w-7 h-7 text-indigo-600" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 leading-tight">{t('parent.together.title')}</h3>
+            </div>
+            <div className="flex items-center -space-x-3">
+              {pickupStudents.map(s => (
+                <img
+                  key={s.id}
+                  src={s.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=200"}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
+                  alt={s.first_name}
+                />
+              ))}
+              <p className="pl-5 text-sm font-bold text-slate-700">
+                {pickupStudents.map(s => s.first_name).join(' · ')}
+              </p>
+            </div>
+            <p className="text-xs text-slate-500 font-medium">{t('parent.together.helper')}</p>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleAnswerTogether(true)}
+                className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest"
+              >
+                {t('parent.together.yesBtn')}
+              </button>
+              <button
+                onClick={() => handleAnswerTogether(false)}
+                className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest"
+              >
+                {t('parent.together.noBtn')}
               </button>
             </div>
           </div>
