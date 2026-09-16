@@ -63,7 +63,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
-  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number }[]>([]);
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number; inactiveTodayCount: number }[]>([]);
   // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
   // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
   // hay padre ni vehículo), así que se muestra en su propio panel para no
@@ -195,7 +195,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     // avanzada va la salida de ese salón. También cuántos de cada salón van
     // en bus, para separar a los que probablemente no anuncian su propia
     // llegada (los recoge la ruta) de los que sí.
-    const [{ data, error }, { data: allStudents, error: studentsError }, { data: busRoutes }, pendingLoginRes] = await Promise.all([
+    const [{ data, error }, { data: allStudents, error: studentsError }, { data: busRoutes }, pendingLoginRes, inactiveTodayRes] = await Promise.all([
       supabase
         .from('pickup_events')
         .select('student:students(grade, section)')
@@ -208,8 +208,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       // (a su padre no le hace falta la app para la recogida) — ver el
       // endpoint para el criterio completo de exclusión.
       apiJson(`/api/tenants/${profile.tenant_id}/pending-login-students-by-section`).catch(() => ({ data: { counts: {} } })),
+      // Alumnos cuyos padres SÍ se han logueado alguna vez pero ninguno usó
+      // la app hoy, sin cobertura de hoy — grupo aparte del anterior.
+      apiJson(`/api/tenants/${profile.tenant_id}/inactive-today-students-by-section`).catch(() => ({ data: { counts: {} } })),
     ]);
     const pendingLoginCounts: Record<string, number> = pendingLoginRes?.data?.counts || {};
+    const inactiveTodayCounts: Record<string, number> = inactiveTodayRes?.data?.counts || {};
 
     if (error) {
       console.error('Error cargando salidas del día:', error);
@@ -236,7 +240,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       totals.set(key, (totals.get(key) || 0) + 1);
     });
 
-    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number }>();
+    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number; inactiveTodayCount: number }>();
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
@@ -248,6 +252,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         total: totals.get(key) || 0,
         busCount: busCounts.get(key) || 0,
         pendingLoginCount: pendingLoginCounts[key] || 0,
+        inactiveTodayCount: inactiveTodayCounts[key] || 0,
       });
     });
 
@@ -684,6 +689,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       {d.pendingLoginCount > 0 && (
                         <p className="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold text-rose-500">
                           <AlertTriangle className="w-3 h-3" /> {d.pendingLoginCount} {t('dashboard.pendingLogin')}
+                        </p>
+                      )}
+                      {d.inactiveTodayCount > 0 && (
+                        <p className="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold text-orange-500">
+                          <AlertTriangle className="w-3 h-3" /> {d.inactiveTodayCount} {t('dashboard.inactiveTodayParents')}
                         </p>
                       )}
                     </div>

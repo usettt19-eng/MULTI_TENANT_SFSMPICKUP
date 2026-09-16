@@ -591,6 +591,69 @@ app.get(
   }),
 );
 
+/**
+ * Mismo criterio de "inactivo hoy" que /api/tenants/:tenantId/inactive-today-parents,
+ * pero contado por ALUMNO y agrupado por grado+sección, para la tarjeta de
+ * "Salidas del Día" — un alumno cuenta si TODOS sus padres/tutores reales ya
+ * se logueron alguna vez pero ninguno usó la app hoy, y no va en bus.
+ */
+app.get(
+  '/api/tenants/:tenantId/inactive-today-students-by-section',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
+      admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
+      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      fetchAllAuthUsersLastSignIn(),
+      fetchActiveParentIdsToday(),
+    ]);
+    if (parentsError) return fail(res, 500, parentsError.message);
+    if (studentsError) return fail(res, 500, studentsError.message);
+
+    const isBusRoute = (p: {additional_tutor_name: string | null}) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+    const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
+    const activeToday = activeParentIds.get(tenantId) ?? new Set<string>();
+
+    const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
+    if (linksError) return fail(res, 500, linksError.message);
+
+    const parentsByStudent = new Map<string, string[]>();
+    const busStudentIds = new Set<string>();
+    (links ?? []).forEach((l) => {
+      if (!parentsByStudent.has(l.student_id)) parentsByStudent.set(l.student_id, []);
+      parentsByStudent.get(l.student_id)!.push(l.parent_id);
+      if (busRouteProfileIds.has(l.parent_id)) busStudentIds.add(l.student_id);
+    });
+
+    const counts: Record<string, number> = {};
+    (students ?? []).forEach((s) => {
+      if (busStudentIds.has(s.id)) return;
+      const realParentIds = (parentsByStudent.get(s.id) ?? []).filter((pid) => !busRouteProfileIds.has(pid));
+      if (realParentIds.length === 0) return;
+      const anyActiveToday = realParentIds.some((pid) => activeToday.has(pid));
+      if (anyActiveToday) return;
+      // Solo cuenta si TODOS ya se habían logueado alguna vez — si ninguno
+      // se ha logueado nunca, ese alumno ya se cuenta en el endpoint de
+      // "pendiente de loguearse" (no aquí, para no duplicarlo).
+      const allLoggedInBefore = realParentIds.every((pid) => !!lastSignIns.get(pid));
+      if (!allLoggedInBefore) return;
+      const key = `${s.grade || '—'}|${s.section || '—'}`;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    return ok(res, {counts});
+  }),
+);
+
 app.post(
   '/api/tenants/reset-admin-password',
   requireAuth,
