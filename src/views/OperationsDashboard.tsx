@@ -12,7 +12,7 @@ import {
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
   ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode,
-  FileBarChart, Car, Menu, X
+  FileBarChart, Car, Menu, X, Bus
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, announceBilingual, setVoiceLanguageSetting } from '../lib/audioManager';
@@ -63,7 +63,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
-  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number }[]>([]);
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number }[]>([]);
   // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
   // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
   // hay padre ni vehículo), así que se muestra en su propio panel para no
@@ -192,15 +192,18 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     // Total matriculado por grado/sección, para poder mostrar la
     // proporción (ej. "5 / 20") junto a cuántos ya salieron hoy — sin esto
     // la tarjeta solo mostraba el número absoluto, sin contexto de qué tan
-    // avanzada va la salida de ese salón.
-    const [{ data, error }, { data: allStudents, error: studentsError }] = await Promise.all([
+    // avanzada va la salida de ese salón. También cuántos de cada salón van
+    // en bus, para separar a los que probablemente no anuncian su propia
+    // llegada (los recoge la ruta) de los que sí.
+    const [{ data, error }, { data: allStudents, error: studentsError }, { data: busRoutes }] = await Promise.all([
       supabase
         .from('pickup_events')
         .select('student:students(grade, section)')
         .eq('tenant_id', profile.tenant_id)
         .eq('status', 'completed')
         .gte('completed_at', startOfDay.toISOString()),
-      supabase.from('students').select('grade, section').eq('tenant_id', profile.tenant_id),
+      supabase.from('students').select('id, grade, section').eq('tenant_id', profile.tenant_id),
+      supabase.from('bus_routes').select('profile_id').eq('tenant_id', profile.tenant_id),
     ]);
 
     if (error) {
@@ -209,20 +212,33 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     }
     if (studentsError) console.error('Error cargando el total de alumnos por salón:', studentsError);
 
+    const busProfileIds = (busRoutes || []).map((r: any) => r.profile_id);
+    const { data: busLinks } = busProfileIds.length > 0
+      ? await supabase.from('parent_students').select('student_id').in('parent_id', busProfileIds)
+      : { data: [] as { student_id: string }[] };
+    const busStudentIds = new Set((busLinks || []).map((l: any) => l.student_id));
+
+    const gradeSectionByStudentId = new Map((allStudents || []).map((s: any) => [s.id, `${s.grade || '—'}|${s.section || '—'}`]));
+    const busCounts = new Map<string, number>();
+    busStudentIds.forEach((sid) => {
+      const key = gradeSectionByStudentId.get(sid);
+      if (key) busCounts.set(key, (busCounts.get(key) || 0) + 1);
+    });
+
     const totals = new Map<string, number>();
     (allStudents || []).forEach((s: any) => {
       const key = `${s.grade || '—'}|${s.section || '—'}`;
       totals.set(key, (totals.get(key) || 0) + 1);
     });
 
-    const counts = new Map<string, { grade: string; section: string; count: number; total: number }>();
+    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number }>();
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
       const key = `${grade}|${section}`;
       const existing = counts.get(key);
       if (existing) existing.count += 1;
-      else counts.set(key, { grade, section, count: 1, total: totals.get(key) || 0 });
+      else counts.set(key, { grade, section, count: 1, total: totals.get(key) || 0, busCount: busCounts.get(key) || 0 });
     });
 
     setDailyDepartures(
@@ -649,6 +665,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                             style={{ width: `${Math.min(100, Math.round((d.count / d.total) * 100))}%` }}
                           />
                         </div>
+                      )}
+                      {d.busCount > 0 && (
+                        <p className="mt-1.5 flex items-center justify-center gap-1 text-[9px] font-bold text-indigo-500">
+                          <Bus className="w-3 h-3" /> {d.busCount} {t('dashboard.onBus')}
+                        </p>
                       )}
                     </div>
                   ))}
