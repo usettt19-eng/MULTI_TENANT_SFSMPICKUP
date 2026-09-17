@@ -9,7 +9,7 @@ import {
   Users, Search, Filter, Mail, Phone,
   Shield, Trash2, Edit2, CheckCircle2, UserPlus, Plus,
   ExternalLink, Key, X, Camera, Upload, Link,
-  Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download
+  Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download, RefreshCw
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -532,6 +532,19 @@ export function GuardiansRegistry() {
     setStudentSearchTerm('');
   };
 
+  // Antes había que adivinar un PIN de 4 dígitos que nadie más del colegio
+  // ya tuviera (y el guardado fallaba si chocaba) — esto propone uno al azar
+  // que ya se sabe libre, cruzando contra los PIN cargados en `guardians`.
+  const suggestFreePin = () => {
+    const used = new Set(guardians.map(g => g.pin_code).filter(Boolean));
+    let candidate = '';
+    for (let attempts = 0; attempts < 500; attempts++) {
+      candidate = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+      if (!used.has(candidate)) break;
+    }
+    return candidate;
+  };
+
   const resetLinkOtherSchoolForm = () => {
     setLinkEmail('');
     setLinkFoundParent(null);
@@ -700,7 +713,7 @@ export function GuardiansRegistry() {
             </button>
 
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => { resetForm(); setPinCode(suggestFreePin()); setIsModalOpen(true); }}
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-primary-container transition-all shadow-lg"
             >
               <UserPlus className="w-4 h-4" />
@@ -1083,7 +1096,19 @@ export function GuardiansRegistry() {
                       </div>
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('guardiansPage.pinSecretLabel')}</label>
-                        <input required maxLength={4} value={pinCode} onChange={e => setPinCode(e.target.value)} placeholder="0000" className="w-full bg-slate-50 border border-emerald-100 rounded-2xl px-4 py-2.5 text-sm font-black text-center tracking-widest outline-none focus:border-emerald-500 transition-all" />
+                        <div className="flex items-center gap-2">
+                          <input required maxLength={4} value={pinCode} onChange={e => setPinCode(e.target.value)} placeholder="0000" className="w-full bg-slate-50 border border-emerald-100 rounded-2xl px-4 py-2.5 text-sm font-black text-center tracking-widest outline-none focus:border-emerald-500 transition-all" />
+                          {!editingGuardianId && (
+                            <button
+                              type="button"
+                              onClick={() => setPinCode(suggestFreePin())}
+                              title="Sugerir otro PIN libre"
+                              className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div>
