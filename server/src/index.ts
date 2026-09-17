@@ -641,11 +641,15 @@ app.get(
       if (realParentIds.length === 0) return;
       const anyActiveToday = realParentIds.some((pid) => activeToday.has(pid));
       if (anyActiveToday) return;
-      // Solo cuenta si TODOS ya se habían logueado alguna vez — si ninguno
-      // se ha logueado nunca, ese alumno ya se cuenta en el endpoint de
-      // "pendiente de loguearse" (no aquí, para no duplicarlo).
-      const allLoggedInBefore = realParentIds.every((pid) => !!lastSignIns.get(pid));
-      if (!allLoggedInBefore) return;
+      // Cuenta si AL MENOS UN padre ya se había logueado antes (y ninguno
+      // hoy) — no hace falta que sea el mismo padre en las dos familias.
+      // Si NINGÚN padre se ha logueado nunca (ni siquiera uno), ese alumno
+      // ya se cuenta en el endpoint de "pendiente de loguearse", no aquí,
+      // para no duplicarlo. Antes exigía que TODOS se hubieran logueado
+      // antes, así que una familia mixta (un padre nunca entró, el otro
+      // entró antes pero no hoy) no caía en ninguna de las dos categorías.
+      const anyLoggedInBefore = realParentIds.some((pid) => !!lastSignIns.get(pid));
+      if (!anyLoggedInBefore) return;
       const key = `${s.grade || '—'}|${s.section || '—'}`;
       counts[key] = (counts[key] || 0) + 1;
     });
