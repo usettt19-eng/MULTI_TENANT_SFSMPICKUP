@@ -69,6 +69,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // hay padre ni vehículo), así que se muestra en su propio panel para no
   // mezclarla con las recogidas normales.
   const [selfDismissalsToday, setSelfDismissalsToday] = useState<any[]>([]);
+  // Lista completa de alumnos con Salida Autónoma autorizada, para mostrar
+  // no solo quién ya anunció su salida hoy sino también quién sigue
+  // pendiente — antes solo se veía el "0" sin saber si es porque nadie
+  // tiene el permiso o porque nadie lo ha usado todavía hoy.
+  const [selfDismissalAuthorized, setSelfDismissalAuthorized] = useState<any[]>([]);
   const [showDailyReportModal, setShowDailyReportModal] = useState(false);
   // Car pools activos (recurrentes, tabla carpool_authorizations) — antes
   // solo se veían de pasada en Solicitudes, mezclados en el feed de
@@ -268,19 +273,29 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const { data, error } = await supabase
-      .from('self_dismissal_events')
-      .select('id, method, created_at, student:students(first_name, last_name, grade, section, photo_url)')
-      .eq('tenant_id', profile.tenant_id)
-      .gte('created_at', startOfDay.toISOString())
-      .order('created_at', { ascending: false });
+    const [{ data, error }, { data: authorized, error: authorizedError }] = await Promise.all([
+      supabase
+        .from('self_dismissal_events')
+        .select('id, method, created_at, student:students(id, first_name, last_name, grade, section, photo_url)')
+        .eq('tenant_id', profile.tenant_id)
+        .gte('created_at', startOfDay.toISOString())
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('students')
+        .select('id, first_name, last_name, grade, section, photo_url')
+        .eq('tenant_id', profile.tenant_id)
+        .eq('self_dismissal_allowed', true)
+        .order('first_name', { ascending: true }),
+    ]);
 
     if (error) {
       console.error('Error cargando salidas autónomas del día:', error);
       return;
     }
+    if (authorizedError) console.error('Error cargando alumnos autorizados para Salida Autónoma:', authorizedError);
 
     setSelfDismissalsToday(data || []);
+    setSelfDismissalAuthorized(authorized || []);
   };
 
   const fetchConfiguredCarpools = async () => {
@@ -716,45 +731,54 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                   <span className="text-[9px] font-black text-[#64748b] uppercase tracking-widest">{t('dashboard.realtimeSync')}</span>
                 </span>
                 <span className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-black">
-                  {selfDismissalsToday.length}
+                  {selfDismissalsToday.length} / {selfDismissalAuthorized.length}
                 </span>
               </div>
             </div>
             <div className="p-5">
-              {selfDismissalsToday.length === 0 ? (
+              {selfDismissalAuthorized.length === 0 ? (
                 <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest text-center py-6">
-                  Sin salidas autónomas hoy
+                  Ningún alumno tiene Salida Autónoma autorizada
                 </p>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {selfDismissalsToday.map((ev) => (
-                    <div key={ev.id} className="flex items-center gap-3 bg-[#f8fafc] rounded-xl p-3 border border-slate-100">
-                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-slate-200 flex items-center justify-center">
-                        {ev.student?.photo_url ? (
-                          <img src={ev.student.photo_url} alt={ev.student.first_name} className="w-full h-full object-cover" />
+                  {selfDismissalAuthorized.map((student) => {
+                    const ev = selfDismissalsToday.find((e) => e.student?.id === student.id);
+                    return (
+                      <div key={student.id} className={`flex items-center gap-3 rounded-xl p-3 border ${ev ? 'bg-[#f8fafc] border-slate-100' : 'bg-amber-50/50 border-amber-100'}`}>
+                        <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-slate-200 flex items-center justify-center">
+                          {student.photo_url ? (
+                            <img src={student.photo_url} alt={student.first_name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Footprints className="w-4 h-4 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-[#1e293b] truncate">
+                            {student.first_name} {student.last_name}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
+                            {student.grade || '—'}{student.section ? ` · ${student.section}` : ''}
+                          </p>
+                        </div>
+                        {ev ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                              {ev.method === 'qr' ? <QrCode className="w-3 h-3" /> : <Fingerprint className="w-3 h-3" />}
+                              {ev.method === 'qr' ? 'QR' : 'Facial'}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                              {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         ) : (
-                          <Footprints className="w-4 h-4 text-slate-400" />
+                          <span className="shrink-0 bg-amber-100 text-amber-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                            Aún no sale
+                          </span>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-[#1e293b] truncate">
-                          {ev.student?.first_name} {ev.student?.last_name}
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
-                          {ev.student?.grade || '—'}{ev.student?.section ? ` · ${ev.student.section}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
-                          {ev.method === 'qr' ? <QrCode className="w-3 h-3" /> : <Fingerprint className="w-3 h-3" />}
-                          {ev.method === 'qr' ? 'QR' : 'Facial'}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
-                          {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
