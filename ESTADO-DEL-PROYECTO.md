@@ -2,22 +2,29 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-10 (**la app de Android ya se publicó al track de producción de Play
-Store con el plugin nativo de voz incluido**, feature "Hoy no va en bus" para
-excluir un alumno del anuncio automático de su ruta, setting de idioma de los
-avisos de voz por colegio —español/inglés/ambos— con su cadena de fixes en la
-app de padres, fix de seguridad de "Marcar como leído" que creaba
-autorizaciones de reemplazo falsas, autorización automática de salidas después
-de cierto horario, el Reporte del Día ahora muestra las salidas sin autorizar y
-quién debía hacerlo, selección consciente de puerta obligatoria en el panel
-de padres antes de anunciar la llegada, enlaces de restablecer contraseña
-resaltados en el login, padres con hijos en dos colegios vía
-`parent_school_access`, fix de seguridad para que un reemplazo autorizado
-aplique solo a los hijos elegidos, métricas de "Staff/Padres Activos Hoy"
-basadas en actividad real en vez de login, Rutas de Bus completas —incluido
-login propio para el encargado de cada bus—, interruptor para apagar el
-bloqueo de emergencia por colegio, fix de Monitor Externo quedándose pegado en
-bloqueo activo, y selección de quién recibe la Alerta Discreta).
+2026-09-19 (**landing page pública `/LandingPage` con SEO e indexación en Google
+ya confirmada**, botón de "Anunciar llegada" por cada hijo con soporte de
+subgrupos —"¿cuáles salen juntos?"—, el Reporte del Día ahora también lista
+padres pendientes de loguearse y padres inactivos hoy por sección —excluyendo
+bus y Salida Autónoma—, las mismas alertas de login agregadas por salón en el
+dashboard junto con la proporción de salidas, sugerencia automática de PIN
+libre al registrar un padre, guía de padres actualizada, y el widget de
+Salida Autónoma ahora muestra el roster completo, no solo quién ya salió; la
+app de Android ya se publicó al track de producción de Play Store con el
+plugin nativo de voz incluido, feature "Hoy no va en bus" para excluir un
+alumno del anuncio automático de su ruta, setting de idioma de los avisos de
+voz por colegio —español/inglés/ambos— con su cadena de fixes en la app de
+padres, fix de seguridad de "Marcar como leído" que creaba autorizaciones de
+reemplazo falsas, autorización automática de salidas después de cierto
+horario, selección consciente de puerta obligatoria en el panel de padres
+antes de anunciar la llegada, enlaces de restablecer contraseña resaltados en
+el login, padres con hijos en dos colegios vía `parent_school_access`, fix de
+seguridad para que un reemplazo autorizado aplique solo a los hijos elegidos,
+métricas de "Staff/Padres Activos Hoy" basadas en actividad real en vez de
+login, Rutas de Bus completas —incluido login propio para el encargado de
+cada bus—, interruptor para apagar el bloqueo de emergencia por colegio, fix
+de Monitor Externo quedándose pegado en bloqueo activo, y selección de quién
+recibe la Alerta Discreta).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -2234,6 +2241,99 @@ del cliente le agregó ese permiso, se volvió a disparar el workflow y
 esta vez terminó con éxito (run `34542605595`, subida a producción
 confirmada). Play Store puede tardar horas en escalonar la actualización
 a todos los usuarios que ya tienen la app instalada.
+
+### Landing page pública `/LandingPage` con SEO e indexación en Google (2026-09-10 a 2026-09-11)
+Nueva página de marketing en `/LandingPage`, aparte del gateway normal
+(sin sesión sigue yendo directo a Login, sin cambios) — explica todas
+las funciones del sistema en dos secciones, "Para padres y tutores" y
+"Para colegios y administración", con enlaces a las apps de Android/
+iOS, WhatsApp (+507 4320507) e Instagram/Facebook. Se le agregó SEO
+completo: `robots.txt`, `sitemap.xml`, meta tags OG/Twitter y JSON-LD
+(schema.org `SoftwareApplication`) fijados por JS al montar (es una SPA
+sin server-side rendering). El dominio se verificó en Google Search
+Console (registro TXT en GoDaddy — se evitó a propósito el flujo
+automático "Conectar con GoDaddy" porque pedía permisos de Gmail/
+Workspace que hubieran podido pisar los registros MX de Zoho), el
+sitemap se envió y quedó "Correcto" con las 3 páginas descubiertas, y
+`/LandingPage` quedó confirmada como indexable y en cola de rastreo
+prioritario.
+
+### Fix de seguridad: foto de reemplazo fallaba por RLS al subirse (2026-09-11)
+`ParentDashboard.tsx` subía la foto de la persona autorizada a recoger
+directo al bucket `avatars` de Storage — pero esas políticas exigen que
+quien sube sea "staff" de un colegio, y un padre nunca lo es. Mismo
+problema ya resuelto antes para la foto de perfil del padre (comentario
+en el propio archivo), pero se había quedado sin arreglar en este flujo
+específico; era la causa real de varios `new row violates row-level
+security policy for table "objects"` vistos en los logs de producción.
+Se corrigió reusando el data URL en base64 que ya se generaba para la
+vista previa, sin tocar Storage.
+
+### Botón de "Anunciar llegada" por hijo, con soporte de subgrupos (2026-09-16)
+Con más de un hijo, el botón grande (y la geocerca automática) siempre
+anunciaban a todos a la vez, sin importar que tuvieran horarios de
+salida distintos. Ahora cada tarjeta de hijo tiene su propio botón. La
+primera vez que hay más de un hijo, un modal pregunta "¿cuáles de ellos
+salen juntos?" con una lista de checkboxes (no un simple sí/no) — así
+soporta el caso real de 3 hijos donde solo 2 coinciden en horario: se
+marcan esos 2, el tercero queda por su cuenta. Tocar el botón de
+cualquiera del grupo marcado anuncia a todo el grupo; el rastreo
+automático por geocerca de Android solo sigue anunciando solo cuando el
+grupo cubre a TODOS los hijos del padre — si hay aunque sea un hijo
+fuera del grupo, se queda callado y espera que el padre toque el botón
+correcto a mano. La preferencia se guarda en localStorage por padre y
+se puede cambiar en cualquier momento con el enlace "Cambiar".
+
+### Reporte del Día: padres pendientes de loguearse y padres inactivos hoy (2026-09-17 a 2026-09-19)
+Dos secciones nuevas en el Reporte del Día, cada una con su propio
+endpoint de backend (necesario porque `auth.users.last_sign_in_at` no
+es accesible desde el cliente):
+- **Padres pendientes de loguearse**: nunca han iniciado sesión,
+  excluyendo a quienes ya tienen a otro padre/tutor logueado para el
+  mismo alumno (cubierto), a quienes tienen un hijo en bus, y a quienes
+  tienen un hijo con Salida Autónoma autorizada (ninguno de los dos
+  casos depende de que el padre use la app). Ahora también muestra la
+  sección/grado de cada alumno.
+- **Padres inactivos hoy**: sí se han logueado alguna vez pero no
+  usaron la app hoy, con las mismas exclusiones adaptadas a "hoy" (que
+  otro padre del mismo alumno haya estado activo hoy, bus, o Salida
+  Autónoma).
+
+Fix en el camino: la regla de "inactivo hoy" al inicio exigía que
+**todos** los padres de un alumno se hubieran logueado alguna vez —una
+familia mixta (un padre nunca entró, el otro entró antes pero no hoy)
+no calificaba para esa categoría ni para "pendiente de loguearse"
+(que exige que **ninguno** se haya logueado nunca), quedando invisible
+en ambas. Se corrigió a "al menos un padre logueado antes", verificado
+contra un salón real de TCS Albrook alumno por alumno hasta que los 10
+alumnos cuadraron exactamente entre bus, cubiertos hoy, sin loguearse
+nunca, e inactivos hoy.
+
+Las mismas dos alertas se agregaron también por alumno/salón en las
+tarjetas de "Salidas del Día por Grado/Sección" del dashboard
+operativo, junto con la proporción de salidas del día (`N / total
+matriculado`, con barra de progreso) y cuántos de cada salón van en
+bus — antes esas tarjetas solo mostraban el número absoluto de
+recogidas completadas, sin ningún contexto de tamaño de salón ni de
+adopción de la app.
+
+### Guía de padres actualizada + sugerencia de PIN libre (2026-09-17 a 2026-09-18)
+`parent-guide.html` (la página pública de ayuda) se actualizó con los
+pasos nuevos: selección de puerta ahora obligatoria (con la casilla de
+guardarla como habitual), el botón de anunciar por hijo con la pregunta
+de "salen juntos", y "Hoy no va en bus". Aparte, en Padres/Tutores, el
+botón "+ Nuevo" ahora sugiere automáticamente un PIN de 4 dígitos ya
+verificado como libre (cruzado contra los PIN ya usados en el colegio),
+con un botón de refrescar para pedir otro — antes había que adivinar
+uno que no chocara con un padre existente.
+
+### Widget de Salida Autónoma muestra el roster completo (2026-09-19)
+"Salidas Autónomas de Hoy" solo listaba los eventos del día — si nadie
+había salido todavía se veía un simple "0", sin poder distinguir si es
+porque ningún alumno tiene el permiso o porque nadie lo ha usado hoy.
+Ahora lista a **todos** los alumnos con `self_dismissal_allowed = true`,
+marcando quién ya salió (método + hora) y quién sigue pendiente ("Aún
+no sale"), con el contador como "salieron / autorizados".
 
 ---
 

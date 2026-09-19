@@ -24,6 +24,26 @@ docker compose up -d
 
 ---
 
+## 2026-09-19 — `40fb03984f6ecebd8926147e5e7e54dd15ad10e1`
+
+**Landing page pública + SEO + botón por hijo + Reporte del Día con alertas de login + roster de Salida Autónoma**
+
+Confirmado funcionando en producción. Incluye todo lo del punto anterior (2026-09-10) más:
+
+- Página pública `/LandingPage` con todas las funciones del sistema (para padres y para colegios), enlaces a Android/iOS, WhatsApp e Instagram/Facebook.
+- SEO: `robots.txt`, `sitemap.xml`, meta tags OG/Twitter, JSON-LD, verificación de Google Search Console — dominio verificado y sitemap aceptado.
+- Enlaces a Instagram y Facebook en el login.
+- Fix de seguridad: la foto de la persona de reemplazo fallaba por RLS al subirse a Storage (un padre no es "staff") — ahora se guarda como base64 directo, igual que la foto de perfil.
+- Botón de "Anunciar llegada" por cada hijo cuando hay más de uno (antes siempre anunciaba a todos juntos), con la pregunta de "¿cuáles salen juntos?" — soporta subgrupos (ej. 2 de 3 hijos), no solo todos-o-nada.
+- Reporte del Día: nuevas secciones "Padres pendientes de loguearse" y "Padres inactivos hoy" (con la sección/grado de cada uno), excluyendo a quienes ya están cubiertos por otro padre, a quienes tienen hijo en bus, y a quienes tienen Salida Autónoma autorizada.
+- Mismas alertas de login, agregadas por alumno/salón, en las tarjetas de "Salidas del Día por Grado/Sección" del dashboard — más la proporción de salidas (`N / total`) y cuántos van en bus por salón.
+- Fix: familias mixtas (un padre nunca logueado, el otro logueado antes pero no hoy) no caían en ninguna categoría de alerta — corregido.
+- Guía de padres (`parent-guide.html`) actualizada con el botón por hijo, "Hoy no va en bus" y la selección de puerta obligatoria.
+- Sugerencia automática de un PIN de 4 dígitos libre al registrar un padre nuevo (antes había que adivinar uno que no chocara).
+- Widget "Salidas Autónomas de Hoy" ahora muestra el roster completo de alumnos autorizados (quién ya salió y quién no), no solo los eventos del día.
+
+---
+
 ## 2026-09-10 — `2de0c8a41f206a6101c2eaf21c1f4e87f9f20213`
 
 **Fix "Marcar como leído" + "Hoy no va en bus" + idioma de avisos de voz + Android en producción**
