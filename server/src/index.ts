@@ -379,11 +379,13 @@ app.get(
 /**
  * Padres del colegio que nunca se han logueado, para el Reporte del Día —
  * mismo cálculo de "nunca logueado" que /api/parents/resend-invites, pero
- * excluyendo dos grupos de menor prioridad: (a) padres cuyo alumno ya tiene
- * a OTRO padre/tutor logueado (el alumno ya está cubierto), y (b) padres
- * con un alumno en una ruta de bus (se les da seguimiento aparte, vía la
- * propia función de bus). Lo que queda es el grupo que de verdad conviene
- * priorizar en el próximo reenvío de invitaciones.
+ * excluyendo tres grupos de menor prioridad: (a) padres cuyo alumno ya tiene
+ * a OTRO padre/tutor logueado (el alumno ya está cubierto), (b) padres con
+ * un alumno en una ruta de bus (se les da seguimiento aparte, vía la propia
+ * función de bus), y (c) padres cuyo alumno tiene autorizada la Salida
+ * Autónoma (no depende de que el padre anuncie nada). Lo que queda es el
+ * grupo que de verdad conviene priorizar en el próximo reenvío de
+ * invitaciones.
  */
 app.get(
   '/api/tenants/:tenantId/pending-login-parents',
@@ -394,7 +396,7 @@ app.get(
 
     const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
-      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
@@ -414,6 +416,7 @@ app.get(
     if (neverLoggedIds.size === 0) return ok(res, {parents: []});
 
     const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
+    const selfDismissalStudentIds = new Set((tenantStudents ?? []).filter((s) => s.self_dismissal_allowed).map((s) => s.id));
 
     // Vínculos padre↔alumno completos (no solo de este colegio): un mismo
     // alumno puede tener un padre de otro tenant vía parent_school_access,
@@ -440,7 +443,9 @@ app.get(
       );
       if (covered) return false;
       const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
-      return !hasBusChild;
+      if (hasBusChild) return false;
+      const hasSelfDismissalChild = studentIds.some((sid) => selfDismissalStudentIds.has(sid));
+      return !hasSelfDismissalChild;
     });
 
     return ok(res, {
@@ -470,7 +475,7 @@ app.get(
 
     const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
-      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
       fetchActiveParentIdsToday(),
     ]);
@@ -495,6 +500,7 @@ app.get(
     if (candidateIds.size === 0) return ok(res, {parents: []});
 
     const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
+    const selfDismissalStudentIds = new Set((tenantStudents ?? []).filter((s) => s.self_dismissal_allowed).map((s) => s.id));
 
     const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
     if (linksError) return fail(res, 500, linksError.message);
@@ -519,7 +525,9 @@ app.get(
       );
       if (coveredToday) return false;
       const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
-      return !hasBusChild;
+      if (hasBusChild) return false;
+      const hasSelfDismissalChild = studentIds.some((sid) => selfDismissalStudentIds.has(sid));
+      return !hasSelfDismissalChild;
     });
 
     return ok(res, {
@@ -538,8 +546,9 @@ app.get(
  * contado por ALUMNO (no por padre) y agrupado por grado+sección, para la
  * tarjeta de "Salidas del Día" del dashboard — un alumno cuenta como
  * pendiente solo si NINGUNO de sus padres/tutores reales se ha logueado
- * nunca, y no cuenta si va en bus (a su padre no le hace falta la app para
- * la recogida).
+ * nunca, y no cuenta si va en bus o tiene Salida Autónoma autorizada (en
+ * ninguno de los dos casos le hace falta a su padre la app para la
+ * recogida).
  */
 app.get(
   '/api/tenants/:tenantId/pending-login-students-by-section',
@@ -550,7 +559,7 @@ app.get(
 
     const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns] = await Promise.all([
       admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
-      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
@@ -579,6 +588,7 @@ app.get(
     const counts: Record<string, number> = {};
     (students ?? []).forEach((s) => {
       if (busStudentIds.has(s.id)) return;
+      if (s.self_dismissal_allowed) return;
       const realParentIds = (parentsByStudent.get(s.id) ?? []).filter((pid) => !busRouteProfileIds.has(pid));
       if (realParentIds.length === 0) return;
       const anyLoggedIn = realParentIds.some((pid) => !!lastSignIns.get(pid));
@@ -595,7 +605,8 @@ app.get(
  * Mismo criterio de "inactivo hoy" que /api/tenants/:tenantId/inactive-today-parents,
  * pero contado por ALUMNO y agrupado por grado+sección, para la tarjeta de
  * "Salidas del Día" — un alumno cuenta si TODOS sus padres/tutores reales ya
- * se logueron alguna vez pero ninguno usó la app hoy, y no va en bus.
+ * se logueron alguna vez pero ninguno usó la app hoy, y no va en bus ni
+ * tiene Salida Autónoma autorizada.
  */
 app.get(
   '/api/tenants/:tenantId/inactive-today-students-by-section',
@@ -606,7 +617,7 @@ app.get(
 
     const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
       admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
-      admin.from('students').select('id, grade, section').eq('tenant_id', tenantId),
+      admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
       fetchActiveParentIdsToday(),
     ]);
@@ -637,6 +648,7 @@ app.get(
     const counts: Record<string, number> = {};
     (students ?? []).forEach((s) => {
       if (busStudentIds.has(s.id)) return;
+      if (s.self_dismissal_allowed) return;
       const realParentIds = (parentsByStudent.get(s.id) ?? []).filter((pid) => !busRouteProfileIds.has(pid));
       if (realParentIds.length === 0) return;
       const anyActiveToday = realParentIds.some((pid) => activeToday.has(pid));
