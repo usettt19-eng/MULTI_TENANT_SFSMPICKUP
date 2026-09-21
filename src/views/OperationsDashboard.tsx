@@ -12,7 +12,7 @@ import {
   Fingerprint, Wifi, FileWarning, ShieldCheck,
   FileText, TrendingUp, UserCheck, XCircle, Printer,
   ChevronDown, MessageSquare, ClipboardList, FileEdit, Footprints, QrCode,
-  FileBarChart, Car, Menu, X, Bus
+  FileBarChart, Car, Menu, X, Bus, HelpCircle
 } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, announceBilingual, setVoiceLanguageSetting } from '../lib/audioManager';
@@ -36,8 +36,23 @@ const CARPOOL_WEEKDAY_KEYS: Record<number, TranslationKey> = {
 };
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { profile } = useAuth() as any;
+  // El manual de recepción (login, Monitor Externo, escaneo QR de
+  // reemplazos, Pool Day, alerta discreta, etc.) solo tiene sentido para
+  // quien atiende la puerta/recepción: un admin de verdad (no disfrazado de
+  // staff) o un miembro del staff con el permiso 'checkin' otorgado —
+  // mismo criterio que usa Sidebar.tsx para mostrar ese módulo en el menú.
+  const showReceptionHelp = (() => {
+    if (profile?.role !== 'admin') return false;
+    try {
+      const parsed = JSON.parse(profile.additional_tutor_name || '{}');
+      if (parsed.is_staff === true) {
+        return ((parsed.permissions || []) as string[]).includes('checkin');
+      }
+    } catch (e) {}
+    return true;
+  })();
   const { toggleMenu, isMenuOpen } = useLayout();
   const [pickups, setPickups] = useState<any[]>([]);
   const isFirstFetch = useRef(true);
@@ -560,12 +575,25 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               {logoUrl && <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
               <h1 className="text-xl font-black text-slate-800 truncate">{t('dashboard.title')}</h1>
             </div>
-            <button
-              onClick={() => setShowDailyReportModal(true)}
-              className="flex items-center justify-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shrink-0 self-start sm:self-auto"
-            >
-              <FileBarChart className="w-4 h-4" /> Reporte del Día
-            </button>
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+              {showReceptionHelp && (
+                <a
+                  href={language === 'es' ? '/manual-recepcion.html' : '/reception-guide.html'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Ayuda: cómo usar la app en recepción / puerta principal"
+                  className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
+                >
+                  <HelpCircle className="w-4 h-4" /> Ayuda
+                </a>
+              )}
+              <button
+                onClick={() => setShowDailyReportModal(true)}
+                className="flex items-center justify-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
+              >
+                <FileBarChart className="w-4 h-4" /> Reporte del Día
+              </button>
+            </div>
           </div>
 
           {showDailyReportModal && <DailyReportModal onClose={() => setShowDailyReportModal(false)} />}
