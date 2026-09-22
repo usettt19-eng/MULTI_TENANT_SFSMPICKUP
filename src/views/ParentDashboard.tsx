@@ -30,6 +30,13 @@ import {
 // salida por grado en `school_grades.exit_time`, pero este corte de
 // "todavía es muy temprano para anunciarse" es el mismo para todos).
 
+// Una lectura de GPS con más de esto de radio de error (metros) se
+// descarta en vez de usarse — el primer fix suele venir de la red/celda en
+// vez del GPS real y puede estar equivocado por cientos de metros o más;
+// mejor esperar a la siguiente lectura que decidir "adentro/afuera" con un
+// dato que el propio sistema operativo ya marca como poco confiable.
+const MAX_LOCATION_ACCURACY_METERS = 100;
+
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut, refreshProfile } = useAuth();
   const { language, t, setLanguage, hasManualLanguage } = useLanguage();
@@ -271,6 +278,11 @@ export function ParentDashboard() {
 
   // Geofencing states from Database
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
+  // Antes de que fetchSchoolSettings() termine, schoolPos es solo el
+  // placeholder de arriba — sin este flag, una lectura de GPS que llegue
+  // primero mostraría una distancia comparada contra ese placeholder (ver
+  // el efecto que deriva distance/isInside, más abajo).
+  const [schoolSettingsLoaded, setSchoolSettingsLoaded] = useState(false);
   const [parentPos, setParentPos] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
   const [showManualArrival, setShowManualArrival] = useState(false);
@@ -860,6 +872,11 @@ export function ParentDashboard() {
       // dos idiomas sin importar lo configurado.
       setVoiceLangSetting(data.voice_announcement_language === 'en' || data.voice_announcement_language === 'both' ? data.voice_announcement_language : 'es');
     }
+    // Se marca cargado haya o no fila (un colegio sin fila usa el
+    // placeholder a propósito, igual que siempre) — lo que importa es no
+    // mostrar/usar NADA de distancia mientras esta consulta sigue en
+    // vuelo.
+    setSchoolSettingsLoaded(true);
   };
 
   const fetchStudents = async () => {
@@ -1289,7 +1306,10 @@ export function ParentDashboard() {
 
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
+        // Se ignora una lectura de mala precisión en vez de actuar sobre
+        // ella — ver MAX_LOCATION_ACCURACY_METERS más arriba.
+        if (typeof accuracy === 'number' && accuracy > MAX_LOCATION_ACCURACY_METERS) return;
         // La distancia/isInside NO se calculan acá — las deriva el efecto
         // de abajo a partir de parentPos + schoolPos, para que se
         // recalculen solas apenas llegue la coordenada real del colegio
@@ -1329,9 +1349,11 @@ export function ParentDashboard() {
     setErrorMessage(null);
   };
 
-  const handleBackgroundLocation = (lat: number, lng: number) => {
+  const handleBackgroundLocation = (lat: number, lng: number, accuracy?: number) => {
     // Distancia/isInside derivadas más abajo, ver comentario en
-    // startLocationWatch.
+    // startLocationWatch. Mismo filtro de precisión que la versión web —
+    // ver MAX_LOCATION_ACCURACY_METERS.
+    if (typeof accuracy === 'number' && accuracy > MAX_LOCATION_ACCURACY_METERS) return;
     setParentPos({ lat, lng });
     setErrorMessage(null);
     setIsLocationEnabled(true);
@@ -1340,7 +1362,7 @@ export function ParentDashboard() {
   const startNativeTracking = async () => {
     try {
       await startBackgroundWatch(
-        (loc) => handleBackgroundLocation(loc.latitude, loc.longitude),
+        (loc) => handleBackgroundLocation(loc.latitude, loc.longitude, loc.accuracy),
         (message) => setErrorMessage(message),
       );
       setIsBackgroundTrackingActive(true);
@@ -1508,11 +1530,11 @@ export function ParentDashboard() {
   // Ahora, apenas cambia cualquiera de los dos valores —incluida la
   // llegada tardía de la coordenada real— se recalcula solo.
   useEffect(() => {
-    if (!parentPos) return;
+    if (!parentPos || !schoolSettingsLoaded) return;
     const dist = calculateDistance(parentPos.lat, parentPos.lng, schoolPos.lat, schoolPos.lng);
     setDistance(dist);
     setIsInside(dist <= schoolPos.radius);
-  }, [parentPos, schoolPos]);
+  }, [parentPos, schoolPos, schoolSettingsLoaded]);
 
   // A los hijos propios se les suman los alumnos que hoy le tocan a este
   // padre por un pool day (autorizado por el padre/tutor real). Así puede
@@ -1937,7 +1959,13 @@ export function ParentDashboard() {
                 {t('parent.location.sitePrefix')}{profile?.tenant?.name || t('parent.location.schoolFallback')}
               </h2>
               <p className="text-xl font-black">
-                {isInside ? t('parent.location.arrived') : isLocationEnabled ? `${Math.round(distance || 0)}${t('parent.location.distanceMeters')}` : t('parent.location.unavailable')}
+                {isLocationEnabled && (!parentPos || !schoolSettingsLoaded)
+                  ? t('parent.location.locating')
+                  : isInside
+                    ? t('parent.location.arrived')
+                    : isLocationEnabled
+                      ? `${Math.round(distance || 0)}${t('parent.location.distanceMeters')}`
+                      : t('parent.location.unavailable')}
               </p>
             </div>
           </div>
