@@ -66,6 +66,72 @@ app.get(
   }),
 );
 
+/**
+ * Datos del "Pase de Recogida" para SharedQRDisplay.tsx — la página pública
+ * (sin sesión) que ve la persona de reemplazo al abrir el enlace compartido
+ * por WhatsApp/SMS.
+ *
+ * Antes esos datos (incluida la foto) iban embebidos enteros en el propio
+ * enlace (?qr=<JSON con la foto en base64>). Desde que la foto del
+ * reemplazo se guarda como base64 directo en vez de una URL de Storage (ver
+ * ESTADO-DEL-PROYECTO.md, 2026-09-11), ese enlace fácilmente pasaba de un
+ * megabyte de largo — tanto el plugin nativo Share.share() (app Android)
+ * como navigator.share() (web móvil) lo rechazaban en silencio, sin ningún
+ * mensaje de error para el padre: parecía que el botón "Enviar" no hacía
+ * nada. Ahora el enlace solo lleva parent_id + token (un puñado de
+ * caracteres) y esta ruta trae el resto.
+ *
+ * Sin requireAuth a propósito: quien abre el enlace no tiene sesión — el
+ * token de 8 caracteres generado al aprobar el reemplazo (ver
+ * RequestsCenter.tsx) es el único "secreto" que hace falta, igual que ya
+ * pasa con el QR que se escanea en la puerta.
+ */
+app.get(
+  '/api/replacements/shared-pass',
+  wrap(async (req, res) => {
+    const parentId = String(req.query.parent_id ?? '');
+    const token = String(req.query.token ?? '');
+    if (!parentId || !token) return fail(res, 400, 'Falta parent_id o token.');
+
+    const {data: parent} = await admin
+      .from('profiles')
+      .select('first_name, last_name, additional_tutor_name')
+      .eq('id', parentId)
+      .maybeSingle();
+    if (!parent) return fail(res, 404, 'Enlace inválido.');
+
+    let replacements: any[] = [];
+    try {
+      replacements = JSON.parse(parent.additional_tutor_name || '{}')?.replacements || [];
+    } catch {
+      replacements = [];
+    }
+    const replacement = replacements.find((r: any) => r.token === token);
+    if (!replacement) return fail(res, 404, 'Enlace inválido o vencido.');
+
+    const {data: links} = await admin.from('parent_students').select('student_id').eq('parent_id', parentId);
+    const linkedIds = (links ?? []).map((l) => l.student_id);
+    // null/ausente en student_ids = todos los hijos (reemplazos de antes de
+    // que existiera ese campo, ver RequestsCenter.tsx).
+    const studentIds =
+      Array.isArray(replacement.student_ids) && replacement.student_ids.length > 0
+        ? linkedIds.filter((id) => replacement.student_ids.includes(id))
+        : linkedIds;
+
+    const {data: students} =
+      studentIds.length > 0
+        ? await admin.from('students').select('id, first_name, last_name').in('id', studentIds)
+        : {data: [] as {id: string; first_name: string; last_name: string}[]};
+
+    return ok(res, {
+      parent_name: `${parent.first_name ?? ''} ${parent.last_name ?? ''}`.trim(),
+      replacement_name: replacement.name,
+      photo_url: replacement.photo_url ?? null,
+      students: (students ?? []).map((s) => ({id: s.id, name: `${s.first_name} ${s.last_name}`})),
+    });
+  }),
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // COLEGIOS
 // ════════════════════════════════════════════════════════════════════════════

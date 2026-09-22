@@ -37,10 +37,14 @@ export default function App() {
   const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType, error: authError } = useAuth() as any;
 
   useEffect(() => {
-    // Check if we are on the /external route with a qr parameter
+    // Check if we are on the /external route with a qr parameter — 'qr' es
+    // el formato viejo (todo embebido en la URL, incluida la foto en
+    // base64), 'token' el nuevo (corto, SharedQRDisplay.tsx trae el resto
+    // del backend). Se aceptan ambos para no romper enlaces ya compartidos
+    // antes de este cambio.
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
-    if (path === '/external' && params.has('qr')) {
+    if (path === '/external' && (params.has('qr') || params.has('token'))) {
       setIsSharedQRRoute(true);
     }
     // Página pública de marketing (safesmartpickup.com/LandingPage) — no

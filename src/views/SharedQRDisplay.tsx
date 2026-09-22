@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ShieldCheck, UserCheck, AlertTriangle, User } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { apiJson } from '../lib/apiFetch';
 
 export function SharedQRDisplay() {
   const { t } = useLanguage();
@@ -11,8 +12,22 @@ export function SharedQRDisplay() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const qrParam = params.get('qr');
+    const parentId = params.get('parent');
+    const token = params.get('token');
 
-    if (qrParam) {
+    if (parentId && token) {
+      // Formato nuevo: el enlace solo trae parent_id + token, el resto
+      // (incluida la foto) se trae del backend — ver
+      // GET /api/replacements/shared-pass y el comentario en
+      // ParentDashboard.tsx (handleShareQR) sobre por qué se cambió.
+      apiJson(`/api/replacements/shared-pass?parent_id=${encodeURIComponent(parentId)}&token=${encodeURIComponent(token)}`)
+        .then((res) => {
+          setQrData({ type: 'replacement_pickup', parent_id: parentId, token, ...res.data });
+        })
+        .catch(() => setError(t('qr.invalidFormat')));
+    } else if (qrParam) {
+      // Formato viejo (enlaces ya compartidos antes de este cambio): todo
+      // embebido en la propia URL.
       try {
         const parsed = JSON.parse(decodeURIComponent(qrParam));
         if (parsed.type === 'replacement_pickup') {

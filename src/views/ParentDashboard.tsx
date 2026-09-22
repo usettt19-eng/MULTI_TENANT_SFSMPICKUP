@@ -809,16 +809,15 @@ export function ParentDashboard() {
   }, [profile?.additional_tutor_name]);
 
   const handleShareQR = async (replacement: any) => {
-    const qrData = JSON.stringify({
-      type: 'replacement_pickup',
-      parent_id: profile.id,
-      parent_name: `${profile.first_name} ${profile.last_name}`,
-      replacement_name: replacement.name,
-      photo_url: replacement.photo_url ?? null,
-      token: replacement.token,
-      students: students.map(s => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }))
-    });
-    const url = window.location.origin + '/external?qr=' + encodeURIComponent(qrData);
+    // El enlace lleva solo parent_id + token — la foto y el resto de datos
+    // los trae SharedQRDisplay.tsx desde el backend (GET
+    // /api/replacements/shared-pass). Antes iba todo embebido en la propia
+    // URL, incluida la foto en base64 (que puede pesar más de 1MB desde el
+    // 2026-09-11) — eso hacía fallar en silencio tanto el share nativo de
+    // la app Android como el de la web móvil, sin ningún error visible.
+    const url = window.location.origin
+      + '/external?parent=' + encodeURIComponent(profile.id)
+      + '&token=' + encodeURIComponent(replacement.token);
 
     // En apps nativas (Android/iOS) el WebView no siempre implementa la Web
     // Share API del navegador, así que el share.can().value salía en false
