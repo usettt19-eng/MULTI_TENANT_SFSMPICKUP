@@ -19,7 +19,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle, Check, Bus, Users
+  HelpCircle, Check, Bus, Users, KeyRound
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -1811,6 +1811,22 @@ export function ParentDashboard() {
             ))}
           </div>
         )}
+
+        {/* PIN propio, siempre visible — si algo falla (GPS, QR, app
+            trabada) el padre puede darle el PIN a recepción de palabra en
+            vez de quedar sin forma de identificarse. */}
+        <div className="p-4 rounded-2xl flex items-center justify-between border bg-white/10 border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-white/20">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-black block">{t('parent.pickup.yourPin')}</span>
+              <span className="text-[10px] text-indigo-100 opacity-80">{t('parent.pickup.yourPinHint')}</span>
+            </div>
+          </div>
+          <span className="text-xl font-black tracking-[0.25em]">{profile?.pin_code}</span>
+        </div>
 
         {isNative ? (
           <div className={`p-4 rounded-2xl flex items-center justify-between border ${isLocationEnabled ? 'bg-emerald-500/20 border-emerald-400/30' : 'bg-white/10 border-white/10'}`}>
