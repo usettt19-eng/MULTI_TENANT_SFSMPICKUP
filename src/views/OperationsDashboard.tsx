@@ -36,8 +36,15 @@ const CARPOOL_WEEKDAY_KEYS: Record<number, TranslationKey> = {
 };
 
 export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view: string) => void }) {
-  const { t, language } = useLanguage();
+  const { t, language, hasManualLanguage } = useLanguage();
   const { profile } = useAuth() as any;
+  // El idioma de las pantallas de staff arranca en inglés por defecto
+  // (LanguageContext.tsx) hasta que alguien lo cambia a mano en ese
+  // dispositivo — a diferencia de ParentDashboard.tsx, nada acá aplica el
+  // idioma que configuró el colegio (tenants.default_language) como punto
+  // de partida. Mientras no se cambie el toggle ES/EN a mano, el manual de
+  // recepción usa el idioma del colegio en vez de asumir inglés.
+  const receptionHelpLanguage = hasManualLanguage ? language : (profile?.tenant?.default_language || 'es');
   // El manual de recepción (login, Monitor Externo, escaneo QR de
   // reemplazos, Pool Day, alerta discreta, etc.) solo tiene sentido para
   // quien atiende la puerta/recepción: un admin de verdad (no disfrazado de
@@ -78,7 +85,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // Salidas ya completadas hoy (status 'completed', el padre ya confirmó
   // reunión con el alumno), agrupadas por grado/sección — se acumula en
   // tiempo real durante el día vía el mismo canal de pickup_events.
-  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number; inactiveTodayCount: number }[]>([]);
+  const [dailyDepartures, setDailyDepartures] = useState<{ grade: string; section: string; count: number; total: number; busCount: number; selfDismissalCount: number; pendingLoginCount: number; inactiveTodayCount: number }[]>([]);
   // Alumnos que reportaron su propia salida hoy (Salida Autónoma, ver
   // Students.tsx/SmartCheckIn.tsx) — tabla separada de pickup_events (no
   // hay padre ni vehículo), así que se muestra en su propio panel para no
@@ -222,7 +229,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         .eq('tenant_id', profile.tenant_id)
         .eq('status', 'completed')
         .gte('completed_at', startOfDay.toISOString()),
-      supabase.from('students').select('id, grade, section').eq('tenant_id', profile.tenant_id),
+      supabase.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', profile.tenant_id),
       supabase.from('bus_routes').select('profile_id').eq('tenant_id', profile.tenant_id),
       // Alumnos sin NINGÚN padre logueado, excluyendo a quienes van en bus
       // (a su padre no le hace falta la app para la recogida) — ver el
@@ -255,12 +262,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     });
 
     const totals = new Map<string, number>();
+    const selfDismissalCounts = new Map<string, number>();
     (allStudents || []).forEach((s: any) => {
       const key = `${s.grade || '—'}|${s.section || '—'}`;
       totals.set(key, (totals.get(key) || 0) + 1);
+      if (s.self_dismissal_allowed) selfDismissalCounts.set(key, (selfDismissalCounts.get(key) || 0) + 1);
     });
 
-    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; pendingLoginCount: number; inactiveTodayCount: number }>();
+    const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; selfDismissalCount: number; pendingLoginCount: number; inactiveTodayCount: number }>();
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
@@ -271,6 +280,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         grade, section, count: 1,
         total: totals.get(key) || 0,
         busCount: busCounts.get(key) || 0,
+        selfDismissalCount: selfDismissalCounts.get(key) || 0,
         pendingLoginCount: pendingLoginCounts[key] || 0,
         inactiveTodayCount: inactiveTodayCounts[key] || 0,
       });
@@ -578,7 +588,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
               {showReceptionHelp && (
                 <a
-                  href={language === 'es' ? '/manual-recepcion.html' : '/reception-guide.html'}
+                  href={receptionHelpLanguage === 'es' ? '/manual-recepcion.html' : '/reception-guide.html'}
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Ayuda: cómo usar la app en recepción / puerta principal"
@@ -727,6 +737,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       {d.busCount > 0 && (
                         <p className="mt-1.5 flex items-center justify-center gap-1 text-[9px] font-bold text-indigo-500">
                           <Bus className="w-3 h-3" /> {d.busCount} {t('dashboard.onBus')}
+                        </p>
+                      )}
+                      {d.selfDismissalCount > 0 && (
+                        <p className="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold text-teal-600">
+                          <Footprints className="w-3 h-3" /> {d.selfDismissalCount} {t('dashboard.selfDismissal')}
                         </p>
                       )}
                       {d.pendingLoginCount > 0 && (
