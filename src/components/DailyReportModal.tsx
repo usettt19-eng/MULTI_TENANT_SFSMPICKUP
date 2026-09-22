@@ -428,7 +428,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       doc.text('Anexo 7 — Padres pendientes de loguearse (a priorizar)', 14, nextY);
       doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text('Excluye a quienes ya tienen otro padre/tutor logueado para el mismo alumno, a quienes tienen un hijo en bus escolar, y a quienes tienen un hijo con Salida Autónoma autorizada.', 14, nextY + 5);
+      doc.text('Excluye a quienes ya tienen otro padre/tutor logueado para el mismo alumno, a quienes tienen un hijo en bus escolar, a quienes tienen un hijo con Salida Autónoma autorizada, y a quienes tienen un hijo con Pool Day activo hoy.', 14, nextY + 5);
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
@@ -450,7 +450,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       doc.text('Anexo 8 — Padres inactivos hoy (ya usaron la app antes)', 14, nextY);
       doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text('Ya se loguearon alguna vez pero no usaron la app hoy — excluye a quienes hoy sí tuvieron a otro padre activo para el mismo alumno, con un hijo en bus, o con Salida Autónoma autorizada.', 14, nextY + 5);
+      doc.text('Ya se loguearon alguna vez pero no usaron la app hoy — excluye a quienes hoy sí tuvieron a otro padre activo para el mismo alumno, con un hijo en bus, con Salida Autónoma autorizada, o con Pool Day activo hoy.', 14, nextY + 5);
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
@@ -588,7 +588,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                     <UserCog className="w-3.5 h-3.5" /> Padres pendientes de loguearse ({annexes.pendingLoginParents.length})
                   </h3>
                   <p className="text-[10px] text-amber-600 font-medium mb-3">
-                    Ya se excluyó a quienes tienen a otro padre logueado para el mismo alumno, a quienes tienen un hijo en bus, y a quienes tienen un hijo con Salida Autónoma autorizada.
+                    Ya se excluyó a quienes tienen a otro padre logueado para el mismo alumno, a quienes tienen un hijo en bus, a quienes tienen un hijo con Salida Autónoma autorizada, y a quienes tienen un hijo con Pool Day activo hoy.
                   </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {annexes.pendingLoginParents.map((p: any) => (
@@ -608,7 +608,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                     <UserCog className="w-3.5 h-3.5" /> Padres inactivos hoy ({annexes.inactiveTodayParents.length})
                   </h3>
                   <p className="text-[10px] text-orange-600 font-medium mb-3">
-                    Ya usaron la app alguna vez, pero no hoy — y hoy tampoco la usó el otro padre del mismo alumno; no va en bus ni tiene Salida Autónoma autorizada.
+                    Ya usaron la app alguna vez, pero no hoy — y hoy tampoco la usó el otro padre del mismo alumno; no va en bus, no tiene Salida Autónoma autorizada, ni tiene Pool Day activo hoy.
                   </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {annexes.inactiveTodayParents.map((p: any) => (

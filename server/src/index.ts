@@ -256,6 +256,35 @@ async function fetchActiveParentIdsToday(): Promise<Map<string, Set<string>>> {
 }
 
 /**
+ * Alumnos con un Pool Day activo HOY — recurrente (carpool_authorizations,
+ * day_of_week) o de un solo día (carpool_overrides, override_date) — para
+ * excluirlos de "pendiente de loguearse"/"inactivo hoy" en las 4 funciones
+ * de abajo: si ya hay un conductor autorizado recogiéndolos hoy, no hace
+ * falta que sus propios padres hayan usado la app, igual que bus o Salida
+ * Autónoma. Mismo criterio de fecha/día que /api/pickup/notify-staff y
+ * dismissalSchedule.ts (hora del servidor, no el ajuste de zona horaria de
+ * Panamá que usan fetchActiveParentIdsToday/fetchAllAuthUsersLastSignIn).
+ */
+async function fetchCarpoolStudentIdsToday(): Promise<Map<string, Set<string>>> {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const todayDow = new Date().getDay();
+  const [{data: recurring, error: recurringError}, {data: overrides, error: overridesError}] = await Promise.all([
+    admin.from('carpool_authorizations').select('tenant_id, student_id').eq('day_of_week', todayDow),
+    admin.from('carpool_overrides').select('tenant_id, student_id').eq('override_date', dateStr),
+  ]);
+  if (recurringError) throw recurringError;
+  if (overridesError) throw overridesError;
+  const map = new Map<string, Set<string>>();
+  for (const row of [...(recurring ?? []), ...(overrides ?? [])]) {
+    if (!row.tenant_id || !row.student_id) continue;
+    const set = map.get(row.tenant_id) ?? new Set<string>();
+    set.add(row.student_id);
+    map.set(row.tenant_id, set);
+  }
+  return map;
+}
+
+/**
  * Estadísticas por colegio para el panel de super_admin.
  *
  * SuperAdminDashboard.tsx las indexa como `stats[tenant.id].students`,
@@ -445,12 +474,14 @@ app.get(
 /**
  * Padres del colegio que nunca se han logueado, para el Reporte del Día —
  * mismo cálculo de "nunca logueado" que /api/parents/resend-invites, pero
- * excluyendo tres grupos de menor prioridad: (a) padres cuyo alumno ya tiene
- * a OTRO padre/tutor logueado (el alumno ya está cubierto), (b) padres con
- * un alumno en una ruta de bus (se les da seguimiento aparte, vía la propia
- * función de bus), y (c) padres cuyo alumno tiene autorizada la Salida
- * Autónoma (no depende de que el padre anuncie nada). Lo que queda es el
- * grupo que de verdad conviene priorizar en el próximo reenvío de
+ * excluyendo cuatro grupos de menor prioridad: (a) padres cuyo alumno ya
+ * tiene a OTRO padre/tutor logueado (el alumno ya está cubierto), (b)
+ * padres con un alumno en una ruta de bus (se les da seguimiento aparte, vía
+ * la propia función de bus), (c) padres cuyo alumno tiene autorizada la
+ * Salida Autónoma (no depende de que el padre anuncie nada), y (d) padres
+ * cuyo alumno tiene un Pool Day activo hoy (ya hay un conductor autorizado
+ * recogiéndolo, no hace falta que ellos mismos usen la app). Lo que queda es
+ * el grupo que de verdad conviene priorizar en el próximo reenvío de
  * invitaciones.
  */
 app.get(
@@ -460,10 +491,11 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns] = await Promise.all([
+    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns, carpoolByTenant] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
       admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
+      fetchCarpoolStudentIdsToday(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
     if (studentsError) return fail(res, 500, studentsError.message);
@@ -483,6 +515,7 @@ app.get(
 
     const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
     const selfDismissalStudentIds = new Set((tenantStudents ?? []).filter((s) => s.self_dismissal_allowed).map((s) => s.id));
+    const carpoolStudentIds = carpoolByTenant.get(tenantId) ?? new Set<string>();
 
     // Vínculos padre↔alumno completos (no solo de este colegio): un mismo
     // alumno puede tener un padre de otro tenant vía parent_school_access,
@@ -511,7 +544,9 @@ app.get(
       const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
       if (hasBusChild) return false;
       const hasSelfDismissalChild = studentIds.some((sid) => selfDismissalStudentIds.has(sid));
-      return !hasSelfDismissalChild;
+      if (hasSelfDismissalChild) return false;
+      const hasCarpoolToday = studentIds.some((sid) => carpoolStudentIds.has(sid));
+      return !hasCarpoolToday;
     });
 
     return ok(res, {
@@ -530,7 +565,7 @@ app.get(
  * (announced_at de hoy, no login) — mismas exclusiones de menor prioridad
  * que el endpoint anterior, adaptadas al "hoy": no cuenta si algún otro
  * padre/tutor del mismo alumno SÍ la usó hoy (cubierto por hoy), ni si el
- * alumno va en bus.
+ * alumno va en bus, tiene Salida Autónoma, o tiene un Pool Day activo hoy.
  */
 app.get(
   '/api/tenants/:tenantId/inactive-today-parents',
@@ -539,11 +574,12 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
+    const [{data: parents, error: parentsError}, {data: tenantStudents, error: studentsError}, lastSignIns, activeParentIds, carpoolByTenant] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, email, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
       admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
       fetchActiveParentIdsToday(),
+      fetchCarpoolStudentIdsToday(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
     if (studentsError) return fail(res, 500, studentsError.message);
@@ -567,6 +603,7 @@ app.get(
 
     const sectionByStudentId = new Map((tenantStudents ?? []).map((s) => [s.id, `${s.grade || '—'}${s.section ? ' · ' + s.section : ''}`]));
     const selfDismissalStudentIds = new Set((tenantStudents ?? []).filter((s) => s.self_dismissal_allowed).map((s) => s.id));
+    const carpoolStudentIds = carpoolByTenant.get(tenantId) ?? new Set<string>();
 
     const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
     if (linksError) return fail(res, 500, linksError.message);
@@ -593,7 +630,9 @@ app.get(
       const hasBusChild = studentIds.some((sid) => busStudentIds.has(sid));
       if (hasBusChild) return false;
       const hasSelfDismissalChild = studentIds.some((sid) => selfDismissalStudentIds.has(sid));
-      return !hasSelfDismissalChild;
+      if (hasSelfDismissalChild) return false;
+      const hasCarpoolToday = studentIds.some((sid) => carpoolStudentIds.has(sid));
+      return !hasCarpoolToday;
     });
 
     return ok(res, {
@@ -612,8 +651,9 @@ app.get(
  * contado por ALUMNO (no por padre) y agrupado por grado+sección, para la
  * tarjeta de "Salidas del Día" del dashboard — un alumno cuenta como
  * pendiente solo si NINGUNO de sus padres/tutores reales se ha logueado
- * nunca, y no cuenta si va en bus o tiene Salida Autónoma autorizada (en
- * ninguno de los dos casos le hace falta a su padre la app para la
+ * nunca, y no cuenta si va en bus, tiene Salida Autónoma autorizada, o tiene
+ * un Pool Day activo hoy (en ninguno de los tres casos le hace falta a su
+ * padre la app para la
  * recogida).
  */
 app.get(
@@ -623,10 +663,11 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns] = await Promise.all([
+    const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns, carpoolByTenant] = await Promise.all([
       admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
       admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
+      fetchCarpoolStudentIdsToday(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
     if (studentsError) return fail(res, 500, studentsError.message);
@@ -639,6 +680,7 @@ app.get(
       }
     };
     const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
+    const carpoolStudentIds = carpoolByTenant.get(tenantId) ?? new Set<string>();
 
     const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
     if (linksError) return fail(res, 500, linksError.message);
@@ -655,6 +697,7 @@ app.get(
     (students ?? []).forEach((s) => {
       if (busStudentIds.has(s.id)) return;
       if (s.self_dismissal_allowed) return;
+      if (carpoolStudentIds.has(s.id)) return;
       const realParentIds = (parentsByStudent.get(s.id) ?? []).filter((pid) => !busRouteProfileIds.has(pid));
       if (realParentIds.length === 0) return;
       const anyLoggedIn = realParentIds.some((pid) => !!lastSignIns.get(pid));
@@ -671,8 +714,8 @@ app.get(
  * Mismo criterio de "inactivo hoy" que /api/tenants/:tenantId/inactive-today-parents,
  * pero contado por ALUMNO y agrupado por grado+sección, para la tarjeta de
  * "Salidas del Día" — un alumno cuenta si TODOS sus padres/tutores reales ya
- * se logueron alguna vez pero ninguno usó la app hoy, y no va en bus ni
- * tiene Salida Autónoma autorizada.
+ * se logueron alguna vez pero ninguno usó la app hoy, y no va en bus, no
+ * tiene Salida Autónoma autorizada, ni tiene un Pool Day activo hoy.
  */
 app.get(
   '/api/tenants/:tenantId/inactive-today-students-by-section',
@@ -681,11 +724,12 @@ app.get(
     const {tenantId} = req.params;
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
-    const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns, activeParentIds] = await Promise.all([
+    const [{data: parents, error: parentsError}, {data: students, error: studentsError}, lastSignIns, activeParentIds, carpoolByTenant] = await Promise.all([
       admin.from('profiles').select('id, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'parent'),
       admin.from('students').select('id, grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
       fetchAllAuthUsersLastSignIn(),
       fetchActiveParentIdsToday(),
+      fetchCarpoolStudentIdsToday(),
     ]);
     if (parentsError) return fail(res, 500, parentsError.message);
     if (studentsError) return fail(res, 500, studentsError.message);
@@ -699,6 +743,7 @@ app.get(
     };
     const busRouteProfileIds = new Set((parents ?? []).filter(isBusRoute).map((p) => p.id));
     const activeToday = activeParentIds.get(tenantId) ?? new Set<string>();
+    const carpoolStudentIds = carpoolByTenant.get(tenantId) ?? new Set<string>();
 
     const {data: links, error: linksError} = await admin.from('parent_students').select('parent_id, student_id');
     if (linksError) return fail(res, 500, linksError.message);
@@ -715,6 +760,7 @@ app.get(
     (students ?? []).forEach((s) => {
       if (busStudentIds.has(s.id)) return;
       if (s.self_dismissal_allowed) return;
+      if (carpoolStudentIds.has(s.id)) return;
       const realParentIds = (parentsByStudent.get(s.id) ?? []).filter((pid) => !busRouteProfileIds.has(pid));
       if (realParentIds.length === 0) return;
       const anyActiveToday = realParentIds.some((pid) => activeToday.has(pid));
