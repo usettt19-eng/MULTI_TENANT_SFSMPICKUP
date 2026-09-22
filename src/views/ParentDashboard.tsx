@@ -89,6 +89,7 @@ export function ParentDashboard() {
     const intervalId = window.setInterval(() => {
       setNow(new Date());
       fetchSchoolSettings();
+      fetchEarlyWithdrawalsToday();
     }, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
@@ -244,6 +245,29 @@ export function ParentDashboard() {
   const allTogetherRef = useRef(false);
   const [showTogetherPrompt, setShowTogetherPrompt] = useState(false);
   const askedTogetherRef = useRef(false);
+  // Ids de hijos propios con un "retiro anticipado" creado HOY por
+  // recepción/admin (ver GET /api/parents/early-withdrawals-today) — deja
+  // saltarse el límite de las 11am (ANNOUNCE_ARRIVAL_MIN_HOUR) SOLO para
+  // ese alumno puntual, sin desactivar el interruptor general del colegio.
+  const [earlyWithdrawalStudentIds, setEarlyWithdrawalStudentIds] = useState<Set<string>>(new Set());
+  const earlyWithdrawalIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    earlyWithdrawalIdsRef.current = earlyWithdrawalStudentIds;
+  }, [earlyWithdrawalStudentIds]);
+  // Mismo motivo que pickupStudentsCountRef: lo usa el efecto de geocerca
+  // automática, declarado antes que el useMemo de pickupStudents.
+  const pickupStudentIdsRef = useRef<string[]>([]);
+  const fetchEarlyWithdrawalsToday = async () => {
+    try {
+      const res = await apiJson('/api/parents/early-withdrawals-today');
+      setEarlyWithdrawalStudentIds(new Set<string>(res.data?.studentIds || []));
+    } catch (err) {
+      console.error('Error al traer retiros anticipados de hoy:', err);
+    }
+  };
+  useEffect(() => {
+    fetchEarlyWithdrawalsToday();
+  }, []);
 
   // Geofencing states from Database
   const [schoolPos, setSchoolPos] = useState({ lat: 8.9833, lng: -79.5167, radius: 65 });
@@ -1386,7 +1410,13 @@ export function ParentDashboard() {
     // buscar el padre en este momento — se queda callado y el padre toca
     // el botón del hijo correcto a mano.
     const multipleNotTogether = pickupStudentsCountRef.current > 1 && !allTogetherRef.current;
-    if (justEntered && status === 'idle' && !loading && canAnnounceArrivalNow && !multipleNotTogether) {
+    // El límite de las 11am se salta acá solo si TODOS los hijos que se
+    // anunciarían de un tirón (el único, o el grupo completo "salen
+    // juntos") tienen un retiro anticipado activo hoy — igual criterio que
+    // usa handleAnnounceArrival() más abajo para el botón manual.
+    const ids = pickupStudentIdsRef.current;
+    const allBypassRestriction = ids.length > 0 && ids.every(id => earlyWithdrawalIdsRef.current.has(id));
+    if (justEntered && status === 'idle' && !loading && (canAnnounceArrivalNow || allBypassRestriction) && !multipleNotTogether) {
       handleAnnounceArrival();
     }
   }, [isNative, isBackgroundTrackingActive, isInside, status, loading, canAnnounceArrivalNow]);
@@ -1494,7 +1524,15 @@ export function ParentDashboard() {
   useEffect(() => {
     pickupStudentsCountRef.current = pickupStudents.length;
     allTogetherRef.current = allTogether;
-  }, [pickupStudents.length, allTogether]);
+    pickupStudentIdsRef.current = pickupStudents.map(s => s.id);
+  }, [pickupStudents, allTogether]);
+
+  // true si TODOS los hijos que cubre el botón combinado (el único, o el
+  // grupo completo "salen juntos") tienen un retiro anticipado activo hoy —
+  // deja saltarse el límite de las 11am sin desactivarlo para el resto.
+  const combinedEarlyWithdrawalBypass = pickupStudents.length > 0
+    && pickupStudents.every(s => earlyWithdrawalStudentIds.has(s.id));
+  const combinedCanAnnounceNow = canAnnounceArrivalNow || combinedEarlyWithdrawalBypass;
 
   // Carga la preferencia guardada (si la hay) y, si no existe y hay más de
   // un hijo, pregunta una sola vez por sesión.
@@ -1536,7 +1574,24 @@ export function ParentDashboard() {
 
   const handleAnnounceArrival = async (manual: boolean = false, onlyStudentIds?: string[]) => {
     if (!isInside && !manual) return;
-    if (!canAnnounceArrivalNow) {
+
+    // Sin lista específica (botón grande, o el rastreo automático), se
+    // anuncia a todos. Con lista específica (botón de un hijo puntual):
+    // si ese hijo pertenece al grupo "salen juntos", se expande a todo
+    // el grupo (un solo toque cubre a los hermanos con su misma hora);
+    // si no, se anuncia solo a ese hijo. Se calcula ANTES del límite de las
+    // 11am porque ese límite se salta solo si TODOS los hijos de este
+    // anuncio puntual tienen un retiro anticipado activo hoy — el resto de
+    // los hijos del padre sigue con el límite normal.
+    const group = kidsTogetherGroupRef.current;
+    const targets = !onlyStudentIds
+      ? pickupStudents
+      : onlyStudentIds.length === 1 && group.length > 1 && group.includes(onlyStudentIds[0])
+        ? pickupStudents.filter(s => group.includes(s.id))
+        : pickupStudents.filter(s => onlyStudentIds.includes(s.id));
+
+    const bypassRestriction = targets.length > 0 && targets.every(s => earlyWithdrawalStudentIds.has(s.id));
+    if (!canAnnounceArrivalNow && !bypassRestriction) {
       setErrorMessage(t('parent.pickup.tooEarlyError'));
       return;
     }
@@ -1548,17 +1603,6 @@ export function ParentDashboard() {
     isAnnouncingRef.current = true;
     setLoading(true);
     try {
-      // Sin lista específica (botón grande, o el rastreo automático), se
-      // anuncia a todos. Con lista específica (botón de un hijo puntual):
-      // si ese hijo pertenece al grupo "salen juntos", se expande a todo
-      // el grupo (un solo toque cubre a los hermanos con su misma hora);
-      // si no, se anuncia solo a ese hijo.
-      const group = kidsTogetherGroupRef.current;
-      const targets = !onlyStudentIds
-        ? pickupStudents
-        : onlyStudentIds.length === 1 && group.length > 1 && group.includes(onlyStudentIds[0])
-          ? pickupStudents.filter(s => group.includes(s.id))
-          : pickupStudents.filter(s => onlyStudentIds.includes(s.id));
       for (const student of targets) {
         // Si quien anuncia es el propio encargado del bus (no el padre
         // real) y este alumno ya se marcó "hoy no va en bus", se salta —
@@ -1936,18 +1980,18 @@ export function ParentDashboard() {
               <>
                 <button
                   onClick={() => handleAnnounceArrival()}
-                  disabled={!isInside || loading || !canAnnounceArrivalNow || doorSelectionRequired}
-                  className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && canAnnounceArrivalNow && !doorSelectionRequired ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
+                  disabled={!isInside || loading || !combinedCanAnnounceNow || doorSelectionRequired}
+                  className={`w-full p-8 rounded-[3rem] shadow-2xl transition-all flex flex-col items-center gap-4 ${isInside && combinedCanAnnounceNow && !doorSelectionRequired ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 shadow-none'}`}
                 >
                    <ShieldCheck className="w-10 h-10" />
                    <span className="text-2xl font-black">{t('parent.pickup.announceBtn')}</span>
                 </button>
-                {isInside && canAnnounceArrivalNow && doorSelectionRequired && (
+                {isInside && combinedCanAnnounceNow && doorSelectionRequired && (
                   <p className="text-xs font-bold text-amber-600 text-center">
                     {t('parent.doors.selectRequired')}
                   </p>
                 )}
-                {isInside && !canAnnounceArrivalNow && (
+                {isInside && !combinedCanAnnounceNow && (
                   <p className="text-xs font-bold text-slate-500 text-center">
                     {t('parent.pickup.tooEarlyError')}
                   </p>
@@ -1980,12 +2024,12 @@ export function ParentDashboard() {
                     <p className="text-xs font-bold text-slate-600 text-center">
                       {t('parent.pickup.confirmManualMsg')}
                     </p>
-                    {!canAnnounceArrivalNow && (
+                    {!combinedCanAnnounceNow && (
                       <p className="text-xs font-bold text-slate-500 text-center">
                         {t('parent.pickup.tooEarlyError')}
                       </p>
                     )}
-                    {canAnnounceArrivalNow && doorSelectionRequired && (
+                    {combinedCanAnnounceNow && doorSelectionRequired && (
                       <p className="text-xs font-bold text-amber-600 text-center">
                         {t('parent.doors.selectRequired')}
                       </p>
@@ -2000,7 +2044,7 @@ export function ParentDashboard() {
                       </button>
                       <button
                         onClick={() => handleAnnounceArrival(true)}
-                        disabled={loading || !canAnnounceArrivalNow || doorSelectionRequired}
+                        disabled={loading || !combinedCanAnnounceNow || doorSelectionRequired}
                         className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40"
                       >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('parent.pickup.confirmArrivalBtn')}
@@ -2234,7 +2278,7 @@ export function ParentDashboard() {
 
         <div className="space-y-4">
            {pickupStudents.map(s => {
-             const canAnnounceThis = status === 'idle' && !loading && canAnnounceArrivalNow && !doorSelectionRequired
+             const canAnnounceThis = status === 'idle' && !loading && (canAnnounceArrivalNow || earlyWithdrawalStudentIds.has(s.id)) && !doorSelectionRequired
                && (isLocationEnabled ? isInside : true)
                && !(isBusMonitorAccount && busExclusionsToday[s.id]);
              return (
@@ -2246,6 +2290,11 @@ export function ParentDashboard() {
                    <p className="text-[11px] text-slate-500 font-black uppercase">
                      {s.grade || t('parent.students.gradeUnassigned')}{s.section && ` · ${s.section}`}
                    </p>
+                   {earlyWithdrawalStudentIds.has(s.id) && (
+                     <p className="text-[10px] text-amber-600 font-black uppercase mt-0.5">
+                       El colegio pidió que lo retires ahora
+                     </p>
+                   )}
                 </div>
                 {(s as any)._isCarpool && (
                   <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border border-emerald-100 flex items-center gap-1">

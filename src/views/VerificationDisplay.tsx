@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car, UserX, Search } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, announceBilingual, setVoiceLanguageSetting, getAudioContext } from '../lib/audioManager';
@@ -58,6 +58,31 @@ export function VerificationDisplay() {
   const [latestDetections, setLatestDetections] = useState<any[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const channelRef = React.useRef<any>(null);
+
+  // Retiro anticipado: recepción marca a un alumno para salir antes de lo
+  // normal (se siente mal, o el colegio pide que lo retiren) — en un solo
+  // paso avisa al encargado de salida del salón, excluye del bus si aplica,
+  // y avisa al padre. Mismo criterio de visibilidad que el botón de Ayuda
+  // del Dashboard: admin real, o staff con el permiso 'checkin' otorgado.
+  const showEarlyWithdrawal = (() => {
+    if (profile?.role !== 'admin') return false;
+    try {
+      const parsed = JSON.parse(profile.additional_tutor_name || '{}');
+      if (parsed.is_staff === true) {
+        return ((parsed.permissions || []) as string[]).includes('checkin');
+      }
+    } catch (e) {}
+    return true;
+  })();
+  const [showEarlyWithdrawalModal, setShowEarlyWithdrawalModal] = useState(false);
+  const [ewSearchQuery, setEwSearchQuery] = useState('');
+  const [ewSearchResults, setEwSearchResults] = useState<any[]>([]);
+  const [ewSearching, setEwSearching] = useState(false);
+  const [ewSelectedStudent, setEwSelectedStudent] = useState<any | null>(null);
+  const [ewReason, setEwReason] = useState('');
+  const [ewSubmitting, setEwSubmitting] = useState(false);
+  const [ewResult, setEwResult] = useState<{ busExcluded: boolean; staffNotified: number; parentsNotified: number } | null>(null);
+  const [ewError, setEwError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -527,6 +552,56 @@ export function VerificationDisplay() {
     setTimeout(() => setDiscreteAlertStatus('idle'), 4000);
   };
 
+  const openEarlyWithdrawalModal = () => {
+    setEwSearchQuery('');
+    setEwSearchResults([]);
+    setEwSelectedStudent(null);
+    setEwReason('');
+    setEwResult(null);
+    setEwError(null);
+    setShowEarlyWithdrawalModal(true);
+  };
+
+  const searchStudentsForWithdrawal = async (query: string) => {
+    setEwSearchQuery(query);
+    setEwSelectedStudent(null);
+    if (query.trim().length < 2 || !profile?.tenant_id) {
+      setEwSearchResults([]);
+      return;
+    }
+    setEwSearching(true);
+    const { data } = await supabase
+      .from('students')
+      .select('id, first_name, last_name, grade, section')
+      .eq('tenant_id', profile.tenant_id)
+      .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+      .limit(15);
+    setEwSearchResults(data || []);
+    setEwSearching(false);
+  };
+
+  const handleSubmitEarlyWithdrawal = async () => {
+    if (!ewSelectedStudent || !ewReason.trim() || !profile?.tenant_id) return;
+    setEwSubmitting(true);
+    setEwError(null);
+    try {
+      const res = await apiJson(`/api/tenants/${profile.tenant_id}/early-withdrawals`, {
+        method: 'POST',
+        body: JSON.stringify({ student_id: ewSelectedStudent.id, reason: ewReason.trim() }),
+      });
+      setEwResult({
+        busExcluded: !!res.data?.bus_excluded,
+        staffNotified: res.data?.staff_notified ?? 0,
+        parentsNotified: res.data?.parents_notified ?? 0,
+      });
+    } catch (error: any) {
+      console.error('Error al crear retiro anticipado:', error);
+      setEwError(error?.message || 'No se pudo registrar el retiro anticipado.');
+    } finally {
+      setEwSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Usamos el TopNav estándar en lugar del header embebido para mantener consistencia */}
@@ -661,6 +736,15 @@ export function VerificationDisplay() {
                 <AlertTriangle className="w-5 h-5" />
                 {discreteAlertStatus === 'sent' ? 'Enviada' : t('monitor.discreteAlert')}
               </button>
+              {showEarlyWithdrawal && (
+                <button
+                  onClick={openEarlyWithdrawalModal}
+                  className="bg-amber-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-amber-200 active:scale-95 transition-all"
+                >
+                  <UserX className="w-5 h-5" />
+                  Retiro Anticipado
+                </button>
+              )}
             </div>
           </div>
 
@@ -977,6 +1061,114 @@ export function VerificationDisplay() {
                   </button>
                 )}
              </div>
+          </div>
+        </div>
+      )}
+      {/* RETIRO ANTICIPADO MODAL */}
+      {showEarlyWithdrawalModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Retiro Anticipado</h3>
+              <button onClick={() => setShowEarlyWithdrawalModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
+            </div>
+
+            {ewResult ? (
+              <div className="p-8 space-y-5 text-center">
+                <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-slate-800">Listo, ya se avisó a todos</p>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {ewResult.staffNotified > 0
+                      ? `Se avisó al encargado de salida del salón (${ewResult.staffNotified}).`
+                      : 'No hay encargado de salida asignado hoy para ese salón, pero el padre ya puede anunciar su llegada.'}
+                  </p>
+                  {ewResult.busExcluded && (
+                    <p className="text-xs text-amber-700 font-bold">El alumno fue excluido del bus de hoy y se avisó al encargado de la ruta.</p>
+                  )}
+                  <p className="text-xs text-slate-500 font-medium">
+                    {ewResult.parentsNotified > 0 ? 'El padre/tutor ya fue notificado en la app.' : 'No se encontró padre/tutor vinculado para notificar.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowEarlyWithdrawalModal(false)}
+                  className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
+                >
+                  Cerrar
+                </button>
+              </div>
+            ) : (
+              <div className="p-8 space-y-5">
+                <p className="text-xs text-slate-500 font-medium">
+                  Úsalo cuando el colegio necesita que retiren a un alumno antes de lo normal (se siente mal, o alguna
+                  situación puntual). Avisa de una vez al encargado de salida del salón, excluye al alumno del bus de
+                  hoy si va en uno, y avisa al padre/tutor — incluso si el límite de las 11am está activo.
+                </p>
+
+                {!ewSelectedStudent ? (
+                  <div>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={ewSearchQuery}
+                        onChange={(e) => searchStudentsForWithdrawal(e.target.value)}
+                        placeholder="Buscar alumno por nombre..."
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl pl-10 pr-4 py-3 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                        autoFocus
+                      />
+                    </div>
+                    {ewSearching && <p className="text-xs text-slate-400 mt-2">Buscando...</p>}
+                    {ewSearchResults.length > 0 && (
+                      <div className="mt-3 max-h-56 overflow-y-auto space-y-1.5">
+                        {ewSearchResults.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => setEwSelectedStudent(s)}
+                            className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-all flex items-center justify-between"
+                          >
+                            <span className="text-sm font-bold text-slate-800">{s.first_name} {s.last_name}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{s.grade} {s.section}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-4 bg-indigo-50 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{ewSelectedStudent.first_name} {ewSelectedStudent.last_name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{ewSelectedStudent.grade} {ewSelectedStudent.section}</p>
+                      </div>
+                      <button onClick={() => setEwSelectedStudent(null)} className="text-xs font-bold text-indigo-600">Cambiar</button>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motivo</label>
+                      <textarea
+                        value={ewReason}
+                        onChange={(e) => setEwReason(e.target.value)}
+                        placeholder="Ej. Se siente mal, fiebre / Situación familiar indicada por el colegio..."
+                        rows={3}
+                        className="w-full mt-1.5 bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl p-3 font-medium outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      />
+                    </div>
+                    {ewError && (
+                      <p className="text-xs font-bold text-rose-600 bg-rose-50 p-3 rounded-xl">{ewError}</p>
+                    )}
+                    <button
+                      onClick={handleSubmitEarlyWithdrawal}
+                      disabled={ewSubmitting || !ewReason.trim()}
+                      className="w-full bg-amber-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50"
+                    >
+                      {ewSubmitting ? 'Enviando...' : 'Confirmar Retiro Anticipado'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

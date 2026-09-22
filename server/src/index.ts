@@ -2226,6 +2226,211 @@ app.post(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// RETIRO ANTICIPADO (recepción/admin marca a un alumno para salir antes de lo
+// normal — se siente mal, o el colegio pide que lo retiren por alguna
+// situación puntual)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// A diferencia del flujo normal (el padre anuncia su llegada desde su app),
+// acá lo dispara el staff en un solo paso: avisa al encargado de salida del
+// salón para que no espere al alumno en la fila regular, lo saca del bus de
+// hoy si va en uno, y avisa al padre — todo con service_role, porque ni el
+// staff ni el padre pueden insertarle notificaciones a otro usuario por RLS
+// (mismo motivo que /api/pickup/notify-staff más arriba).
+
+app.post(
+  '/api/tenants/:tenantId/early-withdrawals',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No autorizado.');
+
+    const {student_id} = req.body ?? {};
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 300);
+    if (!student_id || !reason) return fail(res, 400, 'Falta el alumno o el motivo.');
+
+    const {data: student} = await admin
+      .from('students')
+      .select('id, first_name, last_name, grade, section')
+      .eq('id', student_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (!student) return fail(res, 404, 'Alumno no encontrado.');
+
+    const {data: requester} = await admin
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', req.caller!.id)
+      .maybeSingle();
+    const requesterName = requester
+      ? `${requester.first_name ?? ''} ${requester.last_name ?? ''}`.trim() || 'El colegio'
+      : 'El colegio';
+    const studentName = `${student.first_name} ${student.last_name}`;
+
+    const {data: row, error: insertError} = await admin
+      .from('early_withdrawals')
+      .insert({tenant_id: tenantId, student_id, reason, requested_by: req.caller!.id})
+      .select()
+      .single();
+    if (insertError) return fail(res, 500, insertError.message);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const todayDow = new Date().getDay();
+
+    // 1. Avisar al/los encargado(s) de salida del salón de hoy (mismo cálculo
+    // que POST /api/pickup/notify-staff, ver ahí el porqué de cada paso).
+    const {data: grade} = await admin
+      .from('school_grades')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('name', student.grade ?? '')
+      .maybeSingle();
+
+    let staffIds: string[] = [];
+    if (grade) {
+      const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+      const sectionValue = norm(student.section);
+      const pickExact = (rows: any[]) =>
+        rows.find((r) => norm(r.section) === sectionValue) || rows.find((r) => norm(r.section) === '');
+
+      const {data: assignmentRows} = await admin
+        .from('dismissal_assignments')
+        .select('staff_id, staff_id_2, section')
+        .eq('tenant_id', tenantId)
+        .eq('grade_id', grade.id)
+        .eq('schedule_type', 'regular')
+        .eq('day_of_week', todayDow);
+      const assignment = assignmentRows && assignmentRows.length > 0 ? pickExact(assignmentRows) : undefined;
+      let slot1: string | null = assignment?.staff_id ?? null;
+      let slot2: string | null = assignment?.staff_id_2 ?? null;
+
+      const {data: overrideRows} = await admin
+        .from('dismissal_overrides')
+        .select('staff_id, section, slot')
+        .eq('tenant_id', tenantId)
+        .eq('grade_id', grade.id)
+        .eq('schedule_type', 'regular')
+        .eq('override_date', dateStr);
+      if (overrideRows && overrideRows.length > 0) {
+        const slot1Overrides = overrideRows.filter((o) => o.slot === 1);
+        const slot2Overrides = overrideRows.filter((o) => o.slot === 2);
+        const slot1Pick = slot1Overrides.length > 0 ? pickExact(slot1Overrides) : undefined;
+        const slot2Pick = slot2Overrides.length > 0 ? pickExact(slot2Overrides) : undefined;
+        if (slot1Pick) slot1 = slot1Pick.staff_id;
+        if (slot2Pick) slot2 = slot2Pick.staff_id;
+      }
+      staffIds = Array.from(new Set([slot1, slot2].filter((id): id is string => !!id)));
+    }
+
+    if (staffIds.length > 0) {
+      await admin.from('notifications').insert(
+        staffIds.map((staffId) => ({
+          user_id: staffId,
+          title: 'Retiro anticipado',
+          message: `${studentName} será retirado ahora por indicación de ${requesterName} (${reason}). No lo envíes a la fila de salida regular.`,
+          type: 'warning',
+          tenant_id: tenantId,
+        })),
+      );
+    }
+
+    // 2. Si va en una ruta de bus, excluirlo del bus de hoy y avisar al
+    // encargado de esa ruta (mismo patrón que /api/bus/exclusion-notify).
+    const {data: routes} = await admin
+      .from('bus_routes')
+      .select('id, name, profile_id')
+      .eq('tenant_id', tenantId);
+    const routeProfileIds = (routes ?? []).map((r) => r.profile_id);
+    let busExcluded = false;
+    if (routeProfileIds.length > 0) {
+      const {data: busLink} = await admin
+        .from('parent_students')
+        .select('parent_id')
+        .in('parent_id', routeProfileIds)
+        .eq('student_id', student_id)
+        .maybeSingle();
+      const route = busLink ? (routes ?? []).find((r) => r.profile_id === busLink.parent_id) : undefined;
+      if (busLink && route) {
+        const {data: existingExclusion} = await admin
+          .from('bus_daily_exclusions')
+          .select('id')
+          .eq('student_id', student_id)
+          .eq('excluded_date', dateStr)
+          .maybeSingle();
+        if (!existingExclusion) {
+          await admin.from('bus_daily_exclusions').insert({
+            tenant_id: tenantId,
+            bus_route_id: route.id,
+            student_id,
+            excluded_date: dateStr,
+            created_by: req.caller!.id,
+          });
+        }
+        busExcluded = true;
+        await admin.from('notifications').insert({
+          user_id: busLink.parent_id,
+          title: 'Alumno excluido de la ruta de hoy',
+          message: `${studentName} no debe subir al bus hoy — retiro anticipado autorizado por ${requesterName}.`,
+          type: 'warning',
+          tenant_id: tenantId,
+        });
+      }
+    }
+    if (busExcluded) {
+      await admin.from('early_withdrawals').update({bus_excluded: true}).eq('id', row.id);
+    }
+
+    // 3. Avisar al/los padre(s)/tutor(es) reales del alumno (no al perfil
+    // fantasma del bus, que también aparece en parent_students).
+    const {data: parentLinks} = await admin.from('parent_students').select('parent_id').eq('student_id', student_id);
+    const parentIds = Array.from(
+      new Set((parentLinks ?? []).map((l) => l.parent_id).filter((id) => !routeProfileIds.includes(id))),
+    );
+    if (parentIds.length > 0) {
+      await admin.from('notifications').insert(
+        parentIds.map((parentId) => ({
+          user_id: parentId,
+          title: 'Debes recoger a tu hijo/a ahora',
+          message: `El colegio indica que debes recoger a ${studentName} cuanto antes: ${reason}. Ya puedes anunciar tu llegada sin esperar el horario habitual.`,
+          type: 'warning',
+          tenant_id: tenantId,
+        })),
+      );
+    }
+
+    return ok(res, {...row, bus_excluded: busExcluded, staff_notified: staffIds.length, parents_notified: parentIds.length});
+  }),
+);
+
+/**
+ * Alumnos con un retiro anticipado creado HOY entre los hijos propios del
+ * padre — ParentDashboard.tsx lo usa para saltarse el límite de las 11:00 am
+ * solo para ese alumno puntual, sin desactivar el interruptor general del
+ * colegio. `early_withdrawals` no tiene políticas de RLS para `authenticated`
+ * (ver sql/early_withdrawals.sql), así que esta lectura pasa por acá con
+ * service_role.
+ */
+app.get(
+  '/api/parents/early-withdrawals-today',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {data: links} = await admin.from('parent_students').select('student_id').eq('parent_id', req.caller!.id);
+    const studentIds = Array.from(new Set((links ?? []).map((l) => l.student_id)));
+    if (studentIds.length === 0) return ok(res, {studentIds: []});
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const {data: rows} = await admin
+      .from('early_withdrawals')
+      .select('student_id')
+      .in('student_id', studentIds)
+      .gte('created_at', `${dateStr}T00:00:00.000Z`)
+      .lt('created_at', `${dateStr}T23:59:59.999Z`);
+
+    return ok(res, {studentIds: Array.from(new Set((rows ?? []).map((r) => r.student_id)))});
+  }),
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // POOL DAY (CARPOOL)
 // ════════════════════════════════════════════════════════════════════════════
 //
