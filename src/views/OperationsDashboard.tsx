@@ -263,13 +263,32 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
 
     const totals = new Map<string, number>();
     const selfDismissalCounts = new Map<string, number>();
+    const gradeSectionOf = new Map<string, { grade: string; section: string }>();
     (allStudents || []).forEach((s: any) => {
-      const key = `${s.grade || '—'}|${s.section || '—'}`;
+      const grade = s.grade || '—';
+      const section = s.section || '—';
+      const key = `${grade}|${section}`;
       totals.set(key, (totals.get(key) || 0) + 1);
+      gradeSectionOf.set(key, { grade, section });
       if (s.self_dismissal_allowed) selfDismissalCounts.set(key, (selfDismissalCounts.get(key) || 0) + 1);
     });
 
+    // Se arma una tarjeta por cada salón con alumnos matriculados, no solo
+    // los que ya tuvieron alguna salida hoy — un salón donde TODOS los
+    // alumnos tienen Salida Autónoma nunca genera pickup_events (salen por
+    // self_dismissal_events, no por acá) y antes quedaba invisible en este
+    // reporte, aunque tuviera alumnos reales.
     const counts = new Map<string, { grade: string; section: string; count: number; total: number; busCount: number; selfDismissalCount: number; pendingLoginCount: number; inactiveTodayCount: number }>();
+    gradeSectionOf.forEach(({ grade, section }, key) => {
+      counts.set(key, {
+        grade, section, count: 0,
+        total: totals.get(key) || 0,
+        busCount: busCounts.get(key) || 0,
+        selfDismissalCount: selfDismissalCounts.get(key) || 0,
+        pendingLoginCount: pendingLoginCounts[key] || 0,
+        inactiveTodayCount: inactiveTodayCounts[key] || 0,
+      });
+    });
     (data || []).forEach((row: any) => {
       const grade = row.student?.grade || '—';
       const section = row.student?.section || '—';
