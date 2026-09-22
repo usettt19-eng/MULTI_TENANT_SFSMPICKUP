@@ -2,8 +2,13 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-19 (**landing page pública `/LandingPage` con SEO e indexación en Google
-ya confirmada**, botón de "Anunciar llegada" por cada hijo con soporte de
+2026-09-21 (**incidente resuelto**: la cuenta de AWS que hospeda Amazon SES se
+cerró por créditos agotados y rompió "Establecer contraseña"/invitaciones/magic
+link — parche de emergencia con Zoho SMTP aplicado, **pendiente reactivar AWS**
+antes de otra importación masiva de padres; botón de **Ayuda para recepción**
+en el Dashboard, enlazado al manual de recepción ya existente; landing page
+pública `/LandingPage` con SEO e indexación en Google ya confirmada, botón de
+"Anunciar llegada" por cada hijo con soporte de
 subgrupos —"¿cuáles salen juntos?"—, el Reporte del Día ahora también lista
 padres pendientes de loguearse y padres inactivos hoy por sección —excluyendo
 bus y Salida Autónoma—, las mismas alertas de login agregadas por salón en el
@@ -2334,6 +2339,64 @@ porque ningún alumno tiene el permiso o porque nadie lo ha usado hoy.
 Ahora lista a **todos** los alumnos con `self_dismissal_allowed = true`,
 marcando quién ya salió (método + hora) y quién sigue pendiente ("Aún
 no sale"), con el contador como "salieron / autorizados".
+
+### Incidente: cuenta de AWS cerrada rompía "Establecer contraseña" — solución de emergencia con Zoho SMTP (2026-09-20/21)
+Los padres empezaron a recibir **"Error sending recovery email"** al pedir
+el enlace de "¿No tienes contraseña o la olvidaste? Establécela aquí" en
+el login. Ese botón llama a `supabase.auth.resetPasswordForEmail()`
+(`src/views/Login.tsx`), y ese correo (junto con las invitaciones y los
+magic links) lo manda por completo el propio servicio de Auth de
+Supabase usando el SMTP configurado en su Dashboard — no depende de
+ningún código de este repo.
+
+**Causa real encontrada**: no fue un problema de reputación/límite de
+envío de Amazon SES (que es lo que usa Supabase Auth desde la migración
+documentada en "Correo real e invitaciones (Amazon SES)" más arriba) —
+la **cuenta de AWS completa (`884404664605`) estaba cerrada** ("Your AWS
+free plan has ended... the account has been closed"), por créditos
+agotados o fin del período gratis, con fecha límite del **17 de
+noviembre de 2026** antes de que AWS borre el contenido de forma
+permanente. Al estar cerrada la cuenta, SES no podía enviar nada — ni
+resets, ni invitaciones nuevas, ni magic links — desde el momento del
+cierre, no solo para este padre.
+
+**Solución aplicada (parche de emergencia, no definitivo)**: se
+reconfiguró el SMTP personalizado de Supabase Auth para usar **Zoho
+Mail** en vez de SES, con una contraseña de aplicación dedicada
+generada en la cuenta `info@safesmartpickup.com` (Zoho ya tenía SPF/DKIM
+verificados para `safesmartpickup.com` desde antes, para otros correos
+salientes de la plataforma):
+- Host `smtp.zoho.com`, puerto `587` (TLS).
+- Usuario/remitente: `info@safesmartpickup.com`.
+- Confirmado funcionando: el mismo padre que había recibido el error
+  volvió a intentarlo y ya no salió.
+
+**Limitación conocida, sin resolver todavía**: los planes de Zoho Mail
+tienen límites de envío por hora/día muy por debajo de lo que permitía
+SES con su Configuration Set dedicado — suficiente para resets y magic
+links individuales, pero una **importación masiva de cientos de padres
+por CSV** (como la de 451 en TCS Albrook) probablemente se trabaría a
+mitad de camino si se intenta mientras el SMTP siga apuntando a Zoho.
+**Pendiente**: reactivar la cuenta de AWS (agregar método de pago en
+"Upgrade plan" dentro de Billing and Cost Management) y, una vez
+reactivada, volver a apuntar el SMTP de Supabase Auth a las credenciales
+de SES — revisando de paso que el envío no haya quedado también
+pausado por reputación/rebotes mientras la cuenta estuvo cerrada. Falta
+además confirmar si el FusionPBX (telefonía) vive en esa misma cuenta de
+AWS y si se vio afectado por el cierre.
+
+### Botón de Ayuda para recepción/puerta principal en el Dashboard (2026-09-21)
+El Dashboard (`OperationsDashboard.tsx`) ganó un botón **"Ayuda"** junto
+a "Reporte del Día", que enlaza (en pestaña nueva) al manual de
+recepción ya existente en `public/` (`manual-recepcion.html` en
+español, `reception-guide.html` en inglés según el idioma activo) —
+cubre login, qué avisos van a llegar, verificar/autorizar en Monitor
+Externo, escanear el QR de un reemplazo, Pool Day, atender fuera de
+orden, la puerta que eligió el padre, la alerta discreta y Salida
+Autónoma en Check-In. Solo visible para el admin real o para un miembro
+del staff con el permiso `checkin` otorgado (el mismo criterio que usa
+`Sidebar.tsx` para mostrar ese módulo en el menú) — no para cualquier
+otro rol de staff que no atienda la puerta.
 
 ---
 
