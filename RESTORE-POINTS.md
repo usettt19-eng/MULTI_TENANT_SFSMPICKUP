@@ -24,6 +24,19 @@ docker compose up -d
 
 ---
 
+## 2026-09-22 — `94734a4232967357801f172b639f04cee3c95f01`
+
+**Retiro Anticipado + botón de Ayuda de recepción + fix del enlace de reemplazo**
+
+Confirmado funcionando en producción. Incluye todo lo del punto anterior (2026-09-19) más:
+
+- **Retiro Anticipado**: botón nuevo en Monitor Externo (recepción/admin) para cuando el colegio necesita que retiren a un alumno antes de lo normal (se siente mal, u otra situación puntual). En un solo paso: avisa al encargado de salida del salón, excluye al alumno del bus de hoy si va en uno (con aviso al encargado de la ruta), avisa al padre/tutor, y le permite anunciar su llegada sin el límite de las 11am — solo para ese alumno puntual ese día. Requiere la migración `sql/early_withdrawals.sql` ya aplicada.
+- Botón de **Ayuda** en el Dashboard para recepción/admin, enlazado al manual de recepción (`manual-recepcion.html` / `reception-guide.html`), ahora también documentando el Retiro Anticipado.
+- **Fix**: el botón "Enviar" al autorizado de un reemplazo no hacía nada en Android ni web móvil — el enlace llevaba la foto del reemplazo embebida en base64 dentro de la propia URL (a veces más de 1MB), rechazado en silencio por el share nativo. Ahora el enlace es corto y la foto se trae del backend.
+- Parche de emergencia (fuera de este repo, en el Dashboard de Supabase): SMTP de Auth cambiado de Amazon SES a Zoho Mail porque la cuenta de AWS que hospeda SES se cerró por créditos agotados — ver el detalle completo y los pendientes en `ESTADO-DEL-PROYECTO.md` (sección de correo/AWS del 2026-09-20/21). **Pendiente**: reactivar la cuenta de AWS antes de otra importación masiva de padres.
+
+---
+
 ## 2026-09-19 — `40fb03984f6ecebd8926147e5e7e54dd15ad10e1`
 
 **Landing page pública + SEO + botón por hijo + Reporte del Día con alertas de login + roster de Salida Autónoma**

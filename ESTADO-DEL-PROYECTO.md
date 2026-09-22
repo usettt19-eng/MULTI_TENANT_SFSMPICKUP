@@ -2,12 +2,19 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-21 (**incidente resuelto**: la cuenta de AWS que hospeda Amazon SES se
-cerró por créditos agotados y rompió "Establecer contraseña"/invitaciones/magic
-link — parche de emergencia con Zoho SMTP aplicado, **pendiente reactivar AWS**
-antes de otra importación masiva de padres; botón de **Ayuda para recepción**
-en el Dashboard, enlazado al manual de recepción ya existente; landing page
-pública `/LandingPage` con SEO e indexación en Google ya confirmada, botón de
+2026-09-22 (**Retiro Anticipado**: recepción retira a un alumno antes de lo
+normal desde Monitor Externo en un solo paso —avisa al encargado de salida
+del salón, excluye del bus si aplica, avisa al padre, y salta el límite de
+las 11am solo para ese alumno—; **fix**: el botón "Enviar" al autorizado de
+reemplazo no hacía nada en Android ni web móvil porque el enlace llevaba la
+foto embebida en base64 en la URL —ahora el enlace trae los datos del
+backend, confirmado funcionando—; botón de **Ayuda para recepción** en el
+Dashboard, enlazado al manual de recepción ya existente; **incidente
+resuelto** el 2026-09-21: la cuenta de AWS que hospeda Amazon SES se cerró
+por créditos agotados y rompió "Establecer contraseña"/invitaciones/magic
+link — parche de emergencia con Zoho SMTP aplicado, **pendiente reactivar
+AWS** antes de otra importación masiva de padres; landing page pública
+`/LandingPage` con SEO e indexación en Google ya confirmada, botón de
 "Anunciar llegada" por cada hijo con soporte de
 subgrupos —"¿cuáles salen juntos?"—, el Reporte del Día ahora también lista
 padres pendientes de loguearse y padres inactivos hoy por sección —excluyendo
@@ -2397,6 +2404,55 @@ Autónoma en Check-In. Solo visible para el admin real o para un miembro
 del staff con el permiso `checkin` otorgado (el mismo criterio que usa
 `Sidebar.tsx` para mostrar ese módulo en el menú) — no para cualquier
 otro rol de staff que no atienda la puerta.
+
+### Retiro Anticipado: recepción retira a un alumno antes de lo normal, saltando el límite de las 11am solo para ese alumno (2026-09-22)
+Pedido real: un alumno se siente mal (o hay alguna otra situación puntual)
+y el colegio necesita que el padre lo recoja ya mismo, pero el límite de
+las 11am (`ANNOUNCE_ARRIVAL_MIN_HOUR`) le bloqueaba anunciar la llegada, y
+nadie avisaba de una vez al encargado de salida del salón ni excluía al
+alumno del bus si iba en uno.
+
+- Nuevo botón **"Retiro Anticipado"** en Monitor Externo (junto a Alerta
+  Discreta), visible solo para admin o staff con el permiso `checkin`.
+  Se busca al alumno por nombre y se escribe el motivo.
+- `POST /api/tenants/:tenantId/early-withdrawals` (nueva tabla
+  `early_withdrawals`, ver `sql/early_withdrawals.sql`) hace, en un solo
+  paso, con `service_role`:
+  1. Avisa (vía `notifications`) al/los encargado(s) de salida del salón
+     de hoy (mismo cálculo de `dismissal_assignments`/`dismissal_overrides`
+     que ya usa `POST /api/pickup/notify-staff`).
+  2. Si el alumno va en una ruta de bus, lo excluye del bus de hoy
+     (`bus_daily_exclusions`, mismo mecanismo que "Hoy no va en bus" del
+     padre) y avisa al encargado de esa ruta.
+  3. Avisa al padre/tutor en su propia app.
+- `ParentDashboard.tsx` consulta `GET /api/parents/early-withdrawals-today`
+  (qué hijos propios tienen un retiro anticipado creado hoy) y deja
+  anunciar la llegada de ESE alumno puntual sin el límite de las 11am —
+  tanto el botón combinado como los botones por hijo y el rastreo
+  automático por geocerca respetan la excepción sin desactivar el límite
+  para el resto del colegio. Badge ámbar en la tarjeta del alumno ("El
+  colegio pidió que lo retires ahora") para que quede claro por qué el
+  botón está habilitado antes de hora.
+- Documentado también en el manual de recepción (`manual-recepcion.html` /
+  `reception-guide.html`).
+
+### Fix: el botón "Enviar" al autorizado de reemplazo no hacía nada en Android ni web móvil (2026-09-22)
+El enlace del "Pase de Recogida" que se comparte por WhatsApp llevaba
+**todos** los datos embebidos en la propia URL (`/external?qr=<JSON>`),
+incluida la foto del reemplazo — que desde el 2026-09-11 se guarda como
+base64 directo en vez de una URL de Storage, así que esa URL fácilmente
+pasaba de 1MB. Tanto el share nativo de Capacitor (app Android) como
+`navigator.share()` (web móvil) la rechazaban en silencio, sin ningún
+error visible — el botón "Enviar" parecía no hacer nada.
+
+Ahora el enlace solo lleva `parent_id` + `token` (formato
+`/external?parent=...&token=...`); `SharedQRDisplay.tsx` trae el resto
+(incluida la foto) desde el backend con el nuevo endpoint público
+`GET /api/replacements/shared-pass` (sin `requireAuth` a propósito: quien
+abre el enlace no tiene sesión — el token de 8 caracteres es el único
+secreto que hace falta, igual que el QR que se escanea en la puerta). Se
+sigue aceptando el formato viejo (`?qr=...`) para no romper enlaces ya
+compartidos antes de este fix. Confirmado funcionando en producción.
 
 ---
 
