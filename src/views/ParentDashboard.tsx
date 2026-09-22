@@ -276,14 +276,6 @@ export function ParentDashboard() {
   const [showManualArrival, setShowManualArrival] = useState(false);
   const watchId = useRef<number | null>(null);
 
-  // El watcher nativo en segundo plano se registra una sola vez al montar la
-  // pantalla (antes de que fetchSchoolSettings() traiga la ubicación real del
-  // colegio). Si su callback leyera "schoolPos" directamente, quedaría para
-  // siempre comparando contra el valor por defecto de arriba, ya que ese
-  // closure nunca se vuelve a crear. Este ref sí se mantiene al día.
-  const schoolPosRef = useRef(schoolPos);
-  useEffect(() => { schoolPosRef.current = schoolPos; }, [schoolPos]);
-
   // En la app nativa (Android), la ubicación se rastrea en segundo plano sin
   // que el padre tenga que abrir la app ni tocar nada — solo se pide el
   // permiso "Permitir siempre" una vez, con una pantalla propia explicando
@@ -1298,10 +1290,12 @@ export function ParentDashboard() {
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
+        // La distancia/isInside NO se calculan acá — las deriva el efecto
+        // de abajo a partir de parentPos + schoolPos, para que se
+        // recalculen solas apenas llegue la coordenada real del colegio
+        // (fetchSchoolSettings), sin depender de que llegue OTRA lectura
+        // de GPS después de esa carga (ver el porqué en ese efecto).
         setParentPos({ lat: latitude, lng: longitude });
-        const dist = calculateDistance(latitude, longitude, schoolPosRef.current.lat, schoolPosRef.current.lng);
-        setDistance(dist);
-        setIsInside(dist <= schoolPosRef.current.radius);
         setErrorMessage(null);
       },
       (error) => {
@@ -1336,10 +1330,9 @@ export function ParentDashboard() {
   };
 
   const handleBackgroundLocation = (lat: number, lng: number) => {
+    // Distancia/isInside derivadas más abajo, ver comentario en
+    // startLocationWatch.
     setParentPos({ lat, lng });
-    const dist = calculateDistance(lat, lng, schoolPosRef.current.lat, schoolPosRef.current.lng);
-    setDistance(dist);
-    setIsInside(dist <= schoolPosRef.current.radius);
     setErrorMessage(null);
     setIsLocationEnabled(true);
   };
@@ -1500,6 +1493,26 @@ export function ParentDashboard() {
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
   };
+
+  // La distancia/isInside se derivan acá, de parentPos + schoolPos, en vez
+  // de calcularse una sola vez dentro de cada callback de GPS (como era
+  // antes). El rastreo de ubicación (nativo o web) arranca en un efecto
+  // aparte, en paralelo con fetchSchoolSettings() — si el celular entrega
+  // su primera lectura de GPS antes de que termine esa carga, el cálculo
+  // usaba el valor por defecto de schoolPos (Panamá genérico, ver el
+  // useState de más arriba) en vez de la coordenada real del colegio, y
+  // como nada disparaba un recálculo hasta la SIGUIENTE lectura de GPS, un
+  // padre que no se moviera del sitio se quedaba viendo una distancia
+  // enorme y errada de forma indefinida (confirmado en TCS Albrook el
+  // 2026-09-22: ~4.8km, la distancia real entre el default y el colegio).
+  // Ahora, apenas cambia cualquiera de los dos valores —incluida la
+  // llegada tardía de la coordenada real— se recalcula solo.
+  useEffect(() => {
+    if (!parentPos) return;
+    const dist = calculateDistance(parentPos.lat, parentPos.lng, schoolPos.lat, schoolPos.lng);
+    setDistance(dist);
+    setIsInside(dist <= schoolPos.radius);
+  }, [parentPos, schoolPos]);
 
   // A los hijos propios se les suman los alumnos que hoy le tocan a este
   // padre por un pool day (autorizado por el padre/tutor real). Así puede
