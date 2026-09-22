@@ -596,7 +596,7 @@ export function VerificationDisplay() {
       });
     } catch (error: any) {
       console.error('Error al crear retiro anticipado:', error);
-      setEwError(error?.message || 'No se pudo registrar el retiro anticipado.');
+      setEwError(error?.message || t('monitor.earlyWithdrawal.defaultError'));
     } finally {
       setEwSubmitting(false);
     }
@@ -742,7 +742,7 @@ export function VerificationDisplay() {
                   className="bg-amber-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-amber-200 active:scale-95 transition-all"
                 >
                   <UserX className="w-5 h-5" />
-                  Retiro Anticipado
+                  {t('monitor.earlyWithdrawal.button')}
                 </button>
               )}
             </div>
@@ -1069,7 +1069,7 @@ export function VerificationDisplay() {
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95">
             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Retiro Anticipado</h3>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('monitor.earlyWithdrawal.modalTitle')}</h3>
               <button onClick={() => setShowEarlyWithdrawalModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm"><X className="w-5 h-5" /></button>
             </div>
 
@@ -1079,32 +1079,30 @@ export function VerificationDisplay() {
                   <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-black text-slate-800">Listo, ya se avisó a todos</p>
+                  <p className="text-sm font-black text-slate-800">{t('monitor.earlyWithdrawal.successTitle')}</p>
                   <p className="text-xs text-slate-500 font-medium">
                     {ewResult.staffNotified > 0
-                      ? `Se avisó al encargado de salida del salón (${ewResult.staffNotified}).`
-                      : 'No hay encargado de salida asignado hoy para ese salón, pero el padre ya puede anunciar su llegada.'}
+                      ? t('monitor.earlyWithdrawal.staffNotifiedTemplate').replace('{count}', String(ewResult.staffNotified))
+                      : t('monitor.earlyWithdrawal.noStaffAssigned')}
                   </p>
                   {ewResult.busExcluded && (
-                    <p className="text-xs text-amber-700 font-bold">El alumno fue excluido del bus de hoy y se avisó al encargado de la ruta.</p>
+                    <p className="text-xs text-amber-700 font-bold">{t('monitor.earlyWithdrawal.busExcludedNote')}</p>
                   )}
                   <p className="text-xs text-slate-500 font-medium">
-                    {ewResult.parentsNotified > 0 ? 'El padre/tutor ya fue notificado en la app.' : 'No se encontró padre/tutor vinculado para notificar.'}
+                    {ewResult.parentsNotified > 0 ? t('monitor.earlyWithdrawal.parentNotified') : t('monitor.earlyWithdrawal.parentNotFound')}
                   </p>
                 </div>
                 <button
                   onClick={() => setShowEarlyWithdrawalModal(false)}
                   className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
                 >
-                  Cerrar
+                  {t('monitor.earlyWithdrawal.closeBtn')}
                 </button>
               </div>
             ) : (
               <div className="p-8 space-y-5">
                 <p className="text-xs text-slate-500 font-medium">
-                  Úsalo cuando el colegio necesita que retiren a un alumno antes de lo normal (se siente mal, o alguna
-                  situación puntual). Avisa de una vez al encargado de salida del salón, excluye al alumno del bus de
-                  hoy si va en uno, y avisa al padre/tutor — incluso si el límite de las 11am está activo.
+                  {t('monitor.earlyWithdrawal.description')}
                 </p>
 
                 {!ewSelectedStudent ? (
@@ -1115,12 +1113,12 @@ export function VerificationDisplay() {
                         type="text"
                         value={ewSearchQuery}
                         onChange={(e) => searchStudentsForWithdrawal(e.target.value)}
-                        placeholder="Buscar alumno por nombre..."
+                        placeholder={t('monitor.earlyWithdrawal.searchPlaceholder')}
                         className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl pl-10 pr-4 py-3 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                         autoFocus
                       />
                     </div>
-                    {ewSearching && <p className="text-xs text-slate-400 mt-2">Buscando...</p>}
+                    {ewSearching && <p className="text-xs text-slate-400 mt-2">{t('monitor.earlyWithdrawal.searching')}</p>}
                     {ewSearchResults.length > 0 && (
                       <div className="mt-3 max-h-56 overflow-y-auto space-y-1.5">
                         {ewSearchResults.map((s) => (
@@ -1143,14 +1141,14 @@ export function VerificationDisplay() {
                         <p className="text-sm font-black text-slate-800">{ewSelectedStudent.first_name} {ewSelectedStudent.last_name}</p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">{ewSelectedStudent.grade} {ewSelectedStudent.section}</p>
                       </div>
-                      <button onClick={() => setEwSelectedStudent(null)} className="text-xs font-bold text-indigo-600">Cambiar</button>
+                      <button onClick={() => setEwSelectedStudent(null)} className="text-xs font-bold text-indigo-600">{t('monitor.earlyWithdrawal.change')}</button>
                     </div>
                     <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motivo</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('monitor.earlyWithdrawal.reasonLabel')}</label>
                       <textarea
                         value={ewReason}
                         onChange={(e) => setEwReason(e.target.value)}
-                        placeholder="Ej. Se siente mal, fiebre / Situación familiar indicada por el colegio..."
+                        placeholder={t('monitor.earlyWithdrawal.reasonPlaceholder')}
                         rows={3}
                         className="w-full mt-1.5 bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl p-3 font-medium outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                       />
@@ -1163,7 +1161,7 @@ export function VerificationDisplay() {
                       disabled={ewSubmitting || !ewReason.trim()}
                       className="w-full bg-amber-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50"
                     >
-                      {ewSubmitting ? 'Enviando...' : 'Confirmar Retiro Anticipado'}
+                      {ewSubmitting ? t('monitor.earlyWithdrawal.submitting') : t('monitor.earlyWithdrawal.submitBtn')}
                     </button>
                   </>
                 )}
