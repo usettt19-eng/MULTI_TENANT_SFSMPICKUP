@@ -3,14 +3,16 @@ import { supabase } from '../lib/supabase';
 import { apiFetch } from '../lib/apiFetch';
 import { TopNav } from '../components/TopNav';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  FileEdit, Plus, Trash2, CheckCircle2, XCircle, 
+import { useLanguage } from '../contexts/LanguageContext';
+import {
+  FileEdit, Plus, Trash2, CheckCircle2, XCircle,
   Send, Users, List, Loader2, ChevronRight, MessageSquare,
   AlertCircle, Save, ToggleRight, BarChart3, User, Calendar, FileText
 } from 'lucide-react';
 
 export function FormBuilder() {
   const { profile } = useAuth();
+  const { t } = useLanguage();
   const [forms, setForms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,7 +28,7 @@ export function FormBuilder() {
   const [targetGrades, setTargetGrades] = useState<string[]>([]);
   const [targetSections, setTargetSections] = useState<string[]>([]);
   const [questions, setQuestions] = useState<any[]>([
-    { question_text: '¿Autoriza que su hijo participe en esta actividad?', question_type: 'boolean' }
+    { question_text: t('formBuilder.defaultQuestion'), question_type: 'boolean' }
   ]);
 
   // Cada colegio usa su propia convención de nombres de grado (códigos
@@ -107,7 +109,7 @@ export function FormBuilder() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Reporte de Autorización - ${selectedForm.title}</title>
+          <title>${t('formBuilder.print.pageTitleTemplate').replace('{title}', selectedForm.title)}</title>
           <style>
             body { font-family: sans-serif; padding: 40px; color: #333; }
             .header { border-bottom: 3px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
@@ -127,32 +129,32 @@ export function FormBuilder() {
         </head>
         <body>
           <div class="header">
-            <h1>${selectedForm.form_type === 'announcement' ? 'REPORTE DE LECTURA DE AVISO' : 'REPORTE OFICIAL DE AUTORIZACIONES'}</h1>
-            <p style="margin: 5px 0; font-weight: bold;">Evento: ${selectedForm.title}</p>
-            <p style="margin: 0; font-size: 12px; color: #666;">Generado el: ${new Date().toLocaleString()}</p>
+            <h1>${selectedForm.form_type === 'announcement' ? t('formBuilder.print.headerAnnouncement') : t('formBuilder.print.headerAuthorization')}</h1>
+            <p style="margin: 5px 0; font-weight: bold;">${t('formBuilder.print.eventTemplate').replace('{title}', selectedForm.title)}</p>
+            <p style="margin: 0; font-size: 12px; color: #666;">${t('formBuilder.print.generatedOnTemplate').replace('{date}', new Date().toLocaleString())}</p>
           </div>
           <div class="stats">
             <div class="stat-box">
-              <span class="stat-label">Total Alumnos</span>
+              <span class="stat-label">${t('formBuilder.print.totalStudents')}</span>
               <span class="stat-value">${responses.length}</span>
             </div>
             <div class="stat-box">
-              <span class="stat-label">${selectedForm.form_type === 'announcement' ? 'Leyeron el Aviso' : 'Autorizados (SÍ)'}</span>
+              <span class="stat-label">${selectedForm.form_type === 'announcement' ? t('formBuilder.print.readAnnouncement') : t('formBuilder.print.authorizedYes')}</span>
               <span class="stat-value">${selectedForm.form_type === 'announcement' ? responses.length : responses.filter(r => Object.values(r.answers).includes('SI')).length}</span>
             </div>
             <div class="stat-box">
-               <span class="stat-label">Grados</span>
+               <span class="stat-label">${t('formBuilder.print.grades')}</span>
                <span class="stat-value">${selectedForm.target_grades?.join(', ')}</span>
             </div>
           </div>
           <table>
             <thead>
               <tr>
-                <th>ALUMNO</th>
-                <th>GRADO</th>
-                <th>PADRE / TUTOR</th>
-                <th>${selectedForm.form_type === 'announcement' ? 'ESTADO' : 'AUTORIZACIÓN'}</th>
-                <th>FECHA FIRMA</th>
+                <th>${t('formBuilder.print.tableStudent')}</th>
+                <th>${t('formBuilder.print.tableGrade')}</th>
+                <th>${t('formBuilder.print.tableParent')}</th>
+                <th>${selectedForm.form_type === 'announcement' ? t('formBuilder.print.tableStatus') : t('formBuilder.print.tableAuthorization')}</th>
+                <th>${t('formBuilder.print.tableSignDate')}</th>
               </tr>
             </thead>
             <tbody>
@@ -162,7 +164,7 @@ export function FormBuilder() {
                   <td>${r.student?.grade}</td>
                   <td>${r.parent?.first_name} ${r.parent?.last_name}</td>
                   <td class="${selectedForm.form_type === 'announcement' || Object.values(r.answers).includes('SI') ? 'authorized' : 'not-authorized'}">
-                    ${selectedForm.form_type === 'announcement' ? 'LEÍDO' : (Object.values(r.answers).includes('SI') ? 'SÍ, AUTORIZA' : 'NO AUTORIZA')}
+                    ${selectedForm.form_type === 'announcement' ? t('formBuilder.print.read') : (Object.values(r.answers).includes('SI') ? t('formBuilder.print.yesAuthorizes') : t('formBuilder.print.notAuthorized'))}
                   </td>
                   <td>${new Date(r.created_at).toLocaleDateString()}</td>
                 </tr>
@@ -170,7 +172,7 @@ export function FormBuilder() {
             </tbody>
           </table>
           <div style="margin-top: 50px; border-top: 1px solid #ddd; padding-top: 20px; font-size: 10px; text-align: center; color: #aaa;">
-            SmartPickup Security System - Reporte Digital con Validez Institucional
+            ${t('formBuilder.print.footer')}
           </div>
         </body>
       </html>
@@ -181,8 +183,8 @@ export function FormBuilder() {
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (targetGrades.length === 0) return alert("Selecciona al menos un grado.");
-    if (formType === 'announcement' && !description.trim()) return alert("Escribe el mensaje del aviso.");
+    if (targetGrades.length === 0) return alert(t('formBuilder.alertSelectGrade'));
+    if (formType === 'announcement' && !description.trim()) return alert(t('formBuilder.alertWriteMessage'));
     setProcessing(true);
 
     try {
@@ -252,7 +254,7 @@ export function FormBuilder() {
   const resetForm = () => {
     setFormType('authorization');
     setTitle(''); setDescription(''); setTargetGrades([]); setTargetSections([]);
-    setQuestions([{ question_text: '¿Autoriza?', question_type: 'boolean' }]);
+    setQuestions([{ question_text: t('formBuilder.defaultQuestionShort'), question_type: 'boolean' }]);
   };
 
   // Helper for stats
@@ -266,18 +268,18 @@ export function FormBuilder() {
 
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Gestión de Autorizaciones" />
+      <TopNav title="SmartPickup" subtitle={t('formBuilder.subtitle')} />
 
       <div className="p-6 max-w-7xl mx-auto space-y-8 w-full font-body animate-in fade-in duration-700">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Constructor de Formularios <FileEdit className="w-8 h-8 text-primary" />
+              {t('formBuilder.title')} <FileEdit className="w-8 h-8 text-primary" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium font-body">Crea autorizaciones digitales o avisos informativos, segmentados por grado.</p>
+            <p className="text-sm text-slate-500 font-medium font-body">{t('formBuilder.description')}</p>
           </div>
           <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-primary text-white px-6 py-4 rounded-[1.5rem] font-black text-xs hover:shadow-primary/20 transition-all shadow-xl active:scale-95 group">
-            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> NUEVO FORMULARIO
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> {t('formBuilder.newFormBtn')}
           </button>
         </header>
 
@@ -290,21 +292,21 @@ export function FormBuilder() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${form.is_active ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400'}`}>
-                    {form.is_active ? 'Activo' : 'Cerrado'}
+                    {form.is_active ? t('formBuilder.statusActive') : t('formBuilder.statusClosed')}
                   </span>
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${form.form_type === 'announcement' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
-                    {form.form_type === 'announcement' ? 'Aviso' : 'Autorización'}
+                    {form.form_type === 'announcement' ? t('formBuilder.typeAnnouncement') : t('formBuilder.typeAuthorization')}
                   </span>
                 </div>
               </div>
               <h3 className="text-lg font-black text-slate-900 leading-tight mb-2 truncate">{form.title}</h3>
               <div className="flex flex-wrap gap-1 mb-4">
                 {form.target_grades?.map((g: string) => <span key={g} className="bg-slate-50 text-slate-400 text-[8px] font-black px-2 py-0.5 rounded border border-slate-100">{g}</span>)}
-                {form.target_sections?.map((s: string) => <span key={s} className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded border border-emerald-100">Sección {s}</span>)}
+                {form.target_sections?.map((s: string) => <span key={s} className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded border border-emerald-100">{t('formBuilder.sectionTemplate').replace('{section}', s)}</span>)}
               </div>
               <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div>
-                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Respuestas</span>
+                   <span className="text-[10px] font-bold text-slate-400 uppercase block">{t('formBuilder.responsesLabel')}</span>
                    <span className="text-xl font-black text-primary">{form.form_responses?.[0]?.count || 0}</span>
                 </div>
                 <button onClick={() => fetchResults(form)} className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-primary transition-all">
@@ -324,15 +326,15 @@ export function FormBuilder() {
               <div>
                 <h2 className="text-2xl font-black">{selectedForm.title}</h2>
                 <div className="flex items-center gap-4 mt-1">
-                  <p className="text-xs text-white/60 font-bold uppercase tracking-widest italic">{selectedForm.form_type === 'announcement' ? 'Monitor de Lectura' : 'Monitor de Autorizaciones'}</p>
+                  <p className="text-xs text-white/60 font-bold uppercase tracking-widest italic">{selectedForm.form_type === 'announcement' ? t('formBuilder.readMonitor') : t('formBuilder.authMonitor')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <button 
+                <button
                   onClick={handlePrint}
                   className="flex items-center gap-2 bg-white/10 hover:bg-white text-white hover:text-slate-900 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest border border-white/10"
                 >
-                  <FileText className="w-4 h-4" /> IMPRIMIR REPORTE
+                  <FileText className="w-4 h-4" /> {t('formBuilder.printReportBtn')}
                 </button>
                 <button onClick={() => setShowResults(false)} className="p-3 bg-white/10 hover:bg-rose-500 rounded-2xl transition-all border border-white/10 shadow-lg">
                   <XCircle className="w-6 h-6" />
@@ -344,42 +346,42 @@ export function FormBuilder() {
               {/* Stats Overview */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100">
-                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-2">{selectedForm.form_type === 'announcement' ? 'Confirmaron Lectura' : 'Total Alumnos Autorizados'}</span>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-2">{selectedForm.form_type === 'announcement' ? t('formBuilder.confirmedReading') : t('formBuilder.totalAuthorizedStudents')}</span>
                   <div className="flex items-end gap-2">
                     <span className="text-4xl font-black text-emerald-700">{getStats().authorized}</span>
-                    <span className="text-emerald-500 font-bold mb-1">familias</span>
+                    <span className="text-emerald-500 font-bold mb-1">{t('formBuilder.familiesLabel')}</span>
                   </div>
                 </div>
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Respuestas Totales</span>
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">{t('formBuilder.totalResponses')}</span>
                    <div className="flex items-end gap-2">
                     <span className="text-4xl font-black text-slate-900">{getStats().total}</span>
-                    <span className="text-slate-500 font-bold mb-1">registros</span>
+                    <span className="text-slate-500 font-bold mb-1">{t('formBuilder.recordsLabel')}</span>
                   </div>
                 </div>
                 <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10">
-                   <span className="text-[10px] font-black text-primary uppercase tracking-widest block mb-2">Tasa de Respuesta</span>
+                   <span className="text-[10px] font-black text-primary uppercase tracking-widest block mb-2">{t('formBuilder.responseRate')}</span>
                    <div className="flex items-end gap-2">
                     <span className="text-4xl font-black text-primary">
                        {getStats().total > 0 ? Math.round((getStats().authorized / getStats().total) * 100) : 0}%
                     </span>
-                    <span className="text-primary/60 font-bold mb-1 italic">exito</span>
+                    <span className="text-primary/60 font-bold mb-1 italic">{t('formBuilder.successLabel')}</span>
                   </div>
                 </div>
               </div>
 
               {/* Responder Table */}
               <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" /> Desglose de Participantes
+                <Users className="w-5 h-5 text-primary" /> {t('formBuilder.participantsBreakdown')}
               </h4>
               <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50">
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Alumno / Grado</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Padre / Tutor</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 italic">{selectedForm.form_type === 'announcement' ? 'Estado' : 'Respuesta Principal'}</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Fecha</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">{t('formBuilder.tableHeaderStudentGrade')}</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">{t('formBuilder.tableHeaderParent')}</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 italic">{selectedForm.form_type === 'announcement' ? t('formBuilder.tableHeaderStatus') : t('formBuilder.tableHeaderMainResponse')}</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">{t('formBuilder.tableHeaderDate')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -398,15 +400,15 @@ export function FormBuilder() {
                         <td className="px-6 py-4 border-b border-slate-50">
                            {selectedForm.form_type === 'announcement' ? (
                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
-                                <CheckCircle2 className="w-3 h-3" /> LEÍDO
+                                <CheckCircle2 className="w-3 h-3" /> {t('formBuilder.readBadge')}
                              </span>
                            ) : Object.values(resp.answers).includes('SI') ? (
                              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
-                                <CheckCircle2 className="w-3 h-3" /> SI, AUTORIZA
+                                <CheckCircle2 className="w-3 h-3" /> {t('formBuilder.authorizedBadge')}
                              </span>
                            ) : (
                              <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
-                                <XCircle className="w-3 h-3" /> NO AUTORIZA
+                                <XCircle className="w-3 h-3" /> {t('formBuilder.notAuthorizedBadge')}
                              </span>
                            )}
                         </td>
@@ -417,7 +419,7 @@ export function FormBuilder() {
                     ))}
                     {responses.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-20 text-center text-slate-400 italic">No hay respuestas registradas todavía para este formulario.</td>
+                        <td colSpan={4} className="px-6 py-20 text-center text-slate-400 italic">{t('formBuilder.noResponsesYet')}</td>
                       </tr>
                     )}
                   </tbody>
@@ -433,7 +435,7 @@ export function FormBuilder() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl animate-in zoom-in-95 flex flex-col">
             <div className="flex justify-between items-center p-8 bg-slate-50 border-b border-slate-100 shrink-0">
-               <h2 className="text-xl font-black text-slate-900">{formType === 'announcement' ? 'Nuevo Aviso' : 'Nueva Autorización'}</h2>
+               <h2 className="text-xl font-black text-slate-900">{formType === 'announcement' ? t('formBuilder.newAnnouncementTitle') : t('formBuilder.newAuthorizationTitle')}</h2>
                <button onClick={() => setIsModalOpen(false)} className="p-2 bg-white rounded-xl shadow-sm"><XCircle className="w-6 h-6" /></button>
             </div>
             <form onSubmit={handleSaveForm} className="p-8 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
@@ -443,29 +445,29 @@ export function FormBuilder() {
                     onClick={() => setFormType('authorization')}
                     className={`p-4 rounded-2xl border-2 text-left transition-all ${formType === 'authorization' ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent'}`}
                   >
-                    <span className="text-xs font-black text-slate-800 block">Autorización</span>
-                    <span className="text-[10px] text-slate-400 font-medium">Pide una respuesta (SÍ/NO) por alumno.</span>
+                    <span className="text-xs font-black text-slate-800 block">{t('formBuilder.typeAuthorization')}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">{t('formBuilder.authorizationOptionDesc')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormType('announcement')}
                     className={`p-4 rounded-2xl border-2 text-left transition-all ${formType === 'announcement' ? 'bg-indigo-50 border-indigo-400' : 'bg-slate-50 border-transparent'}`}
                   >
-                    <span className="text-xs font-black text-slate-800 block">Aviso / Mensaje</span>
-                    <span className="text-[10px] text-slate-400 font-medium">Solo informa, sin pedir respuesta.</span>
+                    <span className="text-xs font-black text-slate-800 block">{t('formBuilder.announcementOptionLabel')}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">{t('formBuilder.announcementOptionDesc')}</span>
                   </button>
                </div>
-               <input required placeholder="Título..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold shadow-inner" />
+               <input required placeholder={t('formBuilder.titlePlaceholder')} value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold shadow-inner" />
                <textarea
-                 placeholder={formType === 'announcement' ? 'Escribe el mensaje que verán los padres...' : 'Descripción...'}
+                 placeholder={formType === 'announcement' ? t('formBuilder.announcementMessagePlaceholder') : t('formBuilder.descriptionPlaceholder')}
                  value={description}
                  onChange={e => setDescription(e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-medium h-24"
                />
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Segmentar Grados</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">{t('formBuilder.segmentGrades')}</label>
                   {gradesList.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Este colegio no tiene grados configurados todavía (Ajustes → Grados).</p>
+                    <p className="text-xs text-slate-400 italic">{t('formBuilder.noGradesConfigured')}</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {gradesList.map(g => (
@@ -476,28 +478,28 @@ export function FormBuilder() {
                </div>
                {availableSections.length > 0 && (
                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Segmentar Secciones (opcional)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">{t('formBuilder.segmentSectionsOptional')}</label>
                     <div className="flex flex-wrap gap-2">
                       {availableSections.map(s => (
-                        <button key={s} type="button" onClick={() => toggleSection(s)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black border-2 transition-all ${targetSections.includes(s) ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-400'}`}>Sección {s}</button>
+                        <button key={s} type="button" onClick={() => toggleSection(s)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black border-2 transition-all ${targetSections.includes(s) ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-400'}`}>{t('formBuilder.sectionTemplate').replace('{section}', s)}</button>
                       ))}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-2">Sin elegir ninguna, llega a todo el grado seleccionado.</p>
+                    <p className="text-[10px] text-slate-400 mt-2">{t('formBuilder.noSectionSelectedHint')}</p>
                  </div>
                )}
                {formType === 'authorization' && (
                  <div className="bg-slate-50 rounded-3xl p-6 space-y-3">
-                    <div className="flex justify-between items-center mb-2"><h4 className="text-[10px] font-black text-slate-400 uppercase">Preguntas del Formulario</h4><button type="button" onClick={addQuestion} className="bg-white text-primary px-3 py-1.5 rounded-xl text-[9px] font-black border border-slate-100 shadow-sm">+ PREGUNTA</button></div>
+                    <div className="flex justify-between items-center mb-2"><h4 className="text-[10px] font-black text-slate-400 uppercase">{t('formBuilder.formQuestionsLabel')}</h4><button type="button" onClick={addQuestion} className="bg-white text-primary px-3 py-1.5 rounded-xl text-[9px] font-black border border-slate-100 shadow-sm">{t('formBuilder.addQuestionBtn')}</button></div>
                     {questions.map((q, idx) => (
                       <div key={idx} className="flex gap-2 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <input required className="flex-1 text-sm font-bold outline-none" value={q.question_text} onChange={e => updateQuestion(idx, e.target.value)} placeholder="Ej: ¿Autoriza el viaje?" />
+                        <input required className="flex-1 text-sm font-bold outline-none" value={q.question_text} onChange={e => updateQuestion(idx, e.target.value)} placeholder={t('formBuilder.questionPlaceholder')} />
                         {questions.length > 1 && <button type="button" onClick={() => removeQuestion(idx)} className="text-rose-500"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     ))}
                  </div>
                )}
                <button type="submit" disabled={processing} className="w-full bg-primary text-white font-black py-5 rounded-[2rem] shadow-xl text-xs uppercase tracking-widest disabled:opacity-50">
-                 {formType === 'announcement' ? 'ENVIAR AVISO' : 'LANZAR FORMULARIO'}
+                 {formType === 'announcement' ? t('formBuilder.sendAnnouncementBtn') : t('formBuilder.launchFormBtn')}
                </button>
             </form>
           </div>
