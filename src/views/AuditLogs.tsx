@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { TopNav } from '../components/TopNav';
-import { 
-  History, Search, Filter, Shield, 
+import {
+  History, Search, Filter, Shield,
   User, Clock, Download, Loader2,
   AlertCircle, Activity, Lock, Smartphone
 } from 'lucide-react';
 
 export function AuditLogs() {
   const { profile } = useAuth() as any;
+  const { t } = useLanguage();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('ALL');
@@ -63,13 +65,13 @@ export function AuditLogs() {
   const exportToCSV = () => {
     if (logs.length === 0) return;
 
-    const headers = ['Evento', 'Descripción', 'Actor', 'Fecha'];
+    const headers = [t('auditLogs.csvHeaderEvent'), t('auditLogs.csvHeaderDescription'), t('auditLogs.csvHeaderActor'), t('auditLogs.csvHeaderDate')];
     const csvContent = [
       headers.join(','),
       ...logs.map(log => [
         `"${log.event_type}"`,
         `"${log.description.replace(/"/g, '""')}"`,
-        `"${log.actor_name || 'Sistema'}"`,
+        `"${log.actor_name || t('auditLogs.systemFallback')}"`,
         `"${log.created_at}"`
       ].join(','))
     ].join('\n');
@@ -86,15 +88,15 @@ export function AuditLogs() {
 
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Centro de Auditoría y Trazabilidad" />
+      <TopNav title="SmartPickup" subtitle={t('auditLogs.subtitle')} />
 
       <div className="p-8 max-w-7xl mx-auto space-y-8 font-body animate-in fade-in duration-700">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Bitácora del Sistema <History className="w-10 h-10 text-primary" />
+              {t('auditLogs.title')} <History className="w-10 h-10 text-primary" />
             </h1>
-            <p className="text-sm text-slate-500 font-medium">Registro cronológico de cada acción realizada en la plataforma.</p>
+            <p className="text-sm text-slate-500 font-medium">{t('auditLogs.description')}</p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
              <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex gap-1 overflow-x-auto">
@@ -120,7 +122,7 @@ export function AuditLogs() {
         {loading ? (
           <div className="h-[50vh] flex flex-col items-center justify-center">
             <Loader2 className="w-12 h-12 text-primary animate-spin" />
-            <p className="text-slate-400 font-bold mt-4">Sincronizando flujos de datos...</p>
+            <p className="text-slate-400 font-bold mt-4">{t('auditLogs.syncing')}</p>
           </div>
         ) : (
           <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
@@ -128,10 +130,10 @@ export function AuditLogs() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50">
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Evento</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Descripción Detallada</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Actor</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 text-right">Momento Exacto</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">{t('auditLogs.tableHeaderEvent')}</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">{t('auditLogs.tableHeaderDescription')}</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">{t('auditLogs.tableHeaderActor')}</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 text-right">{t('auditLogs.tableHeaderTimestamp')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -161,7 +163,7 @@ export function AuditLogs() {
                           <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">
                              <User className="w-3 h-3 text-slate-400" />
                           </div>
-                          <span className="text-xs font-black text-slate-500">{log.actor_name || 'Sistema Auto'}</span>
+                          <span className="text-xs font-black text-slate-500">{log.actor_name || t('auditLogs.systemAutoFallback')}</span>
                         </div>
                       </td>
                       <td className="px-8 py-6 text-right">
@@ -183,7 +185,7 @@ export function AuditLogs() {
                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                     <Activity className="w-10 h-10 text-slate-200" />
                  </div>
-                 <p className="text-slate-400 font-bold italic">No hay registros de actividad todavía.</p>
+                 <p className="text-slate-400 font-bold italic">{t('auditLogs.noRecords')}</p>
               </div>
             )}
           </div>
@@ -192,7 +194,7 @@ export function AuditLogs() {
         <footer className="flex justify-between items-center py-6 border-t border-slate-100">
            <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-emerald-500" />
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logs de Grado Militar - Encriptación AES-256 Activa</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('auditLogs.footerSecurity')}</p>
            </div>
            <p className="text-[10px] font-bold text-slate-300 uppercase">SmartPickup Security Auditor v2.0</p>
         </footer>

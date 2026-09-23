@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { TopNav } from '../components/TopNav';
 import { Sunrise, Users, Loader2, CalendarDays } from 'lucide-react';
 
@@ -10,8 +11,11 @@ interface ArrivalRow {
   arrivedAt: string;
 }
 
-const NO_SECTION_KEY = 'Sin sección asignada';
-const NO_STUDENT_KEY = 'Sin alumno vinculado';
+// Claves internas de agrupación (nunca se muestran directas) — el rótulo
+// visible sale de sectionLabel() más abajo, que sí pasa por t() para
+// cambiar con el idioma.
+const NO_SECTION_KEY = '__no_section__';
+const NO_STUDENT_KEY = '__no_student__';
 
 function todayISO() {
   const d = new Date();
@@ -21,6 +25,7 @@ function todayISO() {
 
 export function DailyArrivals() {
   const { profile } = useAuth() as any;
+  const { t } = useLanguage();
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
   const [bySection, setBySection] = useState<Record<string, ArrivalRow[]>>({});
@@ -67,7 +72,7 @@ export function DailyArrivals() {
     ]);
 
     const parentNameById = new Map(
-      (parents || []).map((p: any) => [p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Padre sin nombre'])
+      (parents || []).map((p: any) => [p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || t('dailyArrivals.parentNoName')])
     );
     const studentsByParent = new Map<string, any[]>();
     (links || []).forEach((l: any) => {
@@ -78,7 +83,7 @@ export function DailyArrivals() {
 
     const grouped: Record<string, ArrivalRow[]> = {};
     arrivals.forEach((a: any) => {
-      const parentName = parentNameById.get(a.parent_id) || 'Padre sin nombre';
+      const parentName = parentNameById.get(a.parent_id) || t('dailyArrivals.parentNoName');
       const students = studentsByParent.get(a.parent_id) || [];
 
       if (students.length === 0) {
@@ -111,18 +116,24 @@ export function DailyArrivals() {
 
   const isToday = selectedDate === todayISO();
 
+  const sectionLabel = (key: string) => {
+    if (key === NO_SECTION_KEY) return t('dailyArrivals.noSectionAssigned');
+    if (key === NO_STUDENT_KEY) return t('dailyArrivals.noStudentLinked');
+    return key;
+  };
+
   return (
     <>
-      <TopNav title="SmartPickup" subtitle="Llegadas Diarias" />
+      <TopNav title="SmartPickup" subtitle={t('dailyArrivals.subtitle')} />
 
       <div className="p-8 max-w-7xl mx-auto space-y-8 font-body animate-in fade-in duration-700">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              Llegadas Diarias <Sunrise className="w-9 h-9 text-primary" />
+              {t('dailyArrivals.title')} <Sunrise className="w-9 h-9 text-primary" />
             </h1>
             <p className="text-sm text-slate-500 font-medium">
-              Padres que dejaron a sus hijos en el colegio esta mañana, por sección.
+              {t('dailyArrivals.description')}
             </p>
           </div>
           <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2 px-4">
@@ -136,7 +147,7 @@ export function DailyArrivals() {
             />
             {isToday && (
               <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase tracking-widest">
-                Hoy
+                {t('dailyArrivals.todayBadge')}
               </span>
             )}
           </div>
@@ -145,12 +156,12 @@ export function DailyArrivals() {
         {loading ? (
           <div className="h-[40vh] flex flex-col items-center justify-center">
             <Loader2 className="w-12 h-12 text-primary animate-spin" />
-            <p className="text-slate-400 font-bold mt-4">Cargando llegadas...</p>
+            <p className="text-slate-400 font-bold mt-4">{t('dailyArrivals.loading')}</p>
           </div>
         ) : totalArrivals === 0 ? (
           <div className="h-[40vh] flex flex-col items-center justify-center text-center">
             <Sunrise className="w-14 h-14 text-slate-200 mb-4" />
-            <p className="text-slate-400 font-bold">No hay llegadas registradas ese día.</p>
+            <p className="text-slate-400 font-bold">{t('dailyArrivals.noArrivalsThatDay')}</p>
           </div>
         ) : (
           <>
@@ -158,15 +169,15 @@ export function DailyArrivals() {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {sortedSections.map(section => (
                 <div key={section} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate" title={section}>
-                    {section}
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate" title={sectionLabel(section)}>
+                    {sectionLabel(section)}
                   </p>
                   <p className="text-3xl font-black text-slate-900 mt-1">{bySection[section].length}</p>
                 </div>
               ))}
               <div className="bg-primary text-white rounded-2xl shadow-sm p-5">
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-80 flex items-center gap-1">
-                  <Users className="w-3 h-3" /> Total
+                  <Users className="w-3 h-3" /> {t('dailyArrivals.totalLabel')}
                 </p>
                 <p className="text-3xl font-black mt-1">{totalArrivals}</p>
               </div>
@@ -177,18 +188,18 @@ export function DailyArrivals() {
               {sortedSections.map(section => (
                 <div key={section} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                   <div className="px-8 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                    <h2 className="text-sm font-black text-slate-800 tracking-tight">{section}</h2>
+                    <h2 className="text-sm font-black text-slate-800 tracking-tight">{sectionLabel(section)}</h2>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      {bySection[section].length} llegada{bySection[section].length !== 1 ? 's' : ''}
+                      {bySection[section].length} {bySection[section].length !== 1 ? t('dailyArrivals.arrivalsPlural') : t('dailyArrivals.arrivalSingular')}
                     </span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr>
-                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Alumno</th>
-                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Padre/Tutor</th>
-                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Hora</th>
+                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t('dailyArrivals.tableHeaderStudent')}</th>
+                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t('dailyArrivals.tableHeaderParent')}</th>
+                          <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">{t('dailyArrivals.tableHeaderTime')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
