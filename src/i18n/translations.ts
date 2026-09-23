@@ -477,6 +477,7 @@ export const translations = {
     'superAdmin.staffActiveExplainer': "Based on authorizations and actions logged today, not on login — staff keep their session open for weeks.",
     'superAdmin.actionSingular': 'action',
     'superAdmin.actionPlural': 'actions',
+    'superAdmin.languageToggleTitle': 'Change language',
 
     // Impersonation Banner
     'impersonation.superAdminModePrefix': 'Super Admin Mode — configuring',
@@ -1677,6 +1678,7 @@ export const translations = {
     'superAdmin.staffActiveExplainer': 'Basado en autorizaciones y acciones registradas hoy, no en login — el staff deja su sesión abierta por semanas.',
     'superAdmin.actionSingular': 'acción',
     'superAdmin.actionPlural': 'acciones',
+    'superAdmin.languageToggleTitle': 'Cambiar idioma',
 
     // Impersonation Banner
     'impersonation.superAdminModePrefix': 'Modo Super Admin — configurando',

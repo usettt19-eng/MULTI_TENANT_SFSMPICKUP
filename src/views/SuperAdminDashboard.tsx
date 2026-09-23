@@ -1,7 +1,7 @@
 import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn, X } from 'lucide-react';
+import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn, X, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -38,7 +38,7 @@ export function SuperAdminDashboard() {
   const [showEditModalPassword, setShowEditModalPassword] = useState(false);
 
   const { profile, enterTenantAsAdmin } = useAuth() as any;
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
   const [stats, setStats] = useState<Record<string, any>>({});
   const [staffListModal, setStaffListModal] = useState<Tenant | null>(null);
@@ -197,6 +197,15 @@ export function SuperAdminDashboard() {
             <div className="text-sm font-medium text-slate-500">
                {profile?.email || t('superAdmin.superAdminFallback')}
             </div>
+            <button
+              type="button"
+              onClick={() => setLanguage(language === 'es' ? 'en' : 'es', { manual: true })}
+              title={t('superAdmin.languageToggleTitle')}
+              className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-colors shadow-sm"
+            >
+              <Globe className="w-4 h-4" />
+              {language === 'es' ? 'ES' : 'EN'}
+            </button>
             <button
               onClick={() => supabase.auth.signOut()}
               className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-200 transition-colors shadow-sm text-sm"
