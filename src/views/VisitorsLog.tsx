@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { TopNav } from '../components/TopNav';
 import { Loader2, Search, User, Printer, LogOut, Pencil, Check, X } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -20,6 +21,7 @@ const toDateOnlyValue = (date: Date) => {
 
 export function VisitorsLog() {
   const { profile } = useAuth() as any;
+  const { t } = useLanguage();
   const [visitors, setVisitors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,7 +70,7 @@ export function VisitorsLog() {
 
     if (error) {
       console.error('Error registrando hora de salida:', error);
-      alert('No se pudo guardar la hora de salida.');
+      alert(t('visitorsLog.errorSavingCheckout'));
     } else {
       setVisitors(prev => prev.map(v => (v.id === visitorId ? { ...v, check_out_time: isoValue } : v)));
       await logActivity(
@@ -102,7 +104,7 @@ export function VisitorsLog() {
   const exportToPDF = () => {
     const doc = new jsPDF();
     const dayLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString();
-    doc.text(`Resumen de Visitantes — ${dayLabel}`, 14, 15);
+    doc.text(`${t('visitorsLog.pdfTitle')} — ${dayLabel}`, 14, 15);
 
     const tableData = filteredVisitors.map(v => [
       v.visitor_name,
@@ -115,7 +117,15 @@ export function VisitorsLog() {
     ]);
 
     autoTable(doc, {
-      head: [['Visitante', 'Identificación', 'Empresa', 'Visita a', 'Motivo', 'Hora de Entrada', 'Hora de Salida']],
+      head: [[
+        t('visitorsLog.tableHeaderVisitor'),
+        t('visitorsLog.tableHeaderId'),
+        t('visitorsLog.tableHeaderCompany'),
+        t('visitorsLog.tableHeaderVisiting'),
+        t('visitorsLog.tableHeaderReason'),
+        t('visitorsLog.tableHeaderCheckIn'),
+        t('visitorsLog.tableHeaderCheckOut'),
+      ]],
       body: tableData,
       startY: 20,
     });
@@ -130,10 +140,10 @@ export function VisitorsLog() {
 
   return (
     <>
-      <TopNav title="SafePickup" subtitle="Registro de Visitantes" />
+      <TopNav title="SafePickup" subtitle={t('visitorsLog.subtitle')} />
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-          <h1 className="text-2xl font-black text-slate-800">Bitácora de Visitantes</h1>
+          <h1 className="text-2xl font-black text-slate-800">{t('visitorsLog.title')}</h1>
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
             <input
               type="date"
@@ -145,7 +155,7 @@ export function VisitorsLog() {
             <div className="relative w-full sm:w-64">
               <input
                 type="text"
-                placeholder="Buscar visitante..."
+                placeholder={t('visitorsLog.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none w-full shadow-sm"
@@ -156,7 +166,7 @@ export function VisitorsLog() {
               onClick={exportToPDF}
               className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-primary/90 transition-all"
             >
-              <Printer className="w-4 h-4" /> Exportar PDF
+              <Printer className="w-4 h-4" /> {t('visitorsLog.exportPdfBtn')}
             </button>
           </div>
         </div>
@@ -169,13 +179,13 @@ export function VisitorsLog() {
             <table className="w-full text-left text-sm min-w-[820px]">
               <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                 <tr>
-                  <th className="p-4">Visitante</th>
-                  <th className="p-4">Identificación</th>
-                  <th className="p-4">Empresa</th>
-                  <th className="p-4">Visita a</th>
-                  <th className="p-4">Motivo</th>
-                  <th className="p-4">Hora de Entrada</th>
-                  <th className="p-4">Hora de Salida</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderVisitor')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderId')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderCompany')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderVisiting')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderReason')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderCheckIn')}</th>
+                  <th className="p-4">{t('visitorsLog.tableHeaderCheckOut')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -200,14 +210,14 @@ export function VisitorsLog() {
                             onClick={() => handleSaveEdit(v)}
                             disabled={savingId === v.id}
                             className="p-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
-                            title="Guardar"
+                            title={t('visitorsLog.saveTitle')}
                           >
                             {savingId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
                             className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
-                            title="Cancelar"
+                            title={t('visitorsLog.cancelTitle')}
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -218,7 +228,7 @@ export function VisitorsLog() {
                           <button
                             onClick={() => handleStartEdit(v)}
                             className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100"
-                            title="Corregir hora de salida"
+                            title={t('visitorsLog.editCheckoutTitle')}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -230,7 +240,7 @@ export function VisitorsLog() {
                           className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
                         >
                           {savingId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-                          Registrar salida
+                          {t('visitorsLog.registerCheckoutBtn')}
                         </button>
                       )}
                     </td>

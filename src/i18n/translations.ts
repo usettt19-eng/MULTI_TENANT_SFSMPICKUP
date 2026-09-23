@@ -192,6 +192,25 @@ export const translations = {
     'dailyArrivals.tableHeaderParent': 'Parent/Guardian',
     'dailyArrivals.tableHeaderTime': 'Time',
 
+    // Visitors Log
+    'visitorsLog.errorSavingCheckout': 'Could not save the checkout time.',
+    'visitorsLog.pdfTitle': 'Visitor Summary',
+    'visitorsLog.tableHeaderVisitor': 'Visitor',
+    'visitorsLog.tableHeaderId': 'ID Number',
+    'visitorsLog.tableHeaderCompany': 'Company',
+    'visitorsLog.tableHeaderVisiting': 'Visiting',
+    'visitorsLog.tableHeaderReason': 'Reason',
+    'visitorsLog.tableHeaderCheckIn': 'Check-in Time',
+    'visitorsLog.tableHeaderCheckOut': 'Check-out Time',
+    'visitorsLog.subtitle': 'Visitors Log',
+    'visitorsLog.title': 'Visitors Log',
+    'visitorsLog.searchPlaceholder': 'Search visitor...',
+    'visitorsLog.exportPdfBtn': 'Export PDF',
+    'visitorsLog.saveTitle': 'Save',
+    'visitorsLog.cancelTitle': 'Cancel',
+    'visitorsLog.editCheckoutTitle': 'Correct checkout time',
+    'visitorsLog.registerCheckoutBtn': 'Register checkout',
+
     // Security
     'security.title': 'Guardian Verification',
     'security.subtitle': 'Manage authorized pickups and biometric profiles.',
@@ -1057,6 +1076,25 @@ export const translations = {
     'dailyArrivals.tableHeaderStudent': 'Alumno',
     'dailyArrivals.tableHeaderParent': 'Padre/Tutor',
     'dailyArrivals.tableHeaderTime': 'Hora',
+
+    // Visitors Log
+    'visitorsLog.errorSavingCheckout': 'No se pudo guardar la hora de salida.',
+    'visitorsLog.pdfTitle': 'Resumen de Visitantes',
+    'visitorsLog.tableHeaderVisitor': 'Visitante',
+    'visitorsLog.tableHeaderId': 'Identificación',
+    'visitorsLog.tableHeaderCompany': 'Empresa',
+    'visitorsLog.tableHeaderVisiting': 'Visita a',
+    'visitorsLog.tableHeaderReason': 'Motivo',
+    'visitorsLog.tableHeaderCheckIn': 'Hora de Entrada',
+    'visitorsLog.tableHeaderCheckOut': 'Hora de Salida',
+    'visitorsLog.subtitle': 'Registro de Visitantes',
+    'visitorsLog.title': 'Bitácora de Visitantes',
+    'visitorsLog.searchPlaceholder': 'Buscar visitante...',
+    'visitorsLog.exportPdfBtn': 'Exportar PDF',
+    'visitorsLog.saveTitle': 'Guardar',
+    'visitorsLog.cancelTitle': 'Cancelar',
+    'visitorsLog.editCheckoutTitle': 'Corregir hora de salida',
+    'visitorsLog.registerCheckoutBtn': 'Registrar salida',
 
     // Security
     'security.title': 'Verificación de Tutores',
