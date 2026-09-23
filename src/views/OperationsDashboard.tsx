@@ -430,11 +430,23 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       .from('students')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', profile.tenant_id);
-    const { count: parentsCount } = await supabase
+    // Sin count directo por SQL: hay que descartar los perfiles fantasma de
+    // rutas de bus (role='parent' con additional_tutor_name.is_bus_route,
+    // mismo criterio que las 4 funciones de login) antes de contar, o el
+    // total de "padres" infla con cuentas que no son de ninguna familia.
+    const { data: parentRows } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('additional_tutor_name')
       .eq('tenant_id', profile.tenant_id)
       .eq('role', 'parent');
+    const isBusRoute = (p: { additional_tutor_name: string | null }) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+    const parentsCount = (parentRows || []).filter((p) => !isBusRoute(p)).length;
 
     const { data: gradeData } = await supabase.from('students').select('grade').eq('tenant_id', profile.tenant_id);
 
