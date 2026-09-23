@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   BarChart3, Clock, Navigation, DoorOpen, UserPlus, FileEdit,
   Car, Users, Loader2, TrendingUp,
 } from 'lucide-react';
 
-const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DAY_KEYS = ['statistics.daySun', 'statistics.dayMon', 'statistics.dayTue', 'statistics.dayWed', 'statistics.dayThu', 'statistics.dayFri', 'statistics.daySat'];
 type Period = 'today' | 7 | 30 | 90;
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: 'today', label: 'Hoy' },
-  { value: 7, label: '7 días' },
-  { value: 30, label: '30 días' },
-  { value: 90, label: '90 días' },
+const PERIOD_OPTIONS: { value: Period; labelKey: string }[] = [
+  { value: 'today', labelKey: 'statistics.periodToday' },
+  { value: 7, labelKey: 'statistics.period7' },
+  { value: 30, labelKey: 'statistics.period30' },
+  { value: 90, labelKey: 'statistics.period90' },
 ];
 
 function minutesBetween(a?: string | null, b?: string | null): number | null {
@@ -61,6 +62,7 @@ function StatCard({ icon: Icon, label, value, sublabel }: { icon: any; label: st
 
 export function Statistics() {
   const { profile } = useAuth() as any;
+  const { t } = useLanguage();
   const [period, setPeriod] = useState<Period>(30);
   const [loading, setLoading] = useState(true);
 
@@ -208,7 +210,7 @@ export function Statistics() {
 
     const doorCounts: Record<string, number> = {};
     pickupEvents.forEach(p => {
-      const door = (p.door_id && doorNames[p.door_id]) || 'Sin especificar';
+      const door = (p.door_id && doorNames[p.door_id]) || t('statistics.doorNotSpecified');
       doorCounts[door] = (doorCounts[door] || 0) + 1;
     });
     const topDoor = Object.entries(doorCounts).sort((a, b) => b[1] - a[1])[0];
@@ -243,7 +245,7 @@ export function Statistics() {
 
     const visitorReasonCounts: Record<string, number> = {};
     visitors.forEach(v => {
-      const reason = (v.reason || 'Sin motivo').trim() || 'Sin motivo';
+      const reason = (v.reason || t('statistics.noReason')).trim() || t('statistics.noReason');
       visitorReasonCounts[reason] = (visitorReasonCounts[reason] || 0) + 1;
     });
     const topReasons = Object.entries(visitorReasonCounts).sort((a, b) => b[1] - a[1]).slice(0, 4);
@@ -272,7 +274,7 @@ export function Statistics() {
       visitorsTotal: visitors.length,
       topReasons,
     };
-  }, [pickupEvents, replacementRequests, visitors, forms, formResponses, doorNames]);
+  }, [pickupEvents, replacementRequests, visitors, forms, formResponses, doorNames, t]);
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans p-4 md:p-6">
@@ -282,8 +284,8 @@ export function Statistics() {
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-slate-800">Estadísticas</h1>
-            <p className="text-[11px] font-bold text-slate-400">Datos del colegio en el periodo seleccionado</p>
+            <h1 className="text-lg font-black text-slate-800">{t('statistics.title')}</h1>
+            <p className="text-[11px] font-bold text-slate-400">{t('statistics.subtitle')}</p>
           </div>
         </div>
         <div className="flex gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start">
@@ -295,7 +297,7 @@ export function Statistics() {
                 period === opt.value ? 'bg-[#0f172a] text-white' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           ))}
         </div>
@@ -311,36 +313,36 @@ export function Statistics() {
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               icon={TrendingUp}
-              label="Recogidas completadas"
+              label={t('statistics.completedLabel')}
               value={String(stats.totalCompleted)}
-              sublabel={`${stats.totalAnnounced} anunciadas en total`}
+              sublabel={t('statistics.announcedTotalTemplate').replace('{count}', String(stats.totalAnnounced))}
             />
             <StatCard
               icon={Clock}
-              label="Tiempo promedio de recogida"
+              label={t('statistics.avgTimeLabel')}
               value={formatMinutes(stats.avgCycleMinutes)}
-              sublabel="Desde que llega hasta que se retira"
+              sublabel={t('statistics.avgTimeSublabel')}
             />
             <StatCard
               icon={Navigation}
-              label="Ubicación automática"
+              label={t('statistics.autoLocationLabel')}
               value={stats.gpsPct !== null ? `${stats.gpsPct}%` : '—'}
-              sublabel={`${stats.manualCount} confirmaron manualmente`}
+              sublabel={t('statistics.manualConfirmTemplate').replace('{count}', String(stats.manualCount))}
             />
             <StatCard
               icon={DoorOpen}
-              label="Puerta más usada"
+              label={t('statistics.topDoorLabel')}
               value={stats.topDoor ? stats.topDoor[0] : '—'}
-              sublabel={stats.topDoor ? `${stats.topDoor[1]} recogidas` : undefined}
+              sublabel={stats.topDoor ? t('statistics.pickupsCountTemplate').replace('{count}', String(stats.topDoor[1])) : undefined}
             />
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Recogidas por hora */}
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">Recogidas por hora del día</h3>
+              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">{t('statistics.byHourTitle')}</h3>
               {stats.activeHours.length === 0 ? (
-                <p className="text-[11px] font-bold text-slate-300 italic text-center py-8">Sin datos en este periodo</p>
+                <p className="text-[11px] font-bold text-slate-300 italic text-center py-8">{t('statistics.noDataPeriod')}</p>
               ) : (
                 <div className="space-y-2.5">
                   {stats.activeHours.map(h => (
@@ -352,10 +354,10 @@ export function Statistics() {
 
             {/* Recogidas por día de la semana */}
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">Recogidas por día de la semana</h3>
+              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">{t('statistics.byWeekdayTitle')}</h3>
               <div className="space-y-2.5">
-                {DAY_LABELS.map((label, i) => (
-                  <Bar key={label} label={label} value={stats.dayCounts[i]} max={stats.maxDayCount} colorClass="bg-emerald-500" />
+                {DAY_KEYS.map((key, i) => (
+                  <Bar key={key} label={t(key)} value={stats.dayCounts[i]} max={stats.maxDayCount} colorClass="bg-emerald-500" />
                 ))}
               </div>
             </section>
@@ -366,27 +368,27 @@ export function Statistics() {
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <div className="flex items-center gap-2 mb-5">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">Reemplazos de recogida</h3>
+                <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">{t('statistics.replacementsTitle')}</h3>
               </div>
               <p className="text-2xl font-black text-slate-800 mb-1">{stats.replacementTotal}</p>
-              <p className="text-[10px] font-bold text-slate-400 mb-4">solicitados en el periodo</p>
+              <p className="text-[10px] font-bold text-slate-400 mb-4">{t('statistics.requestedInPeriod')}</p>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-emerald-50 rounded-lg py-2">
                   <p className="text-lg font-black text-emerald-600">{stats.replacementApproved}</p>
-                  <p className="text-[8px] font-black text-emerald-600 uppercase">Aprobados</p>
+                  <p className="text-[8px] font-black text-emerald-600 uppercase">{t('statistics.approvedLabel')}</p>
                 </div>
                 <div className="bg-rose-50 rounded-lg py-2">
                   <p className="text-lg font-black text-rose-600">{stats.replacementRejected}</p>
-                  <p className="text-[8px] font-black text-rose-600 uppercase">Rechazados</p>
+                  <p className="text-[8px] font-black text-rose-600 uppercase">{t('statistics.rejectedLabel')}</p>
                 </div>
                 <div className="bg-amber-50 rounded-lg py-2">
                   <p className="text-lg font-black text-amber-600">{stats.replacementPending}</p>
-                  <p className="text-[8px] font-black text-amber-600 uppercase">Pendientes</p>
+                  <p className="text-[8px] font-black text-amber-600 uppercase">{t('statistics.pendingLabel')}</p>
                 </div>
               </div>
               {stats.replacementApprovalRate !== null && (
                 <p className="text-[10px] font-bold text-slate-400 mt-3 text-center">
-                  {stats.replacementApprovalRate}% de tasa de aprobación
+                  {t('statistics.approvalRateTemplate').replace('{rate}', String(stats.replacementApprovalRate))}
                 </p>
               )}
             </section>
@@ -395,20 +397,20 @@ export function Statistics() {
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <div className="flex items-center gap-2 mb-5">
                 <FileEdit className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">Avisos y autorizaciones</h3>
+                <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">{t('statistics.announcementsTitle')}</h3>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <p className="text-2xl font-black text-slate-800">{stats.avisosCount}</p>
-                  <p className="text-[9px] font-black text-slate-400 uppercase">Avisos enviados</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase">{t('statistics.announcementsSentLabel')}</p>
                 </div>
                 <div>
                   <p className="text-2xl font-black text-slate-800">{stats.autorizacionesCount}</p>
-                  <p className="text-[9px] font-black text-slate-400 uppercase">Autorizaciones</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase">{t('statistics.authorizationsLabel')}</p>
                 </div>
               </div>
               <p className="text-[11px] font-bold text-slate-500">
-                {stats.formResponsesCount} respuestas recibidas en total
+                {t('statistics.responsesReceivedTemplate').replace('{count}', String(stats.formResponsesCount))}
               </p>
             </section>
 
@@ -419,14 +421,14 @@ export function Statistics() {
                 <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider">Pool Day</h3>
               </div>
               <p className="text-2xl font-black text-slate-800">{carpoolCount}</p>
-              <p className="text-[10px] font-bold text-slate-400">autorizaciones nuevas en el periodo</p>
+              <p className="text-[10px] font-bold text-slate-400">{t('statistics.newAuthorizationsPeriod')}</p>
             </section>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* Visitantes */}
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">Visitantes registrados</h3>
+              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">{t('statistics.visitorsRegisteredTitle')}</h3>
               <p className="text-2xl font-black text-slate-800 mb-4">{stats.visitorsTotal}</p>
               {stats.topReasons.length > 0 && (
                 <div className="space-y-2.5">
@@ -441,16 +443,16 @@ export function Statistics() {
             <section className="bg-[#0f172a] p-6 rounded-xl shadow-sm">
               <div className="flex items-center gap-2 mb-5">
                 <Users className="w-4 h-4 text-white/60" />
-                <h3 className="text-[12px] font-black text-white uppercase tracking-wider">Comunidad</h3>
+                <h3 className="text-[12px] font-black text-white uppercase tracking-wider">{t('statistics.communityTitle')}</h3>
               </div>
               <div className="space-y-4">
                 <div>
                   <p className="text-2xl font-black text-white">{community.totalStudents}</p>
-                  <p className="text-[9px] font-black text-white/50 uppercase">Alumnos registrados</p>
+                  <p className="text-[9px] font-black text-white/50 uppercase">{t('statistics.studentsRegisteredLabel')}</p>
                 </div>
                 <div>
                   <p className="text-2xl font-black text-white">{community.totalParents}</p>
-                  <p className="text-[9px] font-black text-white/50 uppercase">Padres registrados</p>
+                  <p className="text-[9px] font-black text-white/50 uppercase">{t('statistics.parentsRegisteredLabel')}</p>
                 </div>
               </div>
             </section>
