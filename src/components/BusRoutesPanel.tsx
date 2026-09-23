@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Bus, Plus, Settings2, X, Search, CheckCircle2, Trash2, Loader2, Check, Car } from 'lucide-react';
 
 interface BusRoute {
@@ -47,6 +48,7 @@ interface RouteActivity {
  */
 export function BusRoutesPanel() {
   const { profile } = useAuth() as any;
+  const { t } = useLanguage();
   const [routes, setRoutes] = useState<BusRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [announcingId, setAnnouncingId] = useState<string | null>(null);
@@ -216,7 +218,7 @@ export function BusRoutesPanel() {
       setNewLoginUsername('');
       setNewLoginPassword('');
     } catch (err: any) {
-      setCredentialsError(err.message || 'Error al guardar el acceso.');
+      setCredentialsError(err.message || t('busRoutes.errorSavingCredentials'));
     } finally {
       setSavingCredentials(false);
     }
@@ -263,18 +265,18 @@ export function BusRoutesPanel() {
       setShowManageModal(false);
       fetchRoutes();
     } catch (err: any) {
-      alert('Error al guardar la ruta: ' + (err.message || String(err)));
+      alert(t('busRoutes.errorSavingRoute') + (err.message || String(err)));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteRoute = async (route: BusRoute) => {
-    if (!confirm(`¿Eliminar la ruta "${route.name}"? No borra a los alumnos, solo la ruta.`)) return;
+    if (!confirm(t('busRoutes.confirmDeleteTemplate').replace('{name}', route.name))) return;
     try {
       await apiJson(`/api/bus-routes/${route.id}`, { method: 'DELETE' });
     } catch (err: any) {
-      alert('Error al eliminar la ruta: ' + (err.message || String(err)));
+      alert(t('busRoutes.errorDeletingRoute') + (err.message || String(err)));
       return;
     }
     fetchRoutes();
@@ -295,7 +297,7 @@ export function BusRoutesPanel() {
       setRoutes((prev) => prev.map((r) => (r.id === route.id ? { ...r, reception_can_announce: nextValue } : r)));
       routesRef.current = routesRef.current.map((r) => (r.id === route.id ? { ...r, reception_can_announce: nextValue } : r));
     } catch (err: any) {
-      alert('Error al cambiar el permiso de anuncio: ' + (err.message || String(err)));
+      alert(t('busRoutes.errorTogglingPermission') + (err.message || String(err)));
     } finally {
       setTogglingId(null);
     }
@@ -330,8 +332,8 @@ export function BusRoutesPanel() {
       if (studentIds.length === 0) {
         alert(
           excludedIds.size > 0
-            ? `Todos los alumnos de "${route.name}" fueron marcados como "hoy no va en bus" por sus padres.`
-            : `La ruta "${route.name}" no tiene alumnos asignados todavía.`,
+            ? t('busRoutes.allExcludedTemplate').replace('{name}', route.name)
+            : t('busRoutes.noStudentsAssignedTemplate').replace('{name}', route.name),
         );
         return;
       }
@@ -359,7 +361,7 @@ export function BusRoutesPanel() {
       setTimeout(() => setAnnouncedId((current) => (current === route.id ? null : current)), 3000);
       fetchActivity();
     } catch (err: any) {
-      alert('Error al anunciar la llegada: ' + (err.message || String(err)));
+      alert(t('busRoutes.errorAnnouncing') + (err.message || String(err)));
     } finally {
       setAnnouncingId(null);
     }
@@ -392,7 +394,7 @@ export function BusRoutesPanel() {
       setTimeout(() => setConfirmedId((current) => (current === route.id ? null : current)), 3000);
       fetchActivity();
     } catch (err: any) {
-      alert('Error al confirmar la salida del bus: ' + (err.message || String(err)));
+      alert(t('busRoutes.errorConfirmingDeparture') + (err.message || String(err)));
     } finally {
       setConfirmingId(null);
     }
@@ -403,13 +405,13 @@ export function BusRoutesPanel() {
       <div className="p-5 border-b border-slate-100 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bus className="w-5 h-5 text-[#1e293b]" />
-          <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">Buses</h2>
+          <h2 className="text-[13px] font-black text-[#1e293b] uppercase tracking-wider">{t('busRoutes.title')}</h2>
         </div>
         <button
           onClick={openCreateModal}
           className="flex items-center gap-1.5 bg-[#1e293b] text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all"
         >
-          <Plus className="w-3.5 h-3.5" /> Nueva Ruta
+          <Plus className="w-3.5 h-3.5" /> {t('busRoutes.newRouteBtn')}
         </button>
       </div>
       <div className="p-5">
@@ -419,7 +421,7 @@ export function BusRoutesPanel() {
           </div>
         ) : routes.length === 0 ? (
           <p className="text-[11px] font-bold text-slate-300 italic uppercase tracking-widest text-center py-6">
-            Ninguna ruta configurada
+            {t('busRoutes.noRoutesConfigured')}
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -460,12 +462,16 @@ export function BusRoutesPanel() {
               const iconBgClasses = flashing ? 'bg-emerald-500' : stage === 'ready' ? 'bg-orange-500' : stage === 'waiting' || blockedIdle ? 'bg-slate-400' : 'bg-amber-500';
 
               let subtitle: string;
-              if (justAnnounced) subtitle = 'Llegada anunciada';
-              else if (justConfirmed) subtitle = 'Salida confirmada';
-              else if (stage === 'ready') subtitle = `Listo — ${released} alumno${released === 1 ? '' : 's'} autorizado${released === 1 ? '' : 's'}, toca para confirmar salida`;
-              else if (stage === 'waiting') subtitle = `${released}/${total} autorizados por su salón`;
-              else if (blockedIdle) subtitle = 'El encargado anuncia desde su celular';
-              else subtitle = `${route.student_count} alumno${route.student_count === 1 ? '' : 's'}${route.excluded_today > 0 ? ` · ${route.excluded_today} no viene${route.excluded_today === 1 ? '' : 'n'} hoy` : ''}${route.door_id ? ` · ${doors.find((d) => d.id === route.door_id)?.name || 'Puerta'}` : ''}`;
+              if (justAnnounced) subtitle = t('busRoutes.arrivalAnnounced');
+              else if (justConfirmed) subtitle = t('busRoutes.departureConfirmed');
+              else if (stage === 'ready') subtitle = t('busRoutes.readyTemplate').replace('{count}', String(released));
+              else if (stage === 'waiting') subtitle = t('busRoutes.waitingTemplate').replace('{released}', String(released)).replace('{total}', String(total));
+              else if (blockedIdle) subtitle = t('busRoutes.receptionBlocked');
+              else {
+                subtitle = t('busRoutes.rosterTemplate').replace('{count}', String(route.student_count));
+                if (route.excluded_today > 0) subtitle += t('busRoutes.excludedTodaySuffix').replace('{count}', String(route.excluded_today));
+                if (route.door_id) subtitle += ` · ${doors.find((d) => d.id === route.door_id)?.name || t('busRoutes.doorFallback')}`;
+              }
 
               return (
                 <div key={route.id} className="flex items-stretch gap-1.5">
@@ -492,7 +498,7 @@ export function BusRoutesPanel() {
                   </button>
                   <button
                     onClick={() => openEditModal(route)}
-                    title="Gestionar ruta"
+                    title={t('busRoutes.manageRouteTitle')}
                     className="w-10 shrink-0 flex items-center justify-center rounded-2xl border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 transition-all"
                   >
                     <Settings2 className="w-4 h-4" />
@@ -513,7 +519,7 @@ export function BusRoutesPanel() {
                   <Bus className="w-5 h-5" />
                 </div>
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
-                  {editingRoute ? 'Editar Ruta' : 'Nueva Ruta de Bus'}
+                  {editingRoute ? t('busRoutes.editRouteTitle') : t('busRoutes.newRouteModalTitle')}
                 </h3>
               </div>
               <button onClick={() => setShowManageModal(false)} className="p-2.5 bg-white text-slate-400 rounded-xl shadow-sm">
@@ -523,41 +529,41 @@ export function BusRoutesPanel() {
 
             <div className="p-6 space-y-5 overflow-y-auto">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre de la ruta</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('busRoutes.routeNameLabel')}</label>
                 <input
                   autoFocus
                   value={routeName}
                   onChange={(e) => setRouteName(e.target.value)}
-                  placeholder="Ej. Ruta 1 — Costa del Este"
+                  placeholder={t('busRoutes.routeNamePlaceholder')}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Puerta por donde sale este bus</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t('busRoutes.doorLabel')}</label>
                 <select
                   value={routeDoorId}
                   onChange={(e) => setRouteDoorId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                 >
-                  <option value="">Sin puerta fija (usa el grado de cada alumno)</option>
+                  <option value="">{t('busRoutes.noFixedDoorOption')}</option>
                   {doors.map((door) => (
                     <option key={door.id} value={door.id}>{door.name}</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
-                  Si la asignas, todos los alumnos de esta ruta salen agrupados por esa puerta al anunciar, sin importar su grado.
+                  {t('busRoutes.doorHelperText')}
                 </p>
               </div>
 
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">Alumnos en esta ruta</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">{t('busRoutes.studentsInRouteLabel')}</label>
                   <div className="relative w-full sm:w-56 shrink-0">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Buscar alumno..."
+                      placeholder={t('busRoutes.searchStudentPlaceholder')}
                       value={studentSearchTerm}
                       onChange={(e) => setStudentSearchTerm(e.target.value)}
                       className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all shadow-sm"
@@ -610,10 +616,10 @@ export function BusRoutesPanel() {
                 <div className="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                      Botón "Anunciar" en este dashboard
+                      {t('busRoutes.announceToggleLabel')}
                     </p>
                     <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                      Apágalo si el encargado del bus ya anuncia desde su propio celular, para evitar que recepción lo haga sin querer. No afecta el anuncio del encargado en su app.
+                      {t('busRoutes.announceToggleHelper')}
                     </p>
                   </div>
                   <button
@@ -630,15 +636,15 @@ export function BusRoutesPanel() {
               {editingRoute && (
                 <div className="border-t border-slate-100 pt-5">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                    Acceso para el encargado del bus
+                    {t('busRoutes.loginAccessLabel')}
                   </label>
                   <p className="text-[11px] text-slate-400 font-medium mb-3 ml-1 leading-relaxed">
-                    Con esto, la persona que viaja en el bus puede anunciar la llegada ella misma desde su celular, igual que un padre. No hace falta correo real — solo un usuario inventado y una contraseña.
+                    {t('busRoutes.loginAccessHelper')}
                   </p>
 
                   {currentLoginUsername && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 mb-3">
-                      <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Usuario actual</p>
+                      <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">{t('busRoutes.currentUsernameLabel')}</p>
                       <p className="text-sm font-bold text-emerald-800 break-all">{currentLoginUsername}</p>
                     </div>
                   )}
@@ -651,19 +657,19 @@ export function BusRoutesPanel() {
                       // lo rechazaba sin explicar bien por qué — ahora se
                       // limpia en el momento, no hay forma de repetir el error.
                       onChange={(e) => setNewLoginUsername(e.target.value.replace(/@.*$/, '').replace(/[^a-z0-9._-]/gi, '').toLowerCase())}
-                      placeholder="usuario, sin arroba (ej. bus5monitor)"
+                      placeholder={t('busRoutes.usernamePlaceholder')}
                       className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                     <input
                       value={newLoginPassword}
                       onChange={(e) => setNewLoginPassword(e.target.value)}
-                      placeholder="contraseña (mín. 6)"
+                      placeholder={t('busRoutes.passwordPlaceholder')}
                       className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:bg-white transition-all"
                     />
                   </div>
                   {newLoginUsername && (
                     <p className="text-[11px] text-slate-400 font-medium mt-2 ml-1">
-                      Quedará como: <span className="font-bold text-slate-600">{newLoginUsername}@buses.{tenantDomain || '...'}.internal</span>
+                      {t('busRoutes.willBeUsername')}<span className="font-bold text-slate-600">{newLoginUsername}@buses.{tenantDomain || '...'}.internal</span>
                     </p>
                   )}
                   {credentialsError && (
@@ -675,7 +681,7 @@ export function BusRoutesPanel() {
                     disabled={savingCredentials || !newLoginUsername.trim() || newLoginPassword.length < 6}
                     className="w-full mt-2 bg-slate-800 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {savingCredentials ? <Loader2 className="w-4 h-4 animate-spin" /> : (currentLoginUsername ? 'Cambiar Acceso' : 'Crear Acceso')}
+                    {savingCredentials ? <Loader2 className="w-4 h-4 animate-spin" /> : (currentLoginUsername ? t('busRoutes.changeAccessBtn') : t('busRoutes.createAccessBtn'))}
                   </button>
                 </div>
               )}
@@ -687,14 +693,14 @@ export function BusRoutesPanel() {
                 disabled={saving || !routeName.trim()}
                 className="w-full bg-amber-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-amber-100 active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
               >
-                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : editingRoute ? 'Guardar Cambios' : 'Crear Ruta'}
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : editingRoute ? t('busRoutes.saveChangesBtn') : t('busRoutes.createRouteBtn')}
               </button>
               {editingRoute && (
                 <button
                   onClick={() => { setShowManageModal(false); handleDeleteRoute(editingRoute); }}
                   className="w-full text-rose-500 font-bold py-2 flex items-center justify-center gap-2 text-xs uppercase tracking-widest hover:text-rose-700"
                 >
-                  <Trash2 className="w-4 h-4" /> Eliminar Ruta
+                  <Trash2 className="w-4 h-4" /> {t('busRoutes.deleteRouteBtn')}
                 </button>
               )}
             </div>
