@@ -4,7 +4,7 @@ import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
 import {
   X, FileBarChart, Loader2, Download, Clock, Users, Car, Footprints,
-  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX, UserCog,
+  ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX, UserCog, Sunrise,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -86,6 +86,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       { data: formResponses },
       { data: pendingLoginParentsData },
       { data: inactiveTodayParentsData },
+      { data: morningArrivalsRaw },
     ] = await Promise.all([
       supabase.from('school_settings').select('school_name').eq('tenant_id', profile.tenant_id).maybeSingle(),
       supabase
@@ -166,6 +167,15 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       // "nunca ha entrado", este es "entró antes, pero hoy no hubo señal
       // de que alguien de esa familia esté al tanto".
       apiJson(`/api/tenants/${profile.tenant_id}/inactive-today-parents`).catch(() => ({ data: { parents: [] } })),
+      // Llegadas matutinas (padre dejando al alumno en la mañana) — misma
+      // tabla y criterio que DailyArrivals.tsx (Llegadas Diarias).
+      supabase
+        .from('morning_arrivals')
+        .select('id, parent_id, arrived_at')
+        .eq('tenant_id', profile.tenant_id)
+        .gte('arrived_at', startIso)
+        .lt('arrived_at', endIso)
+        .order('arrived_at', { ascending: true }),
     ]);
 
     setSchoolName(school?.school_name || 'Colegio');
@@ -237,11 +247,55 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     const pendingLoginParents = pendingLoginParentsData?.parents || [];
     const inactiveTodayParents = inactiveTodayParentsData?.parents || [];
 
+    // Llegadas matutinas: una fila de morning_arrivals es un padre, pero se
+    // muestra una fila por CADA hijo suyo matriculado (mismo criterio que
+    // DailyArrivals.tsx), ya que el registro es "el padre llegó", no "llegó
+    // por este alumno puntual".
+    const arrivalParentIds = Array.from(new Set((morningArrivalsRaw || []).map((a: any) => a.parent_id)));
+    const [{ data: arrivalParents }, { data: arrivalLinks }] = arrivalParentIds.length > 0
+      ? await Promise.all([
+          supabase.from('profiles').select('id, first_name, last_name').in('id', arrivalParentIds),
+          supabase
+            .from('parent_students')
+            .select('parent_id, students(first_name, last_name, grade, section, tenant_id)')
+            .in('parent_id', arrivalParentIds)
+            .eq('students.tenant_id', profile.tenant_id),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+    const arrivalParentNameById = new Map(
+      (arrivalParents || []).map((p: any) => [p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Sin nombre']),
+    );
+    const arrivalStudentsByParent = new Map<string, any[]>();
+    (arrivalLinks || []).forEach((l: any) => {
+      if (!l.students) return;
+      if (!arrivalStudentsByParent.has(l.parent_id)) arrivalStudentsByParent.set(l.parent_id, []);
+      arrivalStudentsByParent.get(l.parent_id)!.push(l.students);
+    });
+    const morningArrivals: any[] = [];
+    (morningArrivalsRaw || []).forEach((a: any) => {
+      const parentName = arrivalParentNameById.get(a.parent_id) || 'Sin nombre';
+      const students = arrivalStudentsByParent.get(a.parent_id) || [];
+      if (students.length === 0) {
+        morningArrivals.push({ studentName: '—', grade: '', section: '', parentName, arrivedAt: a.arrived_at });
+        return;
+      }
+      students.forEach((s: any) => {
+        morningArrivals.push({
+          studentName: `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
+          grade: s.grade || '',
+          section: s.section || '',
+          parentName,
+          arrivedAt: a.arrived_at,
+        });
+      });
+    });
+
     setSummary({
       pickupsAnnounced: (pickupsAnnounced || []).length,
       pickupsCompleted: (pickupsCompleted || []).length,
       noGpsCount,
       avgMinutes,
+      morningArrivals: morningArrivals.length,
       selfDismissals: (selfDismissals || []).length,
       visitors: (visitors || []).length,
       replacementRequests: repByStatus,
@@ -256,6 +310,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
 
     setAnnexes({
       pickups: pickupsAnnounced || [],
+      morningArrivals,
       selfDismissals: selfDismissals || [],
       visitors: visitors || [],
       replacementRequests: replacementRequests || [],
@@ -288,6 +343,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         ['Solicitudes de salida sin autorizar', String(summary.unauthorizedPickups)],
         ['Confirmadas sin GPS', String(summary.noGpsCount)],
         ['Tiempo promedio de recogida', summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'],
+        ['Llegadas matutinas', String(summary.morningArrivals)],
         ['Salidas Autónomas', String(summary.selfDismissals)],
         ['Visitantes registrados', String(summary.visitors)],
         ['Solicitudes de reemplazo (pendientes / aprobadas / rechazadas)', `${summary.replacementRequests.pending} / ${summary.replacementRequests.approved} / ${summary.replacementRequests.rejected}`],
@@ -466,6 +522,29 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       nextY = (doc as any).lastAutoTable.finalY + 12;
     }
 
+    if (annexes.morningArrivals.length > 0) {
+      if (nextY > 260) { doc.addPage(); nextY = 16; }
+      doc.setFontSize(12);
+      doc.text('Anexo 9 — Llegadas matutinas del día', 14, nextY);
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text('Padres que dejaron a sus hijos en el colegio esta mañana (una fila por cada hijo matriculado).', 14, nextY + 5);
+      doc.setTextColor(0);
+      autoTable(doc, {
+        startY: nextY + 9,
+        head: [['Alumno', 'Grado · Sección', 'Padre/Tutor', 'Hora']],
+        body: annexes.morningArrivals.map((a: any) => [
+          a.studentName,
+          `${a.grade || '—'}${a.section ? ' · ' + a.section : ''}`,
+          a.parentName,
+          fmtTime(a.arrivedAt),
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc as any).lastAutoTable.finalY + 12;
+    }
+
     return doc;
   };
 
@@ -572,6 +651,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                   <StatCard icon={UserX} label="Salidas sin autorizar" value={summary.unauthorizedPickups} warn={summary.unauthorizedPickups > 0} />
                   <StatCard icon={ShieldCheck} label="Confirmadas sin GPS" value={summary.noGpsCount} />
                   <StatCard icon={Clock} label="Tiempo prom. de recogida" value={summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'} />
+                  <StatCard icon={Sunrise} label="Llegadas matutinas" value={summary.morningArrivals} />
                   <StatCard icon={Footprints} label="Salidas Autónomas" value={summary.selfDismissals} />
                   <StatCard icon={Users} label="Visitantes" value={summary.visitors} />
                   <StatCard icon={MessageSquare} label="Solicitudes de reemplazo" value={summary.replacementRequests.pending + summary.replacementRequests.approved + summary.replacementRequests.rejected} />
