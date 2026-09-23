@@ -2521,15 +2521,36 @@ export function ParentDashboard() {
 
       {showTogetherPrompt && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 p-8 space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
-                <Users className="w-7 h-7 text-indigo-600" />
+          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 max-h-[85vh] flex flex-col">
+            <div className="p-8 pb-4 space-y-4 shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
+                  <Users className="w-7 h-7 text-indigo-600" />
+                </div>
+                <h3 className="text-lg font-black text-slate-900 leading-tight">{t('parent.together.title')}</h3>
               </div>
-              <h3 className="text-lg font-black text-slate-900 leading-tight">{t('parent.together.title')}</h3>
+              <p className="text-xs text-slate-500 font-medium">{t('parent.together.helper')}</p>
+              {pickupStudents.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGroupDraft(pickupStudents.map(s => s.id))}
+                    className="text-[10px] font-black uppercase tracking-widest text-indigo-600 underline decoration-1 underline-offset-2"
+                  >
+                    {t('parent.together.selectAll')}
+                  </button>
+                  <span className="text-slate-300">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setGroupDraft([])}
+                    className="text-[10px] font-black uppercase tracking-widest text-slate-400 underline decoration-1 underline-offset-2"
+                  >
+                    {t('parent.together.clearAll')}
+                  </button>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-slate-500 font-medium">{t('parent.together.helper')}</p>
-            <div className="space-y-2">
+            <div className="px-8 space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0">
               {pickupStudents.map(s => {
                 const checked = groupDraft.includes(s.id);
                 return (
@@ -2554,12 +2575,14 @@ export function ParentDashboard() {
                 );
               })}
             </div>
-            <button
-              onClick={() => handleSaveTogetherGroup(groupDraft)}
-              className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest"
-            >
-              {t('parent.together.saveBtn')}
-            </button>
+            <div className="p-8 pt-4 shrink-0">
+              <button
+                onClick={() => handleSaveTogetherGroup(groupDraft)}
+                className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest"
+              >
+                {t('parent.together.saveBtn')}
+              </button>
+            </div>
           </div>
         </div>
       )}
