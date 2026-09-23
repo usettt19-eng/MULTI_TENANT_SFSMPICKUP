@@ -1435,6 +1435,16 @@ export function ParentDashboard() {
     }
   }, [isNative, isBackgroundTrackingActive, isInside, status, loading, canAnnounceArrivalNow]);
 
+  // Evita filas duplicadas en morning_arrivals: si el GPS titubea cerca del
+  // borde del perímetro (ej. un bus que se detiene, arranca y da la vuelta
+  // cerca de la entrada) isInside puede pasar a true varias veces en la
+  // misma mañana, y cada una disparaba un insert nuevo — confirmado en
+  // producción con la ruta de un bus duplicada en Llegadas Diarias. Una vez
+  // que se confirma (insertada acá, o ya existente de antes si el padre
+  // cerró y volvió a abrir la app) que ya hay una fila de hoy, no se vuelve
+  // a intentar en esta sesión.
+  const morningArrivalLoggedTodayRef = useRef(false);
+
   // Reporta al colegio si el padre está dentro o fuera del perímetro, para
   // que recepción vea en vivo quién está llegando — sin guardar coordenadas,
   // solo un booleano y desde cuándo. Se actualiza cada vez que isInside
@@ -1456,14 +1466,36 @@ export function ParentDashboard() {
     // padre) — esto en cambio queda como fila permanente en morning_arrivals,
     // para la pantalla de Llegadas Diarias del staff (con historial de días
     // anteriores por sección, no solo el estado actual).
-    if (isInside && new Date().getHours() < ANNOUNCE_ARRIVAL_MIN_HOUR) {
-      supabase.from('morning_arrivals').insert({
-        parent_id: profile.id,
-        tenant_id: profile.tenant_id,
-        arrived_at: new Date().toISOString(),
-      }).then(({ error }) => {
-        if (error) console.error('Error al registrar llegada matutina:', error);
-      });
+    if (isInside && new Date().getHours() < ANNOUNCE_ARRIVAL_MIN_HOUR && !morningArrivalLoggedTodayRef.current) {
+      const parentId = profile.id;
+      const tenantId = profile.tenant_id;
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      supabase
+        .from('morning_arrivals')
+        .select('id')
+        .eq('parent_id', parentId)
+        .eq('tenant_id', tenantId)
+        .gte('arrived_at', startOfDay.toISOString())
+        .limit(1)
+        .then(({ data: existing, error: checkError }) => {
+          if (checkError) {
+            console.error('Error al verificar llegada matutina previa:', checkError);
+            return;
+          }
+          if (existing && existing.length > 0) {
+            morningArrivalLoggedTodayRef.current = true;
+            return;
+          }
+          supabase.from('morning_arrivals').insert({
+            parent_id: parentId,
+            tenant_id: tenantId,
+            arrived_at: new Date().toISOString(),
+          }).then(({ error: insertError }) => {
+            if (insertError) console.error('Error al registrar llegada matutina:', insertError);
+            else morningArrivalLoggedTodayRef.current = true;
+          });
+        });
     }
   }, [isInside, isLocationEnabled, profile?.id, profile?.tenant_id]);
 
