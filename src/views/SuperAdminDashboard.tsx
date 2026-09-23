@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Building2, Plus, ArrowRight, ShieldCheck, Settings, Users, Activity, Mail, Lock, User, LogOut, Eye, EyeOff, LogIn, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface Tenant {
   id: string;
@@ -37,6 +38,7 @@ export function SuperAdminDashboard() {
   const [showEditModalPassword, setShowEditModalPassword] = useState(false);
 
   const { profile, enterTenantAsAdmin } = useAuth() as any;
+  const { t, language } = useLanguage();
 
   const [stats, setStats] = useState<Record<string, any>>({});
   const [staffListModal, setStaffListModal] = useState<Tenant | null>(null);
@@ -88,17 +90,17 @@ export function SuperAdminDashboard() {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al registrar la institución');
+        throw new Error(data.error || t('superAdmin.errorRegisteringInstitution'));
       }
-      
+
       // Refresh list
       await fetchTenants();
       setShowAddModal(false);
       setNewTenant({ schoolName: '', domain: '', firstName: '', lastName: '', email: '' });
-      alert("Institución creada. Se le envió un correo de invitación al administrador.");
+      alert(t('superAdmin.alertInstitutionCreated'));
     } catch (error: any) {
       console.error('Error creating tenant:', error);
-      alert(`Error: ${error.message || 'Desconocido'}`);
+      alert(`${t('superAdmin.errorPrefix')} ${error.message || t('superAdmin.unknownError')}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -132,7 +134,7 @@ export function SuperAdminDashboard() {
       setNewAdminPassword('');
     } catch (error: any) {
       console.error("Error updating tenant:", error);
-      alert(`Error al actualizar: ${error.message}`);
+      alert(`${t('superAdmin.errorUpdating')} ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -140,7 +142,7 @@ export function SuperAdminDashboard() {
 
   const handleResetPassword = async () => {
     if (!editingTenant || !newAdminPassword || newAdminPassword.length < 6) {
-      alert("La contraseña debe tener al menos 6 caracteres.");
+      alert(t('superAdmin.alertPasswordMinLength'));
       return;
     }
     setIsResettingPassword(true);
@@ -156,14 +158,14 @@ export function SuperAdminDashboard() {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al resetear contraseña');
+        throw new Error(data.error || t('superAdmin.errorResettingPassword'));
       }
 
-      alert("Contraseña de administrador actualizada exitosamente.");
+      alert(t('superAdmin.alertPasswordUpdated'));
       setNewAdminPassword('');
     } catch (error: any) {
       console.error("Error reseting password:", error);
-      alert(`Error: ${error.message}`);
+      alert(`${t('superAdmin.errorPrefix')} ${error.message}`);
     } finally {
       setIsResettingPassword(false);
     }
@@ -174,8 +176,8 @@ export function SuperAdminDashboard() {
       <div className="flex h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
           <ShieldCheck className="mx-auto h-16 w-16 text-rose-500 mb-4" />
-          <h1 className="text-2xl font-bold text-slate-800">Acceso Denegado</h1>
-          <p className="text-slate-500 mt-2">No tienes permisos de Super Administrador.</p>
+          <h1 className="text-2xl font-bold text-slate-800">{t('superAdmin.accessDenied')}</h1>
+          <p className="text-slate-500 mt-2">{t('superAdmin.noPermissions')}</p>
         </div>
       </div>
     );
@@ -193,14 +195,14 @@ export function SuperAdminDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-sm font-medium text-slate-500">
-               {profile?.email || 'Super Administrador'}
+               {profile?.email || t('superAdmin.superAdminFallback')}
             </div>
-            <button 
+            <button
               onClick={() => supabase.auth.signOut()}
               className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-200 transition-colors shadow-sm text-sm"
             >
               <LogOut className="w-4 h-4" />
-              Cerrar Sesión
+              {t('superAdmin.logOut')}
             </button>
           </div>
         </div>
@@ -208,15 +210,15 @@ export function SuperAdminDashboard() {
         {/* Page Title & Actions */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-6">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Gestión de Instituciones</h2>
-            <p className="text-slate-500 font-medium">Control global de colegios y tenants activos.</p>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{t('superAdmin.institutionsManagement')}</h2>
+            <p className="text-slate-500 font-medium">{t('superAdmin.institutionsManagementSubtitle')}</p>
           </div>
-          <button 
+          <button
             onClick={() => setShowAddModal(true)}
             className="inline-flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm"
           >
             <Plus className="w-5 h-5" />
-            Nuevo Colegio
+            {t('superAdmin.newSchoolBtn')}
           </button>
         </div>
 
@@ -225,14 +227,14 @@ export function SuperAdminDashboard() {
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-3 text-slate-500 mb-3">
               <Building2 className="w-5 h-5" />
-              <span className="font-bold">Total Colegios</span>
+              <span className="font-bold">{t('superAdmin.totalSchools')}</span>
             </div>
             <div className="text-4xl font-black text-slate-900">{tenants.length}</div>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-3 text-slate-500 mb-3">
               <Activity className="w-5 h-5" />
-              <span className="font-bold">Colegios Activos</span>
+              <span className="font-bold">{t('superAdmin.activeSchools')}</span>
             </div>
             <div className="text-4xl font-black text-emerald-600">
               {tenants.filter(t => t.status === 'active').length}
@@ -241,7 +243,7 @@ export function SuperAdminDashboard() {
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-3 text-slate-500 mb-3">
               <Users className="w-5 h-5" />
-              <span className="font-bold">Reportes de Sistema</span>
+              <span className="font-bold">{t('superAdmin.systemReports')}</span>
             </div>
             <div className="text-4xl font-black text-indigo-600">--</div>
           </div>
@@ -250,31 +252,31 @@ export function SuperAdminDashboard() {
         {/* Tenant List */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Instituciones Registradas</h2>
+            <h2 className="text-xl font-bold text-slate-900">{t('superAdmin.registeredInstitutions')}</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
-                  <th className="font-bold p-4 pl-6">Nombre del Colegio</th>
-                  <th className="font-bold p-4">Administrador</th>
-                  <th className="font-bold p-4">Dominio</th>
-                  <th className="font-bold p-4">Estado</th>
-                  <th className="font-bold p-4">Fecha de Creación</th>
-                  <th className="font-bold p-4 pr-6 text-right">Acciones</th>
+                  <th className="font-bold p-4 pl-6">{t('superAdmin.tableHeaderSchoolName')}</th>
+                  <th className="font-bold p-4">{t('superAdmin.tableHeaderAdmin')}</th>
+                  <th className="font-bold p-4">{t('superAdmin.tableHeaderDomain')}</th>
+                  <th className="font-bold p-4">{t('superAdmin.tableHeaderStatus')}</th>
+                  <th className="font-bold p-4">{t('superAdmin.tableHeaderCreatedDate')}</th>
+                  <th className="font-bold p-4 pr-6 text-right">{t('superAdmin.tableHeaderActions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-slate-500">
-                      Cargando instituciones...
+                      {t('superAdmin.loadingInstitutions')}
                     </td>
                   </tr>
                 ) : tenants.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-slate-500">
-                      No hay colegios registrados en el sistema.
+                      {t('superAdmin.noSchoolsRegistered')}
                     </td>
                   </tr>
                 ) : (
@@ -284,21 +286,21 @@ export function SuperAdminDashboard() {
                         <div>{tenant.name}</div>
                         {stats[tenant.id] && (
                           <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] text-slate-500 font-medium">
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👩🏽‍🎓 {stats[tenant.id].students} Alumnos</span>
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨‍👩‍👦 {stats[tenant.id].parents} Padres</span>
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨🏽‍🏫 {stats[tenant.id].staff} Staff</span>
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">🚪 {stats[tenant.id].doors} Puertas</span>
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👩🏽‍🎓 {stats[tenant.id].students} {t('superAdmin.students')}</span>
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨‍👩‍👦 {stats[tenant.id].parents} {t('superAdmin.parents')}</span>
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">👨🏽‍🏫 {stats[tenant.id].staff} {t('superAdmin.staffLabel')}</span>
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">🚪 {stats[tenant.id].doors} {t('superAdmin.doors')}</span>
                             <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                              🟢 {stats[tenant.id].parentsActiveToday ?? 0} Padres Activos Hoy
+                              🟢 {stats[tenant.id].parentsActiveToday ?? 0} {t('superAdmin.parentsActiveToday')}
                             </span>
                             <button
                               type="button"
                               onClick={() => setStaffListModal(tenant)}
                               disabled={!(stats[tenant.id].staffActiveToday?.length > 0)}
-                              title="Staff que autorizó o registró alguna acción hoy (no depende de login — el staff deja su sesión abierta por semanas)"
+                              title={t('superAdmin.staffActiveTitle')}
                               className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:hover:bg-indigo-50 disabled:cursor-default"
                             >
-                              🧑‍🏫 {stats[tenant.id].staffActiveToday?.length ?? 0} Staff Activo Hoy
+                              🧑‍🏫 {stats[tenant.id].staffActiveToday?.length ?? 0} {t('superAdmin.staffActiveToday')}
                             </button>
                             {(stats[tenant.id].latitude && stats[tenant.id].longitude) && (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded">
@@ -314,13 +316,13 @@ export function SuperAdminDashboard() {
                             <p className="font-bold text-slate-800 text-sm">
                               {stats[tenant.id].admin!.first_name} {stats[tenant.id].admin!.last_name}
                             </p>
-                            <p className="text-xs text-slate-400">{stats[tenant.id].admin!.email || 'sin correo'}</p>
+                            <p className="text-xs text-slate-400">{stats[tenant.id].admin!.email || t('superAdmin.noEmail')}</p>
                             {stats[tenant.id].admin!.phone && (
                               <p className="text-xs text-slate-400">{stats[tenant.id].admin!.phone}</p>
                             )}
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-300 italic">Sin administrador</span>
+                          <span className="text-xs text-slate-300 italic">{t('superAdmin.noAdmin')}</span>
                         )}
                       </td>
                       <td className="p-4 text-slate-500">
@@ -337,7 +339,7 @@ export function SuperAdminDashboard() {
                             : tenant.status === 'suspended' ? 'bg-amber-100 text-amber-700'
                             : 'bg-rose-100 text-rose-700'
                         }`}>
-                          {tenant.status === 'active' ? 'Activo' : tenant.status === 'suspended' ? 'Suspendido' : 'Inactivo'}
+                          {tenant.status === 'active' ? t('superAdmin.statusActive') : tenant.status === 'suspended' ? t('superAdmin.statusSuspended') : t('superAdmin.statusInactive')}
                         </span>
                       </td>
                       <td className="p-4 text-sm text-slate-500">
@@ -347,11 +349,11 @@ export function SuperAdminDashboard() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => enterTenantAsAdmin(tenant.id)}
-                            title="Entrar como administrador de este colegio"
+                            title={t('superAdmin.enterAsAdminTitle')}
                             className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors"
                           >
                             <LogIn className="w-4 h-4" />
-                            Entrar como Admin
+                            {t('superAdmin.enterAsAdminBtn')}
                           </button>
                           <button
                             onClick={() => handleEditClick(tenant)}
@@ -375,18 +377,18 @@ export function SuperAdminDashboard() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl my-8">
             <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900">Registrar Nuevo Colegio y Administrador</h2>
+              <h2 className="text-xl font-bold text-slate-900">{t('superAdmin.registerNewSchoolTitle')}</h2>
             </div>
             <form onSubmit={handleCreateTenant} className="p-6">
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* School Details */}
                 <div className="space-y-4">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <Building2 className="w-4 h-4 text-indigo-500" /> Institución
+                    <Building2 className="w-4 h-4 text-indigo-500" /> {t('superAdmin.institutionSection')}
                   </h3>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Nombre del Colegio *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('superAdmin.schoolNameLabel')}</label>
                     <input
                       type="text"
                       required
@@ -396,7 +398,7 @@ export function SuperAdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Subdominio (Opcional)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('superAdmin.subdomainOptionalLabel')}</label>
                     <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-600">
                       <input
                         type="text"
@@ -414,27 +416,27 @@ export function SuperAdminDashboard() {
                 {/* Admin Details */}
                 <div className="space-y-4">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <User className="w-4 h-4 text-indigo-500" /> Admin Principal
+                    <User className="w-4 h-4 text-indigo-500" /> {t('superAdmin.mainAdminSection')}
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Nombre *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">{t('superAdmin.firstNameLabel')}</label>
                       <input type="text" required value={newTenant.firstName} onChange={(e) => setNewTenant({...newTenant, firstName: e.target.value})} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Apellido *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">{t('superAdmin.lastNameLabel')}</label>
                       <input type="text" required value={newTenant.lastName} onChange={(e) => setNewTenant({...newTenant, lastName: e.target.value})} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('superAdmin.emailLabel')}</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                       <input type="email" required value={newTenant.email} onChange={(e) => setNewTenant({...newTenant, email: e.target.value})} className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2.5">
-                    Se le enviará un correo de invitación a este administrador para que active su acceso — no hace falta definir una contraseña aquí.
+                    {t('superAdmin.invitationEmailNote')}
                   </p>
                 </div>
               </div>
@@ -445,14 +447,14 @@ export function SuperAdminDashboard() {
                   onClick={() => setShowAddModal(false)}
                   className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
                 >
-                  Cancelar
+                  {t('superAdmin.cancelBtn')}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Creando...' : 'Crear Institución y Admin'}
+                  {isSubmitting ? t('superAdmin.creatingBtn') : t('superAdmin.createInstitutionBtn')}
                 </button>
               </div>
             </form>
@@ -465,11 +467,11 @@ export function SuperAdminDashboard() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl">
             <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900">Editar Colegio</h2>
+              <h2 className="text-xl font-bold text-slate-900">{t('superAdmin.editSchoolTitle')}</h2>
             </div>
             <form onSubmit={handleUpdateTenant} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Nombre</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">{t('superAdmin.nameLabel')}</label>
                 <input
                   type="text"
                   required
@@ -479,7 +481,7 @@ export function SuperAdminDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Subdominio</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">{t('superAdmin.subdomainLabel')}</label>
                 <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-600">
                   <input
                     type="text"
@@ -493,15 +495,15 @@ export function SuperAdminDashboard() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Estado</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">{t('superAdmin.tableHeaderStatus')}</label>
                 <select
                   value={editingTenant.status}
                   onChange={(e) => setEditingTenant({...editingTenant, status: e.target.value})}
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none font-medium text-slate-900"
                 >
-                  <option value="active">Activo</option>
-                  <option value="suspended">Suspendido</option>
-                  <option value="inactive">Inactivo</option>
+                  <option value="active">{t('superAdmin.statusActive')}</option>
+                  <option value="suspended">{t('superAdmin.statusSuspended')}</option>
+                  <option value="inactive">{t('superAdmin.statusInactive')}</option>
                 </select>
               </div>
 
@@ -511,27 +513,27 @@ export function SuperAdminDashboard() {
                   onClick={() => setShowEditModal(false)}
                   className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
                 >
-                  Cancelar
+                  {t('superAdmin.cancelBtn')}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                  {isSubmitting ? t('superAdmin.savingBtn') : t('superAdmin.saveChangesBtn')}
                 </button>
               </div>
             </form>
 
             <div className="px-6 pb-6 pt-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
               <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                <Lock className="w-4 h-4 text-slate-500" /> Cambiar Contraseña del Administrador
+                <Lock className="w-4 h-4 text-slate-500" /> {t('superAdmin.changeAdminPasswordTitle')}
               </h3>
               <div className="flex gap-3">
                 <div className="relative flex-1">
                   <input
                     type={showEditModalPassword ? "text" : "password"}
-                    placeholder="Nueva contraseña (min. 6 caracteres)"
+                    placeholder={t('superAdmin.newPasswordPlaceholder')}
                     value={newAdminPassword}
                     onChange={(e) => setNewAdminPassword(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-4 pr-10 py-2.5 bg-white focus:ring-2 focus:ring-indigo-600 outline-none font-medium text-slate-900"
@@ -546,7 +548,7 @@ export function SuperAdminDashboard() {
                   disabled={isResettingPassword || !newAdminPassword || newAdminPassword.length < 6}
                   className="px-4 py-2.5 rounded-xl font-bold text-white bg-slate-800 hover:bg-slate-900 transition-colors disabled:opacity-50 whitespace-nowrap"
                 >
-                  {isResettingPassword ? 'Actualizando...' : 'Actualizar'}
+                  {isResettingPassword ? t('superAdmin.updatingBtn') : t('superAdmin.updateBtn')}
                 </button>
               </div>
             </div>
@@ -560,7 +562,7 @@ export function SuperAdminDashboard() {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Staff Activo Hoy</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('superAdmin.staffActiveToday')}</h2>
                 <p className="text-xs text-slate-500 font-medium">{staffListModal.name}</p>
               </div>
               <button onClick={() => setStaffListModal(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
@@ -568,7 +570,7 @@ export function SuperAdminDashboard() {
               </button>
             </div>
             <p className="px-6 pt-4 text-[11px] text-slate-400 font-medium leading-relaxed">
-              Basado en autorizaciones y acciones registradas hoy, no en login — el staff deja su sesión abierta por semanas.
+              {t('superAdmin.staffActiveExplainer')}
             </p>
             <div className="p-4 overflow-y-auto space-y-2">
               {(stats[staffListModal.id]?.staffActiveToday ?? []).map((s: any) => (
@@ -576,10 +578,10 @@ export function SuperAdminDashboard() {
                   <p className="text-sm font-bold text-slate-800">{s.name}</p>
                   <div className="text-right">
                     <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
-                      {s.action_count} acción{s.action_count === 1 ? '' : 'es'}
+                      {s.action_count} {s.action_count === 1 ? t('superAdmin.actionSingular') : t('superAdmin.actionPlural')}
                     </span>
                     <p className="text-[10px] text-slate-400 mt-1">
-                      {new Date(s.last_action_at).toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(s.last_action_at).toLocaleTimeString(language === 'es' ? 'es-PA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
