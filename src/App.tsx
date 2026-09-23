@@ -86,16 +86,20 @@ export default function App() {
   // casos son gente que YA es del colegio, no un visitante nuevo.
   if (!session) {
     return (
-      <>
+      <LanguageProvider>
         <Login />
-      </>
+      </LanguageProvider>
     );
   }
 
   // Session came from an invite or password-reset link: prompt for a
   // password before showing the normal dashboard.
   if (authRedirectType === 'invite' || authRedirectType === 'recovery') {
-    return <SetPassword type={authRedirectType} onDone={clearAuthRedirectType} />;
+    return (
+      <LanguageProvider>
+        <SetPassword type={authRedirectType} onDone={clearAuthRedirectType} />
+      </LanguageProvider>
+    );
   }
 
   // Hay sesión pero no se pudo cargar el perfil (fallo de red al consultar

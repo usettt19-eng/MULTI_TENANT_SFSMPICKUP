@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, Lock, Loader2 } from 'lucide-react';
+import { Shield, Lock, Loader2, Globe } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SetPasswordProps {
   type: string; // 'invite' | 'recovery'
@@ -8,6 +9,7 @@ interface SetPasswordProps {
 }
 
 export function SetPassword({ type, onDone }: SetPasswordProps) {
+  const { t, language, setLanguage } = useLanguage();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,11 +22,11 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
     setError(null);
 
     if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+      setError(t('setPassword.minLengthError'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
+      setError(t('setPassword.mismatchError'));
       return;
     }
 
@@ -34,7 +36,7 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
       if (updateError) throw updateError;
       onDone();
     } catch (err: any) {
-      setError(err?.message || 'No se pudo guardar la contraseña.');
+      setError(err?.message || t('setPassword.saveFailedError'));
     } finally {
       setLoading(false);
     }
@@ -42,6 +44,15 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-6 px-4 sm:py-12 sm:px-6 lg:px-8 font-body relative">
+      <button
+        type="button"
+        onClick={() => setLanguage(language === 'es' ? 'en' : 'es', { manual: true })}
+        title={t('login.languageToggleTitle')}
+        className="absolute top-4 right-4 sm:top-8 sm:right-8 z-50 flex items-center gap-1.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm transition-colors text-[10px] sm:text-xs"
+      >
+        <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        {language === 'es' ? 'ES' : 'EN'}
+      </button>
       <div className="sm:mx-auto sm:w-full sm:max-w-md animate-in slide-in-from-top-10 duration-700">
         <div className="flex justify-center mb-6 sm:mb-8 relative">
           <div className="w-20 h-20 sm:w-24 sm:h-24 relative flex items-center justify-center p-2 rounded-2xl shadow-xl shadow-cyan-900/10 bg-white">
@@ -58,12 +69,12 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
         </div>
 
         <h2 className="text-center text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none mb-2 font-headline">
-          {isRecovery ? 'Restablece tu contraseña' : 'Crea tu contraseña'}
+          {isRecovery ? t('setPassword.titleRecovery') : t('setPassword.titleCreate')}
         </h2>
         <p className="text-center text-slate-500 font-medium text-xs sm:text-sm px-4">
           {isRecovery
-            ? 'Elige una nueva contraseña para tu cuenta.'
-            : 'Ya iniciaste sesión con tu invitación. Puedes crear una contraseña para entrar directo la próxima vez, o seguir usando el enlace de acceso por correo.'}
+            ? t('setPassword.subtitleRecovery')
+            : t('setPassword.subtitleCreate')}
         </p>
       </div>
 
@@ -79,7 +90,7 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
             )}
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nueva Contraseña</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('setPassword.newPasswordLabel')}</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Lock className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -91,13 +102,13 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-11 pr-5 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder={t('setPassword.minCharsPlaceholder')}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Confirmar Contraseña</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('setPassword.confirmPasswordLabel')}</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Lock className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -109,7 +120,7 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-11 pr-5 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-                  placeholder="Repite la contraseña"
+                  placeholder={t('setPassword.repeatPasswordPlaceholder')}
                 />
               </div>
             </div>
@@ -120,7 +131,7 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
                 disabled={loading}
                 className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'GUARDAR CONTRASEÑA'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('setPassword.saveBtn')}
               </button>
             </div>
 
@@ -131,7 +142,7 @@ export function SetPassword({ type, onDone }: SetPasswordProps) {
                   onClick={onDone}
                   className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  Omitir por ahora, seguiré usando el enlace de acceso
+                  {t('setPassword.skipForNow')}
                 </button>
               </div>
             )}

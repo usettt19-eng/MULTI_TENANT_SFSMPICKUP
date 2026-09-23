@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft, Instagram, Facebook } from 'lucide-react';
+import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft, Instagram, Facebook, Globe } from 'lucide-react';
 import { MobileAppBanner } from '../components/MobileAppBanner';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export function Login() {
+  const { t, language, setLanguage } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +25,7 @@ export function Login() {
 
     try {
       const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout: La conexión con el servidor tardó demasiado.")), 15000)
+        setTimeout(() => reject(new Error(t('login.timeoutError'))), 15000)
       );
 
       const result = await Promise.race([
@@ -39,7 +41,7 @@ export function Login() {
         // SignIn successful
       }
     } catch (err: any) {
-      setError(err?.message || "Error al iniciar sesión.");
+      setError(err?.message || t('login.loginError'));
     } finally {
       setLoading(false);
     }
@@ -59,8 +61,8 @@ export function Login() {
       setMagicLinkSent(true);
     } catch (err: any) {
       const message = /signups not allowed|user not found/i.test(err?.message || '')
-        ? 'Ese correo no está registrado en ningún colegio. Pide a tu administrador que te invite primero.'
-        : err?.message || 'No se pudo enviar el enlace de acceso.';
+        ? t('login.emailNotRegistered')
+        : err?.message || t('login.magicLinkSendFailed');
       setError(message);
     } finally {
       setLoading(false);
@@ -79,7 +81,7 @@ export function Login() {
       if (resetError) throw resetError;
       setResetSent(true);
     } catch (err: any) {
-      setError(err?.message || 'No se pudo enviar el enlace de restablecimiento.');
+      setError(err?.message || t('login.resetLinkSendFailed'));
     } finally {
       setLoading(false);
     }
@@ -90,9 +92,18 @@ export function Login() {
       <div className="absolute top-4 left-4 sm:top-8 sm:left-8 z-50">
         <a href="/" className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors text-xs sm:text-sm">
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-          Volver al Inicio
+          {t('login.backToHome')}
         </a>
       </div>
+      <button
+        type="button"
+        onClick={() => setLanguage(language === 'es' ? 'en' : 'es', { manual: true })}
+        title={t('login.languageToggleTitle')}
+        className="absolute top-4 right-4 sm:top-8 sm:right-8 z-50 flex items-center gap-1.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm transition-colors text-[10px] sm:text-xs"
+      >
+        <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        {language === 'es' ? 'ES' : 'EN'}
+      </button>
       <div className="sm:mx-auto sm:w-full sm:max-w-md animate-in slide-in-from-top-10 duration-700 mt-12 sm:mt-0">
         <div className="flex justify-center mb-6 sm:mb-8 relative">
            <div className="w-20 h-20 sm:w-24 sm:h-24 relative flex items-center justify-center p-2 rounded-2xl shadow-xl shadow-cyan-900/10 bg-white">
@@ -113,12 +124,12 @@ export function Login() {
           Safe Smart<span className="text-cyan-600">PickUP</span>
         </h2>
         <p className="text-center text-slate-500 font-medium text-xs sm:text-sm px-4">
-          Gestión de entrega estudiantil segura
+          {t('login.tagline')}
         </p>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md mb-4">
-        <MobileAppBanner message="Usa Safe Smart Pickup desde la app para una mejor experiencia." />
+        <MobileAppBanner message={t('login.mobileAppBannerMessage')} />
       </div>
 
       <div className="mt-8 sm:mt-12 sm:mx-auto sm:w-full sm:max-w-md">
@@ -129,14 +140,14 @@ export function Login() {
             resetSent ? (
               <div className="space-y-6 animate-in fade-in duration-500 text-center">
                 <p className="text-sm text-slate-600 font-medium">
-                  Te enviamos un enlace a <span className="font-black text-slate-900">{email}</span> para restablecer tu contraseña. Revisa tu bandeja de entrada (y spam) y sigue el enlace.
+                  {t('login.resetSentPrefix')} <span className="font-black text-slate-900">{email}</span> {t('login.resetSentSuffix')}
                 </p>
                 <button
                   type="button"
                   onClick={() => { setShowForgotPassword(false); setResetSent(false); setError(null); }}
                   className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                  <ArrowLeft className="w-3.5 h-3.5" /> {t('login.backToLogin')}
                 </button>
               </div>
             ) : (
@@ -147,10 +158,10 @@ export function Login() {
                   </div>
                 )}
                 <p className="text-xs text-slate-500 font-medium">
-                  Te enviamos un enlace a tu correo para elegir una contraseña nueva.
+                  {t('login.forgotPasswordIntro')}
                 </p>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('login.emailLabel')}</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <UserIcon className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -171,7 +182,7 @@ export function Login() {
                     disabled={loading}
                     className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR ENLACE PARA ESTABLECER CONTRASEÑA'}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('login.sendSetPasswordLinkBtn')}
                   </button>
                 </div>
                 <div className="text-center pt-2">
@@ -180,7 +191,7 @@ export function Login() {
                     onClick={() => { setShowForgotPassword(false); setError(null); }}
                     className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                    <ArrowLeft className="w-3.5 h-3.5" /> {t('login.backToLogin')}
                   </button>
                 </div>
               </form>
@@ -189,14 +200,14 @@ export function Login() {
             magicLinkSent ? (
               <div className="space-y-6 animate-in fade-in duration-500 text-center">
                 <p className="text-sm text-slate-600 font-medium">
-                  Te enviamos un enlace de acceso a <span className="font-black text-slate-900">{email}</span>. Revisa tu bandeja de entrada (y spam) y sigue el enlace para entrar.
+                  {t('login.magicLinkSentPrefix')} <span className="font-black text-slate-900">{email}</span>. {t('login.magicLinkSentSuffix')}
                 </p>
                 <button
                   type="button"
                   onClick={() => { setShowMagicLink(false); setMagicLinkSent(false); setError(null); }}
                   className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                  <ArrowLeft className="w-3.5 h-3.5" /> {t('login.backToLogin')}
                 </button>
               </div>
             ) : (
@@ -207,10 +218,10 @@ export function Login() {
                   </div>
                 )}
                 <p className="text-xs text-slate-500 font-medium">
-                  Te enviamos un enlace a tu correo para entrar sin contraseña. Útil si tu cuenta fue creada por invitación del colegio.
+                  {t('login.magicLinkIntro')}
                 </p>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('login.emailLabel')}</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <UserIcon className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -231,7 +242,7 @@ export function Login() {
                     disabled={loading}
                     className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ENVIAR ENLACE DE ACCESO'}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('login.sendAccessLinkBtn')}
                   </button>
                 </div>
                 <div className="text-center pt-2">
@@ -240,7 +251,7 @@ export function Login() {
                     onClick={() => { setShowMagicLink(false); setError(null); }}
                     className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio de sesión
+                    <ArrowLeft className="w-3.5 h-3.5" /> {t('login.backToLogin')}
                   </button>
                 </div>
               </form>
@@ -254,7 +265,7 @@ export function Login() {
             )}
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('login.emailLabel')}</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <UserIcon className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -271,7 +282,7 @@ export function Login() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Contraseña</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{t('login.passwordLabel')}</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Lock className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -293,14 +304,14 @@ export function Login() {
                 disabled={loading}
                 className="w-full flex justify-center py-4 px-4 bg-primary text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:bg-primary-container active:scale-95 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'INGRESAR'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('login.loginBtn')}
               </button>
             </div>
 
             <div className="pt-3 space-y-2.5">
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">¿Problemas para entrar?</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">{t('login.troubleLoggingIn')}</span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
               <button
@@ -308,14 +319,14 @@ export function Login() {
                 onClick={() => { setShowMagicLink(true); setError(null); }}
                 className="block w-full text-center text-sm font-bold text-indigo-600 underline decoration-1 underline-offset-2 hover:text-indigo-800 transition-colors py-1"
               >
-                ¿No tienes contraseña? Pide un enlace de acceso
+                {t('login.requestAccessLinkPrompt')}
               </button>
               <button
                 type="button"
                 onClick={() => { setShowForgotPassword(true); setError(null); }}
                 className="block w-full text-center text-sm font-bold text-indigo-600 underline decoration-1 underline-offset-2 hover:text-indigo-800 transition-colors py-1"
               >
-                ¿No tienes contraseña o la olvidaste? Establécela aquí
+                {t('login.setPasswordPrompt')}
               </button>
             </div>
           </form>
