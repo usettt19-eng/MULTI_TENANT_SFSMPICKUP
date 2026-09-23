@@ -124,7 +124,7 @@ export function Statistics() {
         .eq('tenant_id', profile.tenant_id),
       supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true })
+        .select('additional_tutor_name')
         .eq('tenant_id', profile.tenant_id)
         .eq('role', 'parent'),
       supabase
@@ -142,9 +142,21 @@ export function Statistics() {
     setReplacementRequests(replacementsRes.data || []);
     setVisitors(visitorsRes.data || []);
     setForms(formsRes.data || []);
+    // Descarta los perfiles fantasma de rutas de bus (role='parent' con
+    // additional_tutor_name.is_bus_route) antes de contar — igual criterio
+    // que el conteo de "Parents" del dashboard operativo.
+    const isBusRoute = (p: { additional_tutor_name: string | null }) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_bus_route === true;
+      } catch {
+        return false;
+      }
+    };
+    const realParentsCount = (parentsCountRes.data || []).filter((p: any) => !isBusRoute(p)).length;
+
     setCommunity({
       totalStudents: studentsCountRes.count || 0,
-      totalParents: parentsCountRes.count || 0,
+      totalParents: realParentsCount,
     });
     const doorMap: Record<string, string> = {};
     (doorsRes.data || []).forEach((d: any) => { doorMap[d.id] = d.name; });

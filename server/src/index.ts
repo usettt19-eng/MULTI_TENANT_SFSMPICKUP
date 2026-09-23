@@ -404,7 +404,9 @@ app.get(
     for (const p of profiles.data ?? []) {
       if (!p.tenant_id || !stats[p.tenant_id]) continue;
       if (p.role === 'parent') {
-        stats[p.tenant_id].parents++;
+        // Mismo criterio que parentsActiveToday más arriba: las cuentas de
+        // rutas de bus son role='parent' pero no son familias reales.
+        if (!busRouteIds.has(p.id)) stats[p.tenant_id].parents++;
       } else if (p.role === 'admin') {
         const isFounder = !isStaffFlag(p);
         if (!isFounder) stats[p.tenant_id].staff++;
