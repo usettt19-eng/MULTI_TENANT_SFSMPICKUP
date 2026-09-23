@@ -572,13 +572,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
         <div className="bg-indigo-600 text-white px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top duration-500">
           <div className="flex items-center gap-3">
             <Activity className="w-5 h-5 animate-pulse shrink-0" />
-            <p className="text-xs font-bold uppercase tracking-widest">El sistema de anuncios por voz requiere activación manual</p>
+            <p className="text-xs font-bold uppercase tracking-widest">{t('dashboard.audioActivationBanner')}</p>
           </div>
           <button
             onClick={enableAudio}
             className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg shrink-0"
           >
-            Activar Altavoces
+            {t('dashboard.activateSpeakersBtn')}
           </button>
         </div>
       )}
@@ -622,17 +622,17 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                   href={receptionHelpLanguage === 'es' ? '/manual-recepcion.html' : '/reception-guide.html'}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Ayuda: cómo usar la app en recepción / puerta principal"
+                  title={t('dashboard.helpBtnTitle')}
                   className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
                 >
-                  <HelpCircle className="w-4 h-4" /> Ayuda
+                  <HelpCircle className="w-4 h-4" /> {t('dashboard.helpBtn')}
                 </a>
               )}
               <button
                 onClick={() => setShowDailyReportModal(true)}
                 className="flex items-center justify-center gap-2 bg-[#1e293b] hover:bg-[#334155] text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
               >
-                <FileBarChart className="w-4 h-4" /> Reporte del Día
+                <FileBarChart className="w-4 h-4" /> {t('dashboard.dailyReportBtn')}
               </button>
             </div>
           </div>

@@ -57,6 +57,11 @@ export const translations = {
 
     // Dashboard
     'dashboard.title': 'Operations Dashboard',
+    'dashboard.audioActivationBanner': 'The voice announcement system requires manual activation',
+    'dashboard.activateSpeakersBtn': 'Activate Speakers',
+    'dashboard.helpBtn': 'Help',
+    'dashboard.helpBtnTitle': 'Help: how to use the app at front desk / main gate',
+    'dashboard.dailyReportBtn': "Daily Report",
     'dashboard.urgentAlert': 'Urgent Health Alert',
     'dashboard.acknowledge': 'Acknowledge',
     'dashboard.liveQueue': 'Live Pickup Queue',
@@ -838,6 +843,11 @@ export const translations = {
 
     // Dashboard
     'dashboard.title': 'Panel de Operaciones',
+    'dashboard.audioActivationBanner': 'El sistema de anuncios por voz requiere activación manual',
+    'dashboard.activateSpeakersBtn': 'Activar Altavoces',
+    'dashboard.helpBtn': 'Ayuda',
+    'dashboard.helpBtnTitle': 'Ayuda: cómo usar la app en recepción / puerta principal',
+    'dashboard.dailyReportBtn': 'Reporte del Día',
     'dashboard.urgentAlert': 'Alerta de Salud Urgente',
     'dashboard.acknowledge': 'Reconocer',
     'dashboard.liveQueue': 'Cola de Recogida en Vivo',
