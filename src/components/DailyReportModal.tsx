@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { apiJson } from '../lib/apiFetch';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   X, FileBarChart, Loader2, Download, Clock, Users, Car, Footprints,
   ShieldCheck, MessageSquare, FileEdit, AlertTriangle, History, UserX, UserCog, Sunrise,
@@ -31,6 +32,7 @@ interface DailyReportModalProps {
  */
 export function DailyReportModal({ onClose }: DailyReportModalProps) {
   const { profile } = useAuth() as any;
+  const { t, language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [schoolName, setSchoolName] = useState('');
@@ -42,7 +44,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
   // cambiar a cualquier día anterior para sacar el reporte de esa fecha.
   const [selectedDate, setSelectedDate] = useState(() => toDateOnlyValue(new Date()));
 
-  const dayLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('es', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const dayLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString(language === 'es' ? 'es' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   useEffect(() => {
     if (!profile?.tenant_id || !selectedDate) return;
@@ -178,7 +180,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         .order('arrived_at', { ascending: true }),
     ]);
 
-    setSchoolName(school?.school_name || 'Colegio');
+    setSchoolName(school?.school_name || t('dailyReport.schoolFallback'));
 
     const completedWithDuration = (pickupsCompleted || []).filter((p: any) => p.announced_at && p.completed_at);
     const avgMinutes = completedWithDuration.length > 0
@@ -222,13 +224,13 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     const { data: staffProfiles } = allStaffIds.length > 0
       ? await supabase.from('profiles').select('id, first_name, last_name').in('id', allStaffIds)
       : { data: [] as any[] };
-    const staffNameById = new Map((staffProfiles || []).map((s: any) => [s.id, `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Sin nombre']));
+    const staffNameById = new Map((staffProfiles || []).map((s: any) => [s.id, `${s.first_name || ''} ${s.last_name || ''}`.trim() || t('dailyReport.noName')]));
 
     const pickupsUnauthorized = (pickupsUnauthorizedRaw || []).map((p: any) => {
       const grade = p.student?.grade || '';
       const section = p.student?.section || '';
       const staffIds = grade ? (staffByGradeSection.get(`${grade}::${section}`) || []) : [];
-      const staffNames = staffIds.map((id) => staffNameById.get(id) || 'Sin nombre');
+      const staffNames = staffIds.map((id) => staffNameById.get(id) || t('dailyReport.noName'));
       return { ...p, responsibleStaffNames: staffNames };
     });
 
@@ -237,7 +239,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     // cuenta aparte, como "Sin asignación", en vez de desaparecer del total.
     const unauthorizedByStaffMap = new Map<string, number>();
     pickupsUnauthorized.forEach((p: any) => {
-      const names = p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames : ['Sin asignación'];
+      const names = p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames : [t('dailyReport.noAssignment')];
       names.forEach((name: string) => unauthorizedByStaffMap.set(name, (unauthorizedByStaffMap.get(name) || 0) + 1));
     });
     const unauthorizedByStaff = Array.from(unauthorizedByStaffMap.entries())
@@ -263,7 +265,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         ])
       : [{ data: [] as any[] }, { data: [] as any[] }];
     const arrivalParentNameById = new Map(
-      (arrivalParents || []).map((p: any) => [p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Sin nombre']),
+      (arrivalParents || []).map((p: any) => [p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || t('dailyReport.noName')]),
     );
     const arrivalStudentsByParent = new Map<string, any[]>();
     (arrivalLinks || []).forEach((l: any) => {
@@ -273,7 +275,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     });
     const morningArrivals: any[] = [];
     (morningArrivalsRaw || []).forEach((a: any) => {
-      const parentName = arrivalParentNameById.get(a.parent_id) || 'Sin nombre';
+      const parentName = arrivalParentNameById.get(a.parent_id) || t('dailyReport.noName');
       const students = arrivalStudentsByParent.get(a.parent_id) || [];
       if (students.length === 0) {
         morningArrivals.push({ studentName: '—', grade: '', section: '', parentName, arrivedAt: a.arrived_at });
@@ -328,7 +330,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—');
 
     doc.setFontSize(16);
-    doc.text(`Reporte del Día — ${schoolName}`, 14, 16);
+    doc.text(t('dailyReport.pdf.titleTemplate').replace('{schoolName}', schoolName), 14, 16);
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1), 14, 23);
@@ -336,22 +338,22 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
 
     autoTable(doc, {
       startY: 30,
-      head: [['Resumen del día', 'Cifra']],
+      head: [[t('dailyReport.pdf.summaryHeaderLabel'), t('dailyReport.pdf.summaryHeaderValue')]],
       body: [
-        ['Recogidas anunciadas', String(summary.pickupsAnnounced)],
-        ['Recogidas completadas', String(summary.pickupsCompleted)],
-        ['Solicitudes de salida sin autorizar', String(summary.unauthorizedPickups)],
-        ['Confirmadas sin GPS', String(summary.noGpsCount)],
-        ['Tiempo promedio de recogida', summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'],
-        ['Llegadas matutinas', String(summary.morningArrivals)],
-        ['Salidas Autónomas', String(summary.selfDismissals)],
-        ['Visitantes registrados', String(summary.visitors)],
-        ['Solicitudes de reemplazo (pendientes / aprobadas / rechazadas)', `${summary.replacementRequests.pending} / ${summary.replacementRequests.approved} / ${summary.replacementRequests.rejected}`],
-        ['Incidentes reportados', String(summary.incidents)],
-        ['Alertas de salud', String(summary.healthAlerts)],
-        ['Respuestas a formularios/avisos', String(summary.formResponses)],
-        ['Padres pendientes de loguearse (a priorizar)', String(summary.pendingLoginParents)],
-        ['Padres inactivos hoy (ya usaron la app antes, sin cobertura hoy)', String(summary.inactiveTodayParents)],
+        [t('dailyReport.pdf.rowAnnounced'), String(summary.pickupsAnnounced)],
+        [t('dailyReport.pdf.rowCompleted'), String(summary.pickupsCompleted)],
+        [t('dailyReport.pdf.rowUnauthorized'), String(summary.unauthorizedPickups)],
+        [t('dailyReport.pdf.rowNoGps'), String(summary.noGpsCount)],
+        [t('dailyReport.pdf.rowAvgTime'), summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'],
+        [t('dailyReport.pdf.rowMorningArrivals'), String(summary.morningArrivals)],
+        [t('dailyReport.pdf.rowSelfDismissals'), String(summary.selfDismissals)],
+        [t('dailyReport.pdf.rowVisitors'), String(summary.visitors)],
+        [t('dailyReport.pdf.rowReplacementRequests'), `${summary.replacementRequests.pending} / ${summary.replacementRequests.approved} / ${summary.replacementRequests.rejected}`],
+        [t('dailyReport.pdf.rowIncidents'), String(summary.incidents)],
+        [t('dailyReport.pdf.rowHealthAlerts'), String(summary.healthAlerts)],
+        [t('dailyReport.pdf.rowFormResponses'), String(summary.formResponses)],
+        [t('dailyReport.pdf.rowPendingLoginParents'), String(summary.pendingLoginParents)],
+        [t('dailyReport.pdf.rowInactiveTodayParents'), String(summary.inactiveTodayParents)],
       ],
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59] },
@@ -361,10 +363,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
 
     if (annexes.pickups.length > 0) {
       doc.setFontSize(12);
-      doc.text('Anexo 1 — Recogidas del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex1Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Alumno', 'Grado · Sección', 'Retirado por', 'Anunciado', 'Completado']],
+        head: [[t('dailyReport.pdf.colStudent'), t('dailyReport.pdf.colGradeSection'), t('dailyReport.pdf.colPickedUpBy'), t('dailyReport.pdf.colAnnounced'), t('dailyReport.pdf.colCompleted')]],
         body: annexes.pickups.map((p: any) => [
           `${p.student?.first_name || ''} ${p.student?.last_name || ''}`.trim(),
           `${p.student?.grade || '—'}${p.student?.section ? ' · ' + p.student.section : ''}`,
@@ -381,14 +383,14 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.selfDismissals.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 2 — Salidas Autónomas del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex2Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Alumno', 'Grado · Sección', 'Método', 'Hora']],
+        head: [[t('dailyReport.pdf.colStudent'), t('dailyReport.pdf.colGradeSection'), t('dailyReport.pdf.colMethod'), t('dailyReport.pdf.colTime')]],
         body: annexes.selfDismissals.map((s: any) => [
           `${s.student?.first_name || ''} ${s.student?.last_name || ''}`.trim(),
           `${s.student?.grade || '—'}${s.student?.section ? ' · ' + s.student.section : ''}`,
-          s.method === 'qr' ? 'QR' : 'Facial',
+          s.method === 'qr' ? 'QR' : t('dailyReport.pdf.methodFacial'),
           fmtTime(s.created_at),
         ]),
         theme: 'striped',
@@ -400,10 +402,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.visitors.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 3 — Visitantes del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex3Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Visitante', 'Empresa', 'Visita a', 'Motivo', 'Entrada', 'Salida']],
+        head: [[t('dailyReport.pdf.colVisitor'), t('dailyReport.pdf.colCompany'), t('dailyReport.pdf.colVisiting'), t('dailyReport.pdf.colReason'), t('dailyReport.pdf.colCheckIn'), t('dailyReport.pdf.colCheckOut')]],
         body: annexes.visitors.map((v: any) => [
           v.visitor_name, v.company || '—', v.visiting_whom, v.reason, fmtTime(v.check_in_time), fmtTime(v.check_out_time),
         ]),
@@ -416,10 +418,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.replacementRequests.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 4 — Solicitudes de reemplazo del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex4Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Nombre del reemplazo', 'Estado', 'Hora']],
+        head: [[t('dailyReport.pdf.colReplacementName'), t('dailyReport.pdf.colStatus'), t('dailyReport.pdf.colTime')]],
         body: annexes.replacementRequests.map((r: any) => [r.replacement_name, r.status, fmtTime(r.created_at)]),
         theme: 'striped',
         styles: { fontSize: 8 },
@@ -430,10 +432,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.incidents.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 5 — Incidentes del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex5Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Alumno', 'Tipo', 'Descripción', 'Hora']],
+        head: [[t('dailyReport.pdf.colStudent'), t('dailyReport.pdf.colType'), t('dailyReport.pdf.colDescription'), t('dailyReport.pdf.colTime')]],
         body: annexes.incidents.map((i: any) => [
           `${i.student?.first_name || ''} ${i.student?.last_name || ''}`.trim(),
           i.type || '—',
@@ -449,15 +451,15 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.unauthorizedPickups.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 6 — Solicitudes de salida sin autorizar, y quién debía hacerlo', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex6Title'), 14, nextY);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Alumno', 'Grado · Sección', 'Solicitado', 'Responsable']],
+        head: [[t('dailyReport.pdf.colStudent'), t('dailyReport.pdf.colGradeSection'), t('dailyReport.pdf.colRequested'), t('dailyReport.pdf.colResponsible')]],
         body: annexes.unauthorizedPickups.map((p: any) => [
           `${p.student?.first_name || ''} ${p.student?.last_name || ''}`.trim(),
           `${p.student?.grade || '—'}${p.student?.section ? ' · ' + p.student.section : ''}`,
           fmtTime(p.announced_at),
-          p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames.join(', ') : 'Sin asignación',
+          p.responsibleStaffNames.length > 0 ? p.responsibleStaffNames.join(', ') : t('dailyReport.noAssignment'),
         ]),
         theme: 'striped',
         styles: { fontSize: 8 },
@@ -467,10 +469,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       if (summary.unauthorizedByStaff.length > 0) {
         if (nextY > 260) { doc.addPage(); nextY = 16; }
         doc.setFontSize(11);
-        doc.text('Resumen por persona responsable', 14, nextY);
+        doc.text(t('dailyReport.pdf.byResponsibleTitle'), 14, nextY);
         autoTable(doc, {
           startY: nextY + 4,
-          head: [['Responsable', 'Sin autorizar']],
+          head: [[t('dailyReport.pdf.colResponsible'), t('dailyReport.pdf.colUnauthorized')]],
           body: summary.unauthorizedByStaff.map((s: any) => [s.name, String(s.count)]),
           theme: 'striped',
           styles: { fontSize: 8 },
@@ -481,14 +483,14 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.pendingLoginParents.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 7 — Padres pendientes de loguearse (a priorizar)', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex7Title'), 14, nextY);
       doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text('Excluye a quienes ya tienen otro padre/tutor logueado para el mismo alumno, a quienes tienen un hijo en bus escolar, a quienes tienen un hijo con Salida Autónoma autorizada, y a quienes tienen un hijo con Pool Day activo hoy.', 14, nextY + 5);
+      doc.text(t('dailyReport.pdf.annex7Explainer'), 14, nextY + 5);
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
-        head: [['Padre/tutor', 'Correo', 'Grado · Sección']],
+        head: [[t('dailyReport.pdf.colParentGuardian'), t('dailyReport.pdf.colEmail'), t('dailyReport.pdf.colGradeSection')]],
         body: annexes.pendingLoginParents.map((p: any) => [
           `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
           p.email || '—',
@@ -503,14 +505,14 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.inactiveTodayParents.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 8 — Padres inactivos hoy (ya usaron la app antes)', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex8Title'), 14, nextY);
       doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text('Ya se loguearon alguna vez pero no usaron la app hoy — excluye a quienes hoy sí tuvieron a otro padre activo para el mismo alumno, con un hijo en bus, con Salida Autónoma autorizada, o con Pool Day activo hoy.', 14, nextY + 5);
+      doc.text(t('dailyReport.pdf.annex8Explainer'), 14, nextY + 5);
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
-        head: [['Padre/tutor', 'Correo', 'Grado · Sección']],
+        head: [[t('dailyReport.pdf.colParentGuardian'), t('dailyReport.pdf.colEmail'), t('dailyReport.pdf.colGradeSection')]],
         body: annexes.inactiveTodayParents.map((p: any) => [
           `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
           p.email || '—',
@@ -525,14 +527,14 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
     if (annexes.morningArrivals.length > 0) {
       if (nextY > 260) { doc.addPage(); nextY = 16; }
       doc.setFontSize(12);
-      doc.text('Anexo 9 — Llegadas matutinas del día', 14, nextY);
+      doc.text(t('dailyReport.pdf.annex9Title'), 14, nextY);
       doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text('Padres que dejaron a sus hijos en el colegio esta mañana (una fila por cada hijo matriculado).', 14, nextY + 5);
+      doc.text(t('dailyReport.pdf.annex9Explainer'), 14, nextY + 5);
       doc.setTextColor(0);
       autoTable(doc, {
         startY: nextY + 9,
-        head: [['Alumno', 'Grado · Sección', 'Padre/Tutor', 'Hora']],
+        head: [[t('dailyReport.pdf.colStudent'), t('dailyReport.pdf.colGradeSection'), t('dailyReport.pdf.colParentGuardian'), t('dailyReport.pdf.colTime')]],
         body: annexes.morningArrivals.map((a: any) => [
           a.studentName,
           `${a.grade || '—'}${a.section ? ' · ' + a.section : ''}`,
@@ -583,7 +585,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       await fetchPastReports();
     } catch (e: any) {
       console.error('Error generando el reporte del día:', e);
-      alert('No se pudo generar/guardar el reporte: ' + (e.message || e));
+      alert(t('dailyReport.alertGenerateFailed') + (e.message || e));
     }
     setGenerating(false);
   };
@@ -599,7 +601,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       link.click();
     } catch (e) {
       console.error('Error descargando reporte guardado:', e);
-      alert('No se pudo descargar ese reporte.');
+      alert(t('dailyReport.alertDownloadFailed'));
     }
     setDownloadingId(null);
   };
@@ -620,7 +622,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
         <div className="p-6 border-b border-slate-100 flex justify-between items-start gap-4 sticky top-0 bg-white z-10">
           <div>
             <h2 className="text-xl font-black text-[#1e293b] flex items-center gap-2">
-              <FileBarChart className="w-5 h-5 text-indigo-600" /> Reporte del Día
+              <FileBarChart className="w-5 h-5 text-indigo-600" /> {t('dailyReport.title')}
             </h2>
             <p className="text-sm text-slate-500 font-medium capitalize">{dayLabel}</p>
           </div>
@@ -644,31 +646,31 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
           ) : (
             <>
               <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Vista Preliminar</h3>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">{t('dailyReport.previewTitle')}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <StatCard icon={Clock} label="Recogidas anunciadas" value={summary.pickupsAnnounced} />
-                  <StatCard icon={Car} label="Recogidas completadas" value={summary.pickupsCompleted} />
-                  <StatCard icon={UserX} label="Salidas sin autorizar" value={summary.unauthorizedPickups} warn={summary.unauthorizedPickups > 0} />
-                  <StatCard icon={ShieldCheck} label="Confirmadas sin GPS" value={summary.noGpsCount} />
-                  <StatCard icon={Clock} label="Tiempo prom. de recogida" value={summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'} />
-                  <StatCard icon={Sunrise} label="Llegadas matutinas" value={summary.morningArrivals} />
-                  <StatCard icon={Footprints} label="Salidas Autónomas" value={summary.selfDismissals} />
-                  <StatCard icon={Users} label="Visitantes" value={summary.visitors} />
-                  <StatCard icon={MessageSquare} label="Solicitudes de reemplazo" value={summary.replacementRequests.pending + summary.replacementRequests.approved + summary.replacementRequests.rejected} />
-                  <StatCard icon={AlertTriangle} label="Incidentes" value={summary.incidents} />
-                  <StatCard icon={FileEdit} label="Respuestas a formularios" value={summary.formResponses} />
-                  <StatCard icon={UserCog} label="Padres por loguearse" value={summary.pendingLoginParents} warn={summary.pendingLoginParents > 0} />
-                  <StatCard icon={UserCog} label="Padres inactivos hoy" value={summary.inactiveTodayParents} warn={summary.inactiveTodayParents > 0} />
+                  <StatCard icon={Clock} label={t('dailyReport.statAnnounced')} value={summary.pickupsAnnounced} />
+                  <StatCard icon={Car} label={t('dailyReport.statCompleted')} value={summary.pickupsCompleted} />
+                  <StatCard icon={UserX} label={t('dailyReport.statUnauthorized')} value={summary.unauthorizedPickups} warn={summary.unauthorizedPickups > 0} />
+                  <StatCard icon={ShieldCheck} label={t('dailyReport.statNoGps')} value={summary.noGpsCount} />
+                  <StatCard icon={Clock} label={t('dailyReport.statAvgTime')} value={summary.avgMinutes !== null ? `${summary.avgMinutes} min` : '—'} />
+                  <StatCard icon={Sunrise} label={t('dailyReport.statMorningArrivals')} value={summary.morningArrivals} />
+                  <StatCard icon={Footprints} label={t('dailyReport.statSelfDismissals')} value={summary.selfDismissals} />
+                  <StatCard icon={Users} label={t('dailyReport.statVisitors')} value={summary.visitors} />
+                  <StatCard icon={MessageSquare} label={t('dailyReport.statReplacementRequests')} value={summary.replacementRequests.pending + summary.replacementRequests.approved + summary.replacementRequests.rejected} />
+                  <StatCard icon={AlertTriangle} label={t('dailyReport.statIncidents')} value={summary.incidents} />
+                  <StatCard icon={FileEdit} label={t('dailyReport.statFormResponses')} value={summary.formResponses} />
+                  <StatCard icon={UserCog} label={t('dailyReport.statPendingLoginParents')} value={summary.pendingLoginParents} warn={summary.pendingLoginParents > 0} />
+                  <StatCard icon={UserCog} label={t('dailyReport.statInactiveTodayParents')} value={summary.inactiveTodayParents} warn={summary.inactiveTodayParents > 0} />
                 </div>
               </div>
 
               {annexes.pendingLoginParents.length > 0 && (
                 <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
                   <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
-                    <UserCog className="w-3.5 h-3.5" /> Padres pendientes de loguearse ({annexes.pendingLoginParents.length})
+                    <UserCog className="w-3.5 h-3.5" /> {t('dailyReport.pendingLoginParentsTitleTemplate').replace('{count}', String(annexes.pendingLoginParents.length))}
                   </h3>
                   <p className="text-[10px] text-amber-600 font-medium mb-3">
-                    Ya se excluyó a quienes tienen a otro padre logueado para el mismo alumno, a quienes tienen un hijo en bus, a quienes tienen un hijo con Salida Autónoma autorizada, y a quienes tienen un hijo con Pool Day activo hoy.
+                    {t('dailyReport.pendingLoginParentsExplainer')}
                   </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {annexes.pendingLoginParents.map((p: any) => (
@@ -685,10 +687,10 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
               {annexes.inactiveTodayParents.length > 0 && (
                 <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
                   <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
-                    <UserCog className="w-3.5 h-3.5" /> Padres inactivos hoy ({annexes.inactiveTodayParents.length})
+                    <UserCog className="w-3.5 h-3.5" /> {t('dailyReport.inactiveTodayParentsTitleTemplate').replace('{count}', String(annexes.inactiveTodayParents.length))}
                   </h3>
                   <p className="text-[10px] text-orange-600 font-medium mb-3">
-                    Ya usaron la app alguna vez, pero no hoy — y hoy tampoco la usó el otro padre del mismo alumno; no va en bus, no tiene Salida Autónoma autorizada, ni tiene Pool Day activo hoy.
+                    {t('dailyReport.inactiveTodayParentsExplainer')}
                   </p>
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {annexes.inactiveTodayParents.map((p: any) => (
@@ -705,7 +707,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
               {summary.unauthorizedByStaff.length > 0 && (
                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
                   <h3 className="text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5">
-                    <UserX className="w-3.5 h-3.5" /> Sin autorizar, por responsable
+                    <UserX className="w-3.5 h-3.5" /> {t('dailyReport.byResponsibleTitle')}
                   </h3>
                   <div className="space-y-1.5">
                     {summary.unauthorizedByStaff.map((s: any) => (
@@ -719,9 +721,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
               )}
 
               <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-700 font-medium">
-                El PDF incluirá este resumen más los anexos con el detalle del día: recogidas, salidas
-                autónomas, visitantes, solicitudes de reemplazo, incidentes, y las salidas sin autorizar
-                con quién debía hacerlo.
+                {t('dailyReport.pdfIncludesNote')}
               </div>
 
               <button
@@ -730,13 +730,13 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                {generating ? 'Generando...' : 'Generar, Guardar y Descargar PDF'}
+                {generating ? t('dailyReport.generatingBtn') : t('dailyReport.generateBtn')}
               </button>
 
               {pastReports.length > 0 && (
                 <div>
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5" /> Reportes Guardados
+                    <History className="w-3.5 h-3.5" /> {t('dailyReport.savedReportsTitle')}
                   </h3>
                   <div className="space-y-2">
                     {pastReports.map(r => (
@@ -753,7 +753,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
                           className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold px-3 py-2 rounded-lg text-xs disabled:opacity-50"
                         >
                           {downloadingId === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          Descargar
+                          {t('dailyReport.downloadBtn')}
                         </button>
                       </div>
                     ))}
