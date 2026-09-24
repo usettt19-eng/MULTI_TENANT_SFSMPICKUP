@@ -146,44 +146,75 @@ export function SmartCheckIn() {
     setIsQrScannerActive(true);
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
-      
+
       // Small delay to ensure the DOM element is rendered
       setTimeout(async () => {
-        if (!html5QrCode.current) {
-          html5QrCode.current = new Html5Qrcode("qr-reader");
-        }
-        
-        await html5QrCode.current.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            // Caja fija en px: si el contenedor real termina siendo más chico
-            // que 200x200 (pantallas angostas, o el layout no terminó de
-            // asentarse en los 100ms de espera), html5-qrcode puede ignorar
-            // la caja o calcular mal la región de escaneo y nunca detecta
-            // nada aunque la cámara se vea bien. Con una función se recalcula
-            // contra el tamaño real del viewfinder en cada intento.
-            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-              const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
-              return { width: edge, height: edge };
-            },
-            // Sin esto, el navegador suele entregar video en baja resolución
-            // (ej. 640x480), lo que hace casi imposible decodificar un QR
-            // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
-            videoConstraints: {
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          async (decodedText: string) => {
-            // Handle success
-            handleQrSuccess(decodedText);
-          },
-          (errorMessage: string) => {
-            // Handle error (ignore usually)
+        try {
+          if (!html5QrCode.current) {
+            html5QrCode.current = new Html5Qrcode("qr-reader");
           }
-        );
+
+          // En una laptop (ej. Mac) solo hay una cámara, frontal — pedir
+          // facingMode: 'environment' ahí deja a getUserMedia intentando
+          // encontrar una cámara trasera que no existe, y no todos los
+          // navegadores caen de vuelta a la única cámara disponible: la
+          // pantalla se queda pegada esperando el video, sin cámara ni
+          // error visible. Se listan las cámaras reales primero — con una
+          // sola, se usa su id directo en vez del selector por facingMode.
+          let cameraSelector: any = { facingMode: 'environment' };
+          try {
+            const cameras = await Html5Qrcode.getCameras();
+            if (cameras.length === 1) {
+              cameraSelector = cameras[0].id;
+            }
+          } catch (listErr) {
+            console.error('No se pudieron listar las cámaras, se sigue con facingMode:', listErr);
+          }
+
+          const startPromise = html5QrCode.current.start(
+            cameraSelector,
+            {
+              fps: 10,
+              // Caja fija en px: si el contenedor real termina siendo más chico
+              // que 200x200 (pantallas angostas, o el layout no terminó de
+              // asentarse en los 100ms de espera), html5-qrcode puede ignorar
+              // la caja o calcular mal la región de escaneo y nunca detecta
+              // nada aunque la cámara se vea bien. Con una función se recalcula
+              // contra el tamaño real del viewfinder en cada intento.
+              qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+                return { width: edge, height: edge };
+              },
+              // Sin esto, el navegador suele entregar video en baja resolución
+              // (ej. 640x480), lo que hace casi imposible decodificar un QR
+              // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
+              videoConstraints: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+            },
+            async (decodedText: string) => {
+              // Handle success
+              handleQrSuccess(decodedText);
+            },
+            (errorMessage: string) => {
+              // Handle error (ignore usually)
+            }
+          );
+
+          // Salvavidas: si getUserMedia se queda esperando indefinidamente
+          // (ej. una cámara que el navegador no logra abrir), la pantalla no
+          // debe quedar pegada para siempre sin ningún aviso ni forma de
+          // reintentar.
+          const timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
+          );
+          await Promise.race([startPromise, timeout]);
+        } catch (err) {
+          console.error("Error starting QR scanner", err);
+          setStatusMsg("No se pudo iniciar la cámara. Intenta de nuevo.");
+          setIsQrScannerActive(false);
+        }
       }, 100);
     } catch (err) {
       console.error("Error starting QR scanner", err);

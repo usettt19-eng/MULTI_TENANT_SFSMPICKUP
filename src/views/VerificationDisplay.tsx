@@ -293,8 +293,26 @@ export function VerificationDisplay() {
           if (!html5QrCodeRef.current) {
             html5QrCodeRef.current = new Html5Qrcode('qr-reader-monitor');
           }
-          await html5QrCodeRef.current.start(
-            { facingMode: 'environment' },
+
+          // En una laptop (ej. Mac) solo hay una cámara, frontal — pedir
+          // facingMode: 'environment' ahí deja a getUserMedia esperando una
+          // cámara trasera que no existe, y no todos los navegadores caen de
+          // vuelta a la única cámara disponible: la pantalla queda pegada
+          // esperando el video, sin cámara ni error visible (ver mismo fix
+          // en SmartCheckIn.tsx). Se listan las cámaras reales primero — con
+          // una sola, se usa su id directo en vez del selector por facingMode.
+          let cameraSelector: any = { facingMode: 'environment' };
+          try {
+            const cameras = await Html5Qrcode.getCameras();
+            if (cameras.length === 1) {
+              cameraSelector = cameras[0].id;
+            }
+          } catch (listErr) {
+            console.error('No se pudieron listar las cámaras, se sigue con facingMode:', listErr);
+          }
+
+          const startPromise = html5QrCodeRef.current.start(
+            cameraSelector,
             {
               fps: 10,
               qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
@@ -302,7 +320,6 @@ export function VerificationDisplay() {
                 return { width: edge, height: edge };
               },
               videoConstraints: {
-                facingMode: 'environment',
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
               },
@@ -310,6 +327,13 @@ export function VerificationDisplay() {
             (decodedText: string) => handleQrDecoded(decodedText),
             () => {} // errores de "no encontrado todavía" por cuadro — se ignoran
           );
+
+          // Salvavidas: si getUserMedia se queda esperando indefinidamente,
+          // no dejar la pantalla pegada para siempre sin ningún aviso.
+          const timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
+          );
+          await Promise.race([startPromise, timeout]);
         } catch (err) {
           console.error('Error starting QR camera', err);
           setQrScanMessage(t('monitor.qrCameraError'));
