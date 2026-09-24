@@ -2,41 +2,60 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-22 (**Retiro Anticipado**: recepción retira a un alumno antes de lo
-normal desde Monitor Externo en un solo paso —avisa al encargado de salida
-del salón, excluye del bus si aplica, avisa al padre, y salta el límite de
-las 11am solo para ese alumno—; **fix**: el botón "Enviar" al autorizado de
-reemplazo no hacía nada en Android ni web móvil porque el enlace llevaba la
-foto embebida en base64 en la URL —ahora el enlace trae los datos del
-backend, confirmado funcionando—; botón de **Ayuda para recepción** en el
-Dashboard, enlazado al manual de recepción ya existente; **incidente
-resuelto** el 2026-09-21: la cuenta de AWS que hospeda Amazon SES se cerró
-por créditos agotados y rompió "Establecer contraseña"/invitaciones/magic
-link — parche de emergencia con Zoho SMTP aplicado, **pendiente reactivar
-AWS** antes de otra importación masiva de padres; landing page pública
-`/LandingPage` con SEO e indexación en Google ya confirmada, botón de
-"Anunciar llegada" por cada hijo con soporte de
-subgrupos —"¿cuáles salen juntos?"—, el Reporte del Día ahora también lista
-padres pendientes de loguearse y padres inactivos hoy por sección —excluyendo
-bus y Salida Autónoma—, las mismas alertas de login agregadas por salón en el
-dashboard junto con la proporción de salidas, sugerencia automática de PIN
-libre al registrar un padre, guía de padres actualizada, y el widget de
-Salida Autónoma ahora muestra el roster completo, no solo quién ya salió; la
-app de Android ya se publicó al track de producción de Play Store con el
-plugin nativo de voz incluido, feature "Hoy no va en bus" para excluir un
-alumno del anuncio automático de su ruta, setting de idioma de los avisos de
-voz por colegio —español/inglés/ambos— con su cadena de fixes en la app de
-padres, fix de seguridad de "Marcar como leído" que creaba autorizaciones de
-reemplazo falsas, autorización automática de salidas después de cierto
-horario, selección consciente de puerta obligatoria en el panel de padres
-antes de anunciar la llegada, enlaces de restablecer contraseña resaltados en
-el login, padres con hijos en dos colegios vía `parent_school_access`, fix de
-seguridad para que un reemplazo autorizado aplique solo a los hijos elegidos,
-métricas de "Staff/Padres Activos Hoy" basadas en actividad real en vez de
-login, Rutas de Bus completas —incluido login propio para el encargado de
-cada bus—, interruptor para apagar el bloqueo de emergencia por colegio, fix
-de Monitor Externo quedándose pegado en bloqueo activo, y selección de quién
-recibe la Alerta Discreta).
+2026-09-23 (**auditoría completa de traducción ES/EN**: 13 pantallas que
+quedaban parcial o totalmente en español fijo —Dashboard, Rutas de Bus,
+Bitácora del Sistema, Llegadas Diarias, Bitácora de Visitantes,
+Estadísticas, Constructor de Formularios, Reporte del Día (incluido el
+PDF), SuperAdminDashboard, banner de impersonación, y Login/SetPassword,
+que ganaron su propio selector de idioma porque se muestran antes de
+iniciar sesión— todas traducidas por completo, más el fix de que
+SuperAdminDashboard no tenía ninguna forma de cambiar de idioma pese a ya
+estar traducido; **fix**: el modal "¿Quiénes salen juntos?" no tenía
+scroll y bloqueaba a las rutas de bus con muchos alumnos para
+guardar su selección —ahora con scroll + botones "Seleccionar/Quitar
+todos"—; **fix**: el conteo de "Parents" en Dashboard/Estadísticas/
+SuperAdmin incluía las cuentas fantasma de rutas de bus; **fix**: la
+distancia al colegio quedaba pegada en un valor por defecto (ej. "4837m")
+si el GPS llegaba antes que la config del colegio, con filtro de
+precisión agregado; **fix**: `morning_arrivals` se duplicaba si el GPS
+titubeaba cerca del perímetro; Llegadas Matutinas sumadas al Reporte del
+Día; Salidas del Día ahora discrimina Salida Autónoma, no desaparece en
+salones 100% autónomos, y excluye Pool Day de las alertas de padres sin
+loguear/inactivos; PIN del padre siempre visible en su dashboard, no solo
+tras anunciar llegada; **Retiro Anticipado**: recepción retira a un
+alumno antes de lo normal desde Monitor Externo en un solo paso —avisa al
+encargado de salida del salón, excluye del bus si aplica, avisa al padre,
+y salta el límite de las 11am solo para ese alumno—; **fix**: el botón
+"Enviar" al autorizado de reemplazo no hacía nada en Android ni web móvil
+porque el enlace llevaba la foto embebida en base64 en la URL —ahora el
+enlace trae los datos del backend, confirmado funcionando—; botón de
+**Ayuda para recepción** en el Dashboard, enlazado al manual de recepción
+ya existente; **incidente resuelto** el 2026-09-21: la cuenta de AWS que
+hospeda Amazon SES se cerró por créditos agotados y rompió "Establecer
+contraseña"/invitaciones/magic link — parche de emergencia con Zoho SMTP
+aplicado, **pendiente reactivar AWS** antes de otra importación masiva de
+padres; landing page pública `/LandingPage` con SEO e indexación en
+Google ya confirmada, botón de "Anunciar llegada" por cada hijo con
+soporte de subgrupos —"¿cuáles salen juntos?"—, sugerencia automática de
+PIN libre al registrar un padre, guía de padres actualizada, y el widget
+de Salida Autónoma ahora muestra el roster completo, no solo quién ya
+salió; la app de Android ya se publicó al track de producción de Play
+Store con el plugin nativo de voz incluido (build más reciente disparado
+el 2026-09-23 con los fixes de GPS y del modal de bus), feature "Hoy no
+va en bus" para excluir un alumno del anuncio automático de su ruta,
+setting de idioma de los avisos de voz por colegio —español/inglés/
+ambos— con su cadena de fixes en la app de padres, fix de seguridad de
+"Marcar como leído" que creaba autorizaciones de reemplazo falsas,
+autorización automática de salidas después de cierto horario, selección
+consciente de puerta obligatoria en el panel de padres antes de anunciar
+la llegada, enlaces de restablecer contraseña resaltados en el login,
+padres con hijos en dos colegios vía `parent_school_access`, fix de
+seguridad para que un reemplazo autorizado aplique solo a los hijos
+elegidos, métricas de "Staff/Padres Activos Hoy" basadas en actividad
+real en vez de login, Rutas de Bus completas —incluido login propio para
+el encargado de cada bus—, interruptor para apagar el bloqueo de
+emergencia por colegio, fix de Monitor Externo quedándose pegado en
+bloqueo activo, y selección de quién recibe la Alerta Discreta).
 
 > Para el detalle de la auditoría de seguridad original y los pendientes técnicos
 > con su razonamiento, ver `DISENO-Y-AVANCE.md`. Para los pasos exactos de
@@ -2454,6 +2473,155 @@ secreto que hace falta, igual que el QR que se escanea en la puerta). Se
 sigue aceptando el formato viejo (`?qr=...`) para no romper enlaces ya
 compartidos antes de este fix. Confirmado funcionando en producción.
 
+### Fix: distancia al colegio pegada en un valor por defecto ("4837m" con el padre dentro del plantel) (2026-09-22)
+Varios colegios reportaron que la app mostraba una distancia fija (ej.
+"4837m de distancia") aunque el padre estuviera físicamente dentro del
+perímetro. Causa: carrera entre el GPS (nativo en Android vía
+`watchPosition`/ubicación en segundo plano, o web) y la carga asíncrona
+de `fetchSchoolSettings()` — si una lectura de GPS llegaba antes de que
+terminara de cargar la coordenada real del colegio, `setDistance`/
+`setIsInside` se calculaban de forma imperativa contra el estado
+por defecto (aún sin poblar) y ese valor quedaba pegado el resto de la
+sesión aunque `fetchSchoolSettings()` terminara después. Confirmado por
+las matemáticas: la distancia reportada coincidía casi exacto con la
+distancia entre la coordenada default y la real del colegio.
+- Se reemplazó el cálculo imperativo dentro de los callbacks de GPS por
+  una derivación reactiva (`useEffect` con `[parentPos, schoolPos,
+  schoolSettingsLoaded]`), así que la distancia siempre se recalcula
+  contra el valor más reciente de ambos lados, sin importar el orden en
+  que lleguen.
+- Se agregó un estado `schoolSettingsLoaded` y una pantalla de "Ubicando…"
+  mientras no hay todavía una lectura de GPS válida o la config del
+  colegio no cargó, en vez de mostrar un número (potencialmente
+  incorrecto) de inmediato.
+- Se agregó un filtro de precisión (`MAX_LOCATION_ACCURACY_METERS = 100`):
+  lecturas de GPS con `accuracy` peor a 100m se descartan, para no tomar
+  una decisión de "estoy dentro/fuera del perímetro" con una posición
+  poco confiable (pedido explícito: "pareciera que tendría que tomar
+  varias lecturas antes de decidir dónde está").
+- Confirmado que pasa igual en Android nativo y web; requiere un build
+  nuevo de la app Android para llegar a quienes ya la tienen instalada
+  (el JS se empaqueta en el APK al compilar, no llega con un deploy del
+  sitio web).
+
+### PIN del padre siempre visible en su dashboard (2026-09-22)
+Antes el PIN de 4 dígitos del padre (para que recepción lo identifique si
+falla el GPS, el QR o la app) solo aparecía después de anunciar la
+llegada, en la pantalla "Maestro Notificado". Se agregó una tarjeta fija
+en `ParentDashboard.tsx`, junto al interruptor de ubicación, visible en
+todo momento — para que el padre pueda dárselo de palabra a recepción sin
+tener que llegar hasta esa pantalla si algo falla.
+
+### Salidas del Día: discrimina Salida Autónoma, incluye salones 100% autónomos, y excluye Pool Day de las alertas de login (2026-09-22/23)
+Tres pedidos seguidos sobre la misma tarjeta de "Salidas del Día"
+(`OperationsDashboard.tsx`, agrupada por grado/sección):
+- **Cuenta de Salida Autónoma por sección**: además de recogidas/bus, la
+  tarjeta ahora muestra cuántos alumnos de esa sección salen por su
+  cuenta hoy (`students.self_dismissal_allowed`), con su propio ícono
+  (🚶) junto a los de bus y las alertas de login.
+- **Secciones 100% autónomas ya no desaparecen**: antes la tarjeta de una
+  sección solo se armaba si tenía al menos un `pickup_events` ese día —
+  un salón donde *todos* los alumnos tienen Salida Autónoma nunca genera
+  esas filas (salen por `self_dismissal_events`, no por recogida), así
+  que quedaba invisible en el reporte pese a tener alumnos reales. Ahora
+  se arma una tarjeta por cada sección con matrícula, tenga o no
+  `pickup_events` ese día.
+- **Pool Day excluido de "pendiente de loguearse"/"inactivo hoy"**: un
+  alumno cuyo Pool Day está activo hoy (otro padre lo recoge) no
+  necesita que su propio padre use la app hoy — se agregó
+  `fetchCarpoolStudentIdsToday()` en el backend (cruza
+  `carpool_authorizations` por día de la semana y `carpool_overrides` por
+  fecha) y se aplicó a los 4 endpoints de alertas de login
+  (`pending-login-parents`, `inactive-today-parents`, y sus versiones
+  "by-section" para esta tarjeta), mismo criterio que ya existía para bus
+  y Salida Autónoma.
+- De paso, el botón de Ayuda del Dashboard pasó a usar el idioma
+  configurado del colegio como punto de partida cuando el staff no lo
+  cambió manualmente (antes siempre abría en español sin importar el
+  idioma activo).
+
+### Reporte del Día: Llegadas Matutinas agregadas, y fix de fila duplicada (2026-09-23)
+- Se sumó una sección **Llegadas Matutinas** al Reporte del Día
+  (`DailyReportModal.tsx`): tarjeta de resumen, fila en la tabla
+  principal, y Anexo 9 con el detalle (mismos datos que
+  `DailyArrivals.tsx`), más una mención en los textos explicativos de que
+  Pool Day también se excluye de esas cifras.
+- **Bug real encontrado**: `morning_arrivals` se duplicaba — hasta 7 filas
+  para el mismo padre el mismo día en algunos casos (confirmado con una
+  consulta del propio usuario, 20 grupos con duplicados). Causa: el
+  `useEffect` que dispara la inserción al detectar `isInside === true` no
+  tenía ningún chequeo de idempotencia — si el GPS titubeaba cerca del
+  borde del perímetro (típico de un bus en movimiento, no de un padre
+  parado), cada transición a `true` insertaba una fila nueva. Se agregó
+  un chequeo "¿ya existe una fila de hoy para este padre?" antes de
+  insertar, más un `useRef` para no repetir esa consulta dentro de la
+  misma sesión. Se corrieron también las queries de diagnóstico y
+  limpieza que pidió el usuario para borrar los duplicados ya existentes.
+
+### Fix: el conteo de "Parents" incluía las cuentas fantasma de rutas de bus (2026-09-23)
+Un bus es, por dentro, un perfil `role = 'parent'` sin email marcado con
+`additional_tutor_name.is_bus_route = true` (ver "Rutas de Bus completas"
+más arriba) — pensado para reutilizar toda la cadena de recogida, pero
+eso significa que cualquier conteo de "padres" que no excluya
+explícitamente esas cuentas fantasma las cuenta como familias reales.
+Encontrado en 3 lugares (`GET /api/tenants/stats` del backend,
+`OperationsDashboard.tsx` y `Statistics.tsx`) — los tres contaban
+`profiles.role = 'parent'` directo, sin el filtro que sí usaban otras
+métricas cercanas (ej. `parentsActiveToday` en el mismo endpoint ya lo
+excluía, pero `.parents` no). Corregido en los tres; confirmado con el
+caso real reportado ("consulto en este número de 451, ¿está incluyendo
+los buses como padres?").
+
+### Auditoría completa de traducción ES/EN de toda la app (2026-09-23)
+Pedido explícito y directo del usuario tras encontrar botones en español
+con el idioma configurado en inglés: **"cuando cambie ES/EN debe cambiar
+todo ES/EN"** — sin pantallas a medio traducir. Auditoría completa
+encontró 13 archivos sin pasar (parcial o totalmente) por `t()`/
+`useLanguage`. Priorizado "staff primero, todo después": se tradujeron
+por completo, agregando las claves correspondientes (español e inglés) a
+`src/i18n/translations.ts`, verificado con `tsc --noEmit` y un chequeo de
+que cada clave usada esté definida exactamente 2 veces (EN+ES):
+- `OperationsDashboard.tsx` (botones "Ayuda", "Reporte del Día", "Activar
+  Altavoces", banner de activación de audio).
+- `BusRoutesPanel.tsx`, `AuditLogs.tsx`, `DailyArrivals.tsx`,
+  `VisitorsLog.tsx`, `Statistics.tsx`, `FormBuilder.tsx` (incluido el
+  reporte HTML imprimible que arma en JS), `DailyReportModal.tsx`
+  (incluido el PDF: título, tabla resumen, los 9 anexos, y el formato de
+  fecha del encabezado, que antes estaba fijo en `'es'` sin importar el
+  idioma activo).
+- `SuperAdminDashboard.tsx` e `ImpersonationBanner.tsx`.
+- `Login.tsx` y `SetPassword.tsx` — estas dos pantallas se muestran
+  **antes** de iniciar sesión, así que no había ningún selector de
+  idioma disponible ahí todavía; se agregó un botón ES/EN (ícono Globe)
+  en ambas. Al hacerlo se encontró que ninguna de las dos estaba envuelta
+  en `<LanguageProvider>` en `App.tsx` — `useLanguage()` habría lanzado
+  una excepción al usarse ahí; se corrigió envolviendo ambas rutas.
+- **Fix de seguimiento**: `SuperAdminDashboard` seguía sin forma de
+  cambiar de idioma pese a estar traducido — a diferencia del resto de la
+  app, no depende de ningún colegio/tenant, así que necesitaba su propio
+  botón independiente en el header (junto a "Cerrar Sesión"), sin
+  heredar nada de ningún `default_language` de tenant.
+
+### Fix: modal "¿Quiénes salen juntos?" sin scroll bloqueaba a rutas de bus con muchos alumnos (2026-09-23)
+Reporte real: "los buses dicen que con muchos alumnos no pueden subir y
+bajar el listado para guardar que todos van juntos". El modal
+`showTogetherPrompt` de `ParentDashboard.tsx` (aparece automáticamente la
+primera vez que una cuenta tiene más de un alumno, con todos
+pre-marcados como "salen juntos" — exactamente lo que necesita una
+cuenta de bus con su roster completo) no tenía ningún contenedor con
+scroll, solo `overflow-hidden` en el div padre — con una ruta de bus de
+muchos alumnos la lista se salía de la pantalla y no había forma de
+bajar para revisar/guardar la selección. Se agregó `max-h-[85vh]` +
+`overflow-y-auto` (con `overscroll-contain` para que el gesto de scroll
+no se le escape al fondo) al contenedor de la lista, con encabezado y
+botón "Guardar" fijos arriba/abajo, más botones "Seleccionar todos" /
+"Quitar todos" para no tener que tocar uno por uno en rutas grandes.
+
+Se disparó un build nuevo de Android (`android-deploy.yml`, track
+`production`) para que este fix y el de GPS lleguen a quienes ya tienen
+la app instalada — un deploy del sitio web no alcanza esos dispositivos
+porque el JS se empaqueta dentro del APK al compilar.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -2626,3 +2794,10 @@ relevantes de cara a producción:
 - 42 alumnos de secundaria de TCS Albrook sin foto (31 de ellos todo el grado
   07, matriculados después de la carpeta de fotos que compartió el colegio) —
   pendiente de que el colegio tome/envíe fotos nuevas para completarlos.
+- **Reactivar la cuenta de AWS** (ver "Incidente: cuenta de AWS cerrada..."
+  en §3, 2026-09-20/21) y volver a apuntar el SMTP de Supabase Auth a las
+  credenciales de Amazon SES — hoy corre sobre un parche de emergencia con
+  Zoho Mail, con límites de envío por hora/día muy por debajo de SES;
+  probablemente no aguante otra importación masiva de cientos de padres
+  por CSV mientras siga así. Fecha límite de AWS antes de borrar el
+  contenido de la cuenta: 17 de noviembre de 2026.
