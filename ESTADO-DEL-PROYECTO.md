@@ -2801,3 +2801,63 @@ relevantes de cara a producción:
   probablemente no aguante otra importación masiva de cientos de padres
   por CSV mientras siga así. Fecha límite de AWS antes de borrar el
   contenido de la cuenta: 17 de noviembre de 2026.
+- **PLAN (pendiente de decidir, propuesto 2026-09-24): eliminar la
+  dependencia de Gemini para los anuncios de voz, usar solo el TTS nativo
+  del navegador/dispositivo.** Motivo: se detectó en producción (TCS
+  Albrook) que la clave de `GEMINI_API_KEY` — aunque válida — vive en el
+  plan gratuito de Google, con un límite de **10 llamadas por día** al
+  modelo `gemini-2.5-flash-tts` (`quotaValue: "10"`,
+  `GenerateRequestsPerDayPerProjectPerModel-FreeTier`). Un colegio real
+  agota eso en los primeros minutos del día; el resto del tiempo ya está
+  sonando con el fallback nativo (`speechSynthesis`) sin que nadie lo
+  supiera, porque el código ya cae ahí solo ante un 429. **No es un bug
+  nuevo ni rompe nada** — el sistema sigue anunciando siempre, solo que
+  casi todo el día con la voz robótica del navegador en vez de la natural
+  de Gemini.
+  - **Opción A — eliminar Gemini del todo** (lo que se está evaluando):
+    quitar el intento de llamar a la API y dejar el TTS nativo como único
+    motor, siempre. Ventaja: cero clave/cuota/facturación que mantener,
+    sin latencia de red por anuncio (Gemini tarda ~1-3s por llamada),
+    listo para usar hoy mismo porque el fallback ya está probado en
+    producción. Desventaja: se pierde el control de tono que se le pedía
+    a Gemini por prompt ("hable despacio, con calma, con voz amable y
+    profesional") — con la voz nativa solo se controla velocidad
+    (`rate`) e idioma/voz del sistema operativo, no el "estilo"; y el
+    sonido puede variar entre dispositivos (Android vs. Mac vs. iPad) en
+    vez de sonar siempre igual.
+  - **Opción B — mantener Gemini, resolver la cuota**: activar
+    facturación en el proyecto de Google Cloud/AI Studio dueño de la
+    clave para subir el límite de 10/día a un plan pago. No requiere
+    tocar código, pero mantiene la dependencia de una clave/cuota/costo
+    recurrente y el riesgo de que se repita este mismo incidente.
+  - **Alcance técnico si se elige la Opción A** (archivos a tocar):
+    1. `src/lib/audioManager.ts` → `processAudioQueue()`: quitar el
+       bloque que llama a `ai.models.generateContent(...)` y usar
+       siempre `useBrowserFallbackWait(text, lang)`; se puede simplificar
+       más quitando el import de `@google/genai`, `quotaExceededUntil` y
+       el manejo de reintento por cuota, ya que deja de hacer falta.
+    2. `src/views/SmartCheckIn.tsx` tiene su **propia** función
+       `playVoiceMessage()` que llama a Gemini directamente, sin pasar
+       por `audioManager.ts` — confirmado en uso activo en 3 lugares
+       (verificación de QR de reemplazo, confirmación de Salida
+       Autónoma, reconocimiento facial). Mismo cambio ahí, o mejor:
+       hacer que llame a `announceBilingual()`/`playGlobalVoiceMessage()`
+       del módulo compartido en vez de reimplementar su propia lógica de
+       TTS (así queda un solo lugar que tocar si se repite esto).
+    3. Confirmar que no hay un tercer lugar con `GoogleGenAI`/
+       `generateContent` fuera de esos dos archivos.
+    4. Quitar `GEMINI_API_KEY` de `docker-compose.yml`, `.env.example` y
+       de las instrucciones de `DESPLIEGUE.md` (o dejarlo ahí marcado
+       como "ya no se usa, se puede quitar del `.env` del servidor").
+    5. Esto también resolvería solo el pendiente de arriba "Sacar la
+       clave de Gemini del navegador (proxy en el backend)" — si no
+       queda ninguna llamada a Gemini, no hay clave que sacar.
+  - **Riesgo/esfuerzo**: bajo — es sobre todo eliminar código (menos
+    superficie de fallos), no agregar nada nuevo; el camino de reemplazo
+    ya corre en producción la mayor parte del tiempo por el límite de
+    cuota.
+  - **Pendiente de decidir antes de ejecutar** (conversación del
+    2026-09-24, a revisar): ¿aceptan perder el control de tono de Gemini
+    a cambio de simplicidad/cero costo? ¿Vale la pena probar primero
+    cómo suena la voz nativa en las tablets/Android reales de Monitor
+    Externo antes de aplicarlo a los dos colegios activos?
