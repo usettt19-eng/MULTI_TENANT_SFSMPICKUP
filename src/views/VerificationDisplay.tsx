@@ -57,6 +57,12 @@ export function VerificationDisplay() {
   const [discreteAlertStatus, setDiscreteAlertStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [latestDetections, setLatestDetections] = useState<any[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  // Si enableGlobalAudio() falla (navegador que rechaza el AudioContext,
+  // política de autoplay más estricta, etc.) el modal de abajo se quedaba
+  // bloqueando toda la pantalla para siempre, sin ningún botón para
+  // continuar — "Guardian Verification" es la pantalla de la puerta,
+  // bloquearla por completo deja a recepción sin poder atender a nadie.
+  const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
   const channelRef = React.useRef<any>(null);
 
   // Retiro anticipado: recepción marca a un alumno para salir antes de lo
@@ -92,9 +98,13 @@ export function VerificationDisplay() {
   }, []);
 
   const enableAudio = () => {
-    enableGlobalAudio().then(() => {
-      announceBilingual('Audio activado correctamente', 'Audio activated successfully');
-    });
+    enableGlobalAudio()
+      .then(() => {
+        announceBilingual('Audio activado correctamente', 'Audio activated successfully');
+      })
+      .catch((err) => {
+        console.error('No se pudo activar el audio:', err);
+      });
   };
 
   useEffect(() => {
@@ -611,7 +621,7 @@ export function VerificationDisplay() {
           por voz, así que en vez de una barra discreta que se puede pasar
           por alto, se pide de entrada con un modal que bloquea la pantalla
           hasta que se active (o se descarte a propósito). */}
-      {!audioEnabled && (
+      {!audioEnabled && !audioPromptDismissed && (
         <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full text-center space-y-5">
             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto">
@@ -626,6 +636,12 @@ export function VerificationDisplay() {
               className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-200"
             >
               {t('monitor.activateSpeakers')}
+            </button>
+            <button
+              onClick={() => setAudioPromptDismissed(true)}
+              className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
+            >
+              {t('monitor.continueWithoutSound')}
             </button>
           </div>
         </div>

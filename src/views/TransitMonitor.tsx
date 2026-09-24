@@ -31,6 +31,10 @@ export function TransitMonitor() {
   const [selectedDoorId, setSelectedDoorId] = useMonitoredDoor(profile?.tenant_id);
   const [loading, setLoading] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  // Ver el mismo comentario en VerificationDisplay.tsx: sin esto, si
+  // enableGlobalAudio() falla, el modal de abajo bloquea toda la pantalla
+  // para siempre sin ninguna forma de continuar.
+  const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
   // Para avisar al personal de entrega final (voz, en español e inglés) en
   // cuanto un alumno entra a la lista — solo una vez por alumno, y nunca
   // para lo que ya estaba en tránsito al abrir la pantalla (si no, cada
@@ -57,7 +61,9 @@ export function TransitMonitor() {
   }, []);
 
   const enableAudio = () => {
-    enableGlobalAudio();
+    enableGlobalAudio().catch((err) => {
+      console.error('No se pudo activar el audio:', err);
+    });
   };
 
   useEffect(() => {
@@ -212,7 +218,7 @@ export function TransitMonitor() {
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <TopNav title={t('transit.title')} subtitle={t('transit.subtitle')} />
 
-      {!audioEnabled && (
+      {!audioEnabled && !audioPromptDismissed && (
         <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full text-center space-y-5">
             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto">
@@ -227,6 +233,12 @@ export function TransitMonitor() {
               className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-200"
             >
               {t('monitor.activateSpeakers')}
+            </button>
+            <button
+              onClick={() => setAudioPromptDismissed(true)}
+              className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
+            >
+              {t('monitor.continueWithoutSound')}
             </button>
           </div>
         </div>
