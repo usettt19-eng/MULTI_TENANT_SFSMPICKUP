@@ -41,7 +41,6 @@ Rellena en `.env`:
 VITE_SUPABASE_URL=https://fvzhfzogigewsvcyopel.supabase.co
 VITE_SUPABASE_ANON_KEY=<la clave anon del proyecto>
 VITE_WELLNESS_API_URL=            # vacío; no se usa desde que /api/ va por nginx
-GEMINI_API_KEY=<la clave de Gemini>
 HOST_PORT=8095
 
 # La API interna (server/) — ver DISENO-Y-AVANCE.md §6.
@@ -66,9 +65,10 @@ Los valores exactos que usa hoy la app están en Vercel, en
 > ejecutar. Si cambias una, hay que reconstruir la imagen — reiniciar el
 > contenedor no basta.
 
-> **Sobre `GEMINI_API_KEY`:** acaba dentro del JavaScript que descarga cada
-> usuario, así que es extraíble. Es el comportamiento actual, no una regresión
-> de este despliegue, pero conviene resolverlo (ver `DISENO-Y-AVANCE.md` §5.2).
+> **`GEMINI_API_KEY` ya no se usa** (retirado 2026-09-25): los anuncios de
+> voz corren solo con el TTS nativo del navegador/dispositivo
+> (`speechSynthesis`), sin clave ni cuota que administrar. Si el `.env` del
+> servidor todavía tiene esa variable, se puede quitar sin que nada se rompa.
 
 ## 2. Construir y levantar
 

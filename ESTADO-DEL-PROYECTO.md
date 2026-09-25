@@ -2,7 +2,17 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-23 (**auditoría completa de traducción ES/EN**: 13 pantallas que
+2026-09-25 (**se elimina Gemini por completo** de los anuncios de voz —la
+clave vivía en el plan gratuito de Google, 10 llamadas/día, insuficiente
+para un colegio real— y se usa solo el TTS nativo del navegador/
+dispositivo, sin clave ni cuota que mantener; **fix**: el modal de
+"activar altavoces" bloqueaba Guardian Verification/En Tránsito para
+siempre si fallaba, sin forma de continuar; **fix**: el lector QR se
+quedaba pegado en laptops sin cámara trasera (ej. Mac); corrección
+masiva de 51 padres con PIN inválido que nunca podían loguearse en
+Check-In; diagnóstico (sin implementar todavía) de por qué los check-in
+por PIN caen siempre en "No Door Assigned" en vez de agrupar con el
+resto. 2026-09-23: **auditoría completa de traducción ES/EN**: 13 pantallas que
 quedaban parcial o totalmente en español fijo —Dashboard, Rutas de Bus,
 Bitácora del Sistema, Llegadas Diarias, Bitácora de Visitantes,
 Estadísticas, Constructor de Formularios, Reporte del Día (incluido el
@@ -2622,6 +2632,111 @@ Se disparó un build nuevo de Android (`android-deploy.yml`, track
 la app instalada — un deploy del sitio web no alcanza esos dispositivos
 porque el JS se empaqueta dentro del APK al compilar.
 
+### Fix: el modal de "activar altavoces" bloqueaba la pantalla para siempre si fallaba (2026-09-24)
+Reporte real: en Guardian Verification, el modal de activación de audio
+(pantalla completa, sin botón de cierre) se quedaba pegado sin dejar
+usar el resto de la pantalla. Causa: `enableGlobalAudio()` es async y
+puede fallar (navegador que rechaza el `AudioContext`, error de
+hardware/driver de audio del equipo — confirmado en este caso con el
+error nativo de Chrome "The AudioContext encountered an error from the
+audio device or the WebAudio renderer"), y el código no capturaba ese
+error — la promesa rechazada quedaba sin manejar, `audioEnabled` nunca
+pasaba a `true`, y no había ninguna forma de descartar el modal ni de
+seguir usando la pantalla. Se agregó `.catch()` para no perder el error
+en silencio, y un botón **"Continuar sin sonido"** en
+`VerificationDisplay.tsx` y `TransitMonitor.tsx` (mismo patrón de modal
+bloqueante en ambas) para poder seguir usando la pantalla aunque la
+activación de audio falle en ese dispositivo puntual.
+
+### Fix: el lector QR se quedaba pegado en laptops sin cámara trasera, ej. Mac (2026-09-24)
+`startQrScanner()` pedía la cámara con `facingMode: 'environment'`
+(trasera) — funciona en un teléfono (cámara frontal y trasera), pero en
+una laptop con una sola cámara (frontal) el navegador podía quedarse
+esperando indefinidamente una cámara trasera que no existe, sin mostrar
+imagen ni error: la pantalla quedaba pegada en "activando cámara" sin
+forma de salir. Se listan las cámaras reales con `Html5Qrcode.getCameras()`
+antes de iniciar; con una sola disponible (típico de una laptop), se usa
+su id directo en vez de pedir por `facingMode`. Se agrega también un
+timeout de 8s como salvavidas: si `getUserMedia` igual se cuelga, se
+muestra un error en vez de dejar la pantalla pegada para siempre.
+Aplicado en Check-In (`SmartCheckIn.tsx`, donde se reportó) y en
+Guardian Verification (`VerificationDisplay.tsx`, mismo patrón de lector
+QR).
+
+### Corrección masiva de PIN inválidos (2026-09-24)
+Se detectó que el teclado de Check-In exige tocar exactamente 4 dígitos
+antes de buscar el PIN (`pin.length !== 4` bloquea el envío) — cualquier
+padre con un `pin_code` de largo distinto a 4 en la base nunca podía
+loguearse por esa vía, sin ningún mensaje de error visible que lo
+explicara. Se encontraron **51 padres** con este problema (48 en TCS
+Albrook, 3 en TCS Costa del Este) — la mayoría con PIN de 2 o 3 dígitos,
+y un caso con un **correo electrónico** guardado en el campo del PIN
+(probablemente un desfase de columnas en una importación CSV anterior).
+Se les asignó a los 51 un PIN nuevo de 4 dígitos, verificado único
+dentro de su colegio, vía un script SQL corrido directo en Supabase
+(no persiste en este repo). Queda pendiente avisarles a esos padres su
+PIN nuevo, ya que el viejo no servía de todas formas.
+
+### Diagnóstico (sin implementar): Check-In por PIN no asigna puerta, cae siempre en "No Door Assigned" (2026-09-24)
+En **En Tránsito** (`TransitMonitor.tsx`), los alumnos agrupan por
+`pickup_events.door_id`; cuando un padre anuncia por PIN desde Check-In
+(`SmartCheckIn.tsx`, función `handleEnter`), el `INSERT` a
+`pickup_events` nunca incluye `door_id` — a diferencia de la app del
+padre (obliga a elegir puerta si el colegio tiene más de una) o de las
+rutas de bus (puerta fija por ruta). Por eso cualquier check-in hecho
+por PIN cae siempre en el grupo "No Door Assigned" en vez de agruparse
+con el resto. **Propuesta pendiente de decidir**: agregar un selector de
+puerta a la pantalla de Check-In (igual al de la app del padre), o una
+puerta fija configurable en Ajustes para ese kiosco — no implementado
+todavía, a la espera de que el colegio decida cuál prefiere.
+
+### Se elimina la dependencia de Gemini para los anuncios de voz (2026-09-25)
+Motivado por un hallazgo en producción (TCS Albrook): la clave de
+`GEMINI_API_KEY` —aunque válida tras renovarla ese mismo día— vive en el
+plan gratuito de Google, con un límite de **10 llamadas por día** al
+modelo `gemini-2.5-flash-tts` (confirmado por el error 429 real:
+`quotaValue: "10"`, `GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
+Un colegio real agota eso en los primeros minutos; el resto del día el
+sistema ya caía solo al fallback nativo del navegador
+(`speechSynthesis`) sin que nadie lo supiera. Se decidió (Opción A de
+las dos evaluadas) eliminar Gemini del proyecto por completo en vez de
+resolver la cuota con facturación, ya que el reemplazo ya corría en
+producción la mayor parte del tiempo de todos modos:
+
+- `src/lib/audioManager.ts` → `processAudioQueue()` ya no intenta llamar
+  a Gemini; usa siempre `useBrowserFallbackWait()` (ahora exportada).
+  Se quita el import de `@google/genai`, la variable
+  `quotaExceededUntil` y todo el manejo de reintento por cuota.
+- `src/views/SmartCheckIn.tsx` tenía su **propia** función
+  `playVoiceMessage()` que llamaba a Gemini directo, con su propio
+  `AudioContext` nuevo en cada llamada, sin pasar por `audioManager.ts`
+  ni tener ningún fallback si Gemini fallaba (silencio total ante
+  cualquier error) — confirmada en uso activo en 3 lugares (verificación
+  de QR de reemplazo, confirmación de Salida Autónoma, reconocimiento
+  facial). Ahora reusa `useBrowserFallbackWait()` del módulo compartido.
+- `VerificationDisplay.tsx` y `OperationsDashboard.tsx` tenían el import
+  de `@google/genai` sin usarlo en ningún lado (código muerto) — quitado.
+- Se quita la dependencia `@google/genai` de `package.json` /
+  `package-lock.json`, el `ARG`/`ENV GEMINI_API_KEY` de `Dockerfile`, el
+  build arg correspondiente de `docker-compose.yml`, el `define` que
+  empotraba la clave en el bundle de `vite.config.ts`, la línea en
+  `.env.example`, y se actualizan las instrucciones de `DESPLIEGUE.md` y
+  el análisis de `DISENO-Y-AVANCE.md` (§5.2, §6, §7) marcándolos como
+  resueltos por eliminación. Se borran también `check_env.ts` /
+  `check_env2.ts`, dos scripts de depuración que solo imprimían el valor
+  de esa clave.
+- **Verificado**: `tsc --noEmit` limpio, build de producción completo
+  (`npx vite build`) sin errores, CSS con utilidades de Tailwind
+  presentes, y cero referencias a Gemini en el bundle final compilado.
+- Efecto para el colegio: los anuncios de voz ahora suenan siempre con
+  la voz nativa del navegador/dispositivo (antes ya sonaba así la mayor
+  parte del tiempo por la cuota agotada) — sin clave, sin cuota, sin
+  facturación que mantener, y sin la latencia de red que agregaba cada
+  llamada a Gemini (~1-3s). Se pierde el control de tono por prompt que
+  se le pedía a Gemini ("hable despacio, con calma..."); con la voz
+  nativa solo queda controlable la velocidad (`rate`, ya en 0.8) y el
+  idioma de la voz del sistema operativo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -2756,7 +2871,10 @@ relevantes de cara a producción:
 - Activar plan **Pro** en Supabase antes del primer colegio que pague (sin
   backups hoy).
 - Webhook propio de cámaras con `service_role` (el `INSERT` anónimo se cerró).
-- Sacar la clave de Gemini del navegador (proxy en el backend).
+- ~~Sacar la clave de Gemini del navegador (proxy en el backend)~~
+  **Resuelto por eliminación, 2026-09-25**: se retiró Gemini del proyecto
+  por completo — ver "Se elimina la dependencia de Gemini..." en §3. Ya no
+  queda ninguna clave que proxear.
 - Vendorizar los pesos de `face-api.js` (hoy dependen de un repo de GitHub de
   terceros sin mantenimiento desde 2020).
 - Registrar el acceso cruzado del `super_admin` (hoy no deja rastro propio
@@ -2801,63 +2919,12 @@ relevantes de cara a producción:
   probablemente no aguante otra importación masiva de cientos de padres
   por CSV mientras siga así. Fecha límite de AWS antes de borrar el
   contenido de la cuenta: 17 de noviembre de 2026.
-- **PLAN (pendiente de decidir, propuesto 2026-09-24): eliminar la
-  dependencia de Gemini para los anuncios de voz, usar solo el TTS nativo
-  del navegador/dispositivo.** Motivo: se detectó en producción (TCS
-  Albrook) que la clave de `GEMINI_API_KEY` — aunque válida — vive en el
-  plan gratuito de Google, con un límite de **10 llamadas por día** al
-  modelo `gemini-2.5-flash-tts` (`quotaValue: "10"`,
-  `GenerateRequestsPerDayPerProjectPerModel-FreeTier`). Un colegio real
-  agota eso en los primeros minutos del día; el resto del tiempo ya está
-  sonando con el fallback nativo (`speechSynthesis`) sin que nadie lo
-  supiera, porque el código ya cae ahí solo ante un 429. **No es un bug
-  nuevo ni rompe nada** — el sistema sigue anunciando siempre, solo que
-  casi todo el día con la voz robótica del navegador en vez de la natural
-  de Gemini.
-  - **Opción A — eliminar Gemini del todo** (lo que se está evaluando):
-    quitar el intento de llamar a la API y dejar el TTS nativo como único
-    motor, siempre. Ventaja: cero clave/cuota/facturación que mantener,
-    sin latencia de red por anuncio (Gemini tarda ~1-3s por llamada),
-    listo para usar hoy mismo porque el fallback ya está probado en
-    producción. Desventaja: se pierde el control de tono que se le pedía
-    a Gemini por prompt ("hable despacio, con calma, con voz amable y
-    profesional") — con la voz nativa solo se controla velocidad
-    (`rate`) e idioma/voz del sistema operativo, no el "estilo"; y el
-    sonido puede variar entre dispositivos (Android vs. Mac vs. iPad) en
-    vez de sonar siempre igual.
-  - **Opción B — mantener Gemini, resolver la cuota**: activar
-    facturación en el proyecto de Google Cloud/AI Studio dueño de la
-    clave para subir el límite de 10/día a un plan pago. No requiere
-    tocar código, pero mantiene la dependencia de una clave/cuota/costo
-    recurrente y el riesgo de que se repita este mismo incidente.
-  - **Alcance técnico si se elige la Opción A** (archivos a tocar):
-    1. `src/lib/audioManager.ts` → `processAudioQueue()`: quitar el
-       bloque que llama a `ai.models.generateContent(...)` y usar
-       siempre `useBrowserFallbackWait(text, lang)`; se puede simplificar
-       más quitando el import de `@google/genai`, `quotaExceededUntil` y
-       el manejo de reintento por cuota, ya que deja de hacer falta.
-    2. `src/views/SmartCheckIn.tsx` tiene su **propia** función
-       `playVoiceMessage()` que llama a Gemini directamente, sin pasar
-       por `audioManager.ts` — confirmado en uso activo en 3 lugares
-       (verificación de QR de reemplazo, confirmación de Salida
-       Autónoma, reconocimiento facial). Mismo cambio ahí, o mejor:
-       hacer que llame a `announceBilingual()`/`playGlobalVoiceMessage()`
-       del módulo compartido en vez de reimplementar su propia lógica de
-       TTS (así queda un solo lugar que tocar si se repite esto).
-    3. Confirmar que no hay un tercer lugar con `GoogleGenAI`/
-       `generateContent` fuera de esos dos archivos.
-    4. Quitar `GEMINI_API_KEY` de `docker-compose.yml`, `.env.example` y
-       de las instrucciones de `DESPLIEGUE.md` (o dejarlo ahí marcado
-       como "ya no se usa, se puede quitar del `.env` del servidor").
-    5. Esto también resolvería solo el pendiente de arriba "Sacar la
-       clave de Gemini del navegador (proxy en el backend)" — si no
-       queda ninguna llamada a Gemini, no hay clave que sacar.
-  - **Riesgo/esfuerzo**: bajo — es sobre todo eliminar código (menos
-    superficie de fallos), no agregar nada nuevo; el camino de reemplazo
-    ya corre en producción la mayor parte del tiempo por el límite de
-    cuota.
-  - **Pendiente de decidir antes de ejecutar** (conversación del
-    2026-09-24, a revisar): ¿aceptan perder el control de tono de Gemini
-    a cambio de simplicidad/cero costo? ¿Vale la pena probar primero
-    cómo suena la voz nativa en las tablets/Android reales de Monitor
-    Externo antes de aplicarlo a los dos colegios activos?
+- **Check-In por PIN no asigna puerta** (ver diagnóstico en §3,
+  2026-09-24) — los alumnos anunciados desde Check-In siempre caen en
+  "No Door Assigned" en En Tránsito y en el filtro de Guardian
+  Verification, en vez de agruparse con el resto. Falta decidir: ¿selector
+  de puerta en Check-In (igual al de la app del padre) o una puerta fija
+  configurable en Ajustes para ese kiosco?
+- **Avisar a los 51 padres con PIN corregido** (ver §3, 2026-09-24) cuál
+  es su nuevo PIN de 4 dígitos — el viejo (2-3 dígitos, o en un caso un
+  correo) nunca había funcionado en Check-In.

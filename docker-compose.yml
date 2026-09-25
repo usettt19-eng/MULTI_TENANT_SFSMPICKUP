@@ -35,7 +35,6 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_WELLNESS_API_URL: ${VITE_WELLNESS_API_URL:-}
-        GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     image: sfsmpickup:latest
     container_name: sfsmpickup
     restart: unless-stopped

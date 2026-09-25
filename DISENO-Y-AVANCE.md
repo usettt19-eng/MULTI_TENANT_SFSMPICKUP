@@ -45,10 +45,15 @@ en el repositorio** y `.gitignore` no los excluye. Ver §6.
 | Generar QR | `qrcode.react` | No — algorítmico |
 | Leer QR | `html5-qrcode` | No — algorítmico |
 | Reconocimiento facial | `face-api.js` | ML local en el navegador, sin API |
-| Anuncios por voz | `@google/genai` (`gemini-2.5-flash-preview-tts`) | Sí — TTS en la nube |
+| Anuncios por voz | `speechSynthesis` nativo del navegador | No — TTS local del dispositivo |
 
-El Gemini del proyecto **solo hace texto a voz**, no identifica a nadie ni
-conversa. La identificación de padres es `face-api.js` corriendo local.
+~~El Gemini del proyecto **solo hace texto a voz**, no identifica a nadie ni
+conversa.~~ **Actualización 2026-09-25**: se retiró `@google/genai`
+(`gemini-2.5-flash-preview-tts`) del proyecto por completo — la clave vivía
+en el plan gratuito de Google (10 llamadas/día), insuficiente para un
+colegio real. Los anuncios de voz corren ahora solo con el TTS nativo del
+navegador/dispositivo. La identificación de padres sigue siendo
+`face-api.js` corriendo local, sin cambios.
 
 ---
 
@@ -188,7 +193,11 @@ combinan con **OR**. Añadir una política estricta junto a una `USING (true)` n
 cierra nada. La migración **elimina** las existentes antes de crear el juego
 nuevo.
 
-### 5.2 Clave de Gemini en el navegador — PENDIENTE
+### 5.2 Clave de Gemini en el navegador — RESUELTO 2026-09-25 (por eliminación)
+
+> Ya no aplica: se retiró Gemini del proyecto por completo (ver §7 más abajo
+> y `ESTADO-DEL-PROYECTO.md`). Los anuncios de voz usan solo el TTS nativo del
+> navegador/dispositivo; no queda ninguna clave que exponer.
 
 `src/lib/audioManager.ts:72` lee `import.meta.env.VITE_GEMINI_API_KEY`. Vite
 expone **todas** las variables con prefijo `VITE_` en el bundle del cliente: esa
@@ -286,15 +295,24 @@ existe:
    con una credencial propia. Tiene un **contrato ya existente** con el
    sistema de cámaras: no se puede reimplementar a ciegas, hace falta saber
    qué envía y cómo se autentica hoy.
-2. **Pregeneración de TTS con caché** — ver §7.
-3. **Proxy de las llamadas a Gemini**, para sacar la clave del navegador
-   (§5.2). El backend ya está montado; falta el endpoint y el cambio en
-   `audioManager.ts` y `SmartCheckIn.tsx` para llamarlo en vez de a Gemini
-   directo.
+2. ~~Pregeneración de TTS con caché~~ — ver §7, ya no aplica.
+3. ~~Proxy de las llamadas a Gemini, para sacar la clave del navegador
+   (§5.2)~~ — **resuelto por eliminación, 2026-09-25**: se retiró Gemini del
+   proyecto, no queda ninguna clave que proxear.
 
 ---
 
 ## 7. Optimización del TTS
+
+> **Ya no aplica (2026-09-25):** se eliminó la dependencia de Gemini por
+> completo — la clave nueva quedó en el plan gratuito de Google (10
+> llamadas/día al modelo TTS), insuficiente para un colegio real; el sistema
+> ya pasaba casi todo el día usando el fallback nativo del navegador de
+> todos modos. Los anuncios de voz corren ahora solo con `speechSynthesis`
+> (nativo, sin costo, sin clave, sin cuota). Esta sección queda como
+> referencia histórica del análisis original, por si en el futuro se
+> reconsidera un proveedor de voz pago (con caché sería la forma correcta de
+> hacerlo, como describe abajo).
 
 Los anuncios se generan hoy **desde cada navegador y sin caché**: la misma frase
 se pide a la API desde cada dispositivo, y se vuelve a pedir al día siguiente.
@@ -359,8 +377,8 @@ una PK son implícitamente `NOT NULL`.
 
 | Tarea | Bloqueado por |
 |---|---|
-| Sacar la clave de Gemini del navegador | El backend |
-| Pregeneración de TTS con caché | El backend |
+| ~~Sacar la clave de Gemini del navegador~~ — resuelto por eliminación 2026-09-25 | — |
+| ~~Pregeneración de TTS con caché~~ — ya no aplica, ver §7 | — |
 | Webhook de cámaras con `service_role` | El backend |
 | Vendorizar los modelos de `face-api.js` | Nada — se puede hacer ya |
 | `@supabase/supabase-js` a `dependencies` | Nada — se puede hacer ya |

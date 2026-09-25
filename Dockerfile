@@ -17,12 +17,10 @@ COPY . .
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_WELLNESS_API_URL
-ARG GEMINI_API_KEY
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
-    VITE_WELLNESS_API_URL=$VITE_WELLNESS_API_URL \
-    GEMINI_API_KEY=$GEMINI_API_KEY
+    VITE_WELLNESS_API_URL=$VITE_WELLNESS_API_URL
 
 # Falla pronto y con un mensaje claro si falta lo imprescindible: sin esto el
 # build sale bien pero la aplicación revienta al arrancar en el navegador.

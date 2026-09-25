@@ -5,7 +5,6 @@ import { GuestSignModal } from '../components/GuestSignModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLayout } from '../contexts/LayoutContext';
-import { GoogleGenAI, Modality } from "@google/genai";
 import {
   AlertTriangle, Clock, CheckCircle2, UserPlus, Users,
   BriefcaseMedical, RefreshCw, Activity, Video, Monitor,

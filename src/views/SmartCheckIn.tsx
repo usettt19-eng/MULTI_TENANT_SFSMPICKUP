@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { GoogleGenAI, Modality } from "@google/genai";
+import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
 
@@ -56,52 +56,18 @@ export function SmartCheckIn() {
   const [isQrScannerActive, setIsQrScannerActive] = useState(false);
   const html5QrCode = useRef<any>(null);
 
+  // Voz nativa del navegador (speechSynthesis) — antes esta pantalla
+  // llamaba a Gemini directamente, con su propio AudioContext nuevo en cada
+  // llamada, sin pasar por audioManager.ts ni tener ningún fallback si
+  // Gemini fallaba (silencio total). Se retiró Gemini del proyecto por
+  // completo el 2026-09-25 (clave en el plan gratuito, 10 llamadas/día —
+  // insuficiente para un colegio real); se reusa el mismo helper que ya
+  // usa el resto de la app para el fallback nativo.
   const playVoiceMessage = async (text: string) => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Diga con voz amable y profesional: ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
-            },
-          },
-        },
-      } as any);
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      
-      if (base64Audio) {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-        const binaryString = atob(base64Audio);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        const float32Data = new Float32Array(bytes.length / 2);
-        const view = new DataView(bytes.buffer);
-        for (let i = 0; i < float32Data.length; i++) {
-          float32Data[i] = view.getInt16(i * 2, true) / 32768;
-        }
-        
-        const buffer = audioContext.createBuffer(1, float32Data.length, 24000);
-        buffer.getChannelData(0).set(float32Data);
-        
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start();
-      }
+      await useBrowserFallbackWait(text, 'es');
     } catch (error) {
-      console.error("Error generating voice message:", error);
+      console.error("Error generando el mensaje de voz:", error);
     }
   };
 

@@ -1,11 +1,8 @@
-import { GoogleGenAI, Modality } from "@google/genai";
-
 let sharedAudioContext: AudioContext | null = null;
 let isAudioEnabled = false;
 let audioEnableListeners: ((enabled: boolean) => void)[] = [];
 let lastPlayedText = "";
 let lastPlayedTime = 0;
-let quotaExceededUntil = 0;
 // Una vez que un clic real del usuario desbloqueó el audio, el navegador
 // deja reanudarlo sin pedir otro gesto — así que si se suspende solo
 // después de eso, se intenta reactivar automáticamente en vez de obligar
@@ -136,61 +133,18 @@ const processAudioQueue = async () => {
   }
 
   const { text, lang } = task;
-  const now = Date.now();
 
-  // Instrucción de ritmo en el mismo idioma del mensaje — pedido explícito
-  // del colegio: un poco más lenta que antes, para que se entienda bien en
-  // las bocinas del salón.
-  const promptPrefix = lang === 'en'
-    ? 'Say slowly, at an unhurried pace, in a warm and professional voice:'
-    : 'Diga despacio, con calma, con voz amable y profesional:';
-
+  // Voz nativa del navegador/dispositivo (speechSynthesis) — sin costo, sin
+  // clave, sin límite de cuota. Antes se intentaba primero una voz más
+  // natural vía la API de Gemini, con esto como fallback ante error/cuota
+  // excedida; se retiró Gemini por completo el 2026-09-25 porque la clave
+  // vive en el plan gratuito de Google (10 llamadas/día), insuficiente para
+  // un colegio real — en la práctica el sistema ya pasaba casi todo el día
+  // usando este mismo camino de todos modos.
   try {
-    if (now < quotaExceededUntil) {
-      await useBrowserFallbackWait(text, lang);
-    } else {
-      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY not configured");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `${promptPrefix} ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
-            },
-          },
-        },
-      } as any);
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-
-      if (base64Audio) {
-        await playBase64AudioWait(base64Audio);
-      } else {
-        await useBrowserFallbackWait(text, lang);
-      }
-    }
-  } catch (error: any) {
-    console.error("Error generating voice message:", error);
-
-    const errorStr = JSON.stringify(error);
-    if (error?.message?.includes('429') || error?.status === 429 || errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
-      console.warn("Gemini Quota Exceeded. Switching to browser TTS for 60s.");
-      quotaExceededUntil = Date.now() + 60000;
-    }
-
-    try {
-      await useBrowserFallbackWait(text, lang);
-    } catch (e) {
-      console.error("Fallback also failed", e);
-    }
+    await useBrowserFallbackWait(text, lang);
+  } catch (e) {
+    console.error("Error reproduciendo el anuncio de voz:", e);
   }
 
   isPlaying = false;
@@ -198,43 +152,7 @@ const processAudioQueue = async () => {
   setTimeout(processAudioQueue, 500);
 };
 
-const playBase64AudioWait = (base64Audio: string): Promise<void> => {
-  return new Promise(async (resolve) => {
-    try {
-      const audioContext = getAudioContext();
-        
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-
-      const binaryString = atob(base64Audio);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      const float32Data = new Float32Array(bytes.length / 2);
-      const view = new DataView(bytes.buffer);
-      for (let i = 0; i < float32Data.length; i++) {
-        float32Data[i] = view.getInt16(i * 2, true) / 32768;
-      }
-      
-      const buffer = audioContext.createBuffer(1, float32Data.length, 24000);
-      buffer.getChannelData(0).set(float32Data);
-      
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContext.destination);
-      source.onended = () => resolve();
-      source.start();
-    } catch (e) {
-      console.error(e);
-      resolve();
-    }
-  });
-};
-
-const useBrowserFallbackWait = (text: string, lang: 'es' | 'en'): Promise<void> => {
+export const useBrowserFallbackWait = (text: string, lang: 'es' | 'en'): Promise<void> => {
   return new Promise((resolve) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);

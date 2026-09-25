@@ -5,7 +5,6 @@ import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car, UserX, Search } from 'lucide-react';
-import { GoogleGenAI, Modality } from "@google/genai";
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, announceBilingual, setVoiceLanguageSetting, getAudioContext } from '../lib/audioManager';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
