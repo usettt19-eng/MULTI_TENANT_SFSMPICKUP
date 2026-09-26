@@ -173,6 +173,7 @@ const NAV_ITEMS: { id: string; label: string }[] = [
   { id: 'implementacion', label: 'Implementación' },
   { id: 'uso', label: 'Uso diario' },
   { id: 'referencias', label: 'Colegios de referencia' },
+  { id: 'material', label: 'Material visual' },
 ];
 
 /**
@@ -228,6 +229,23 @@ export function SalesPlaybook() {
           </p>
         </div>
       </header>
+
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="grid sm:grid-cols-2 gap-3 -mt-8 relative z-20">
+          <img
+            src="/sales-playbook/foto-bus-verificacion.jpg"
+            alt="Personal de seguridad verificando la llegada de un alumno desde la app, con el bus escolar de fondo"
+            className="w-full h-40 sm:h-48 object-cover rounded-2xl shadow-lg border-4 border-white"
+            loading="lazy"
+          />
+          <img
+            src="/sales-playbook/foto-padre-hija.jpg"
+            alt="Padre recibiendo a su hija a la salida del colegio"
+            className="w-full h-40 sm:h-48 object-cover rounded-2xl shadow-lg border-4 border-white"
+            loading="lazy"
+          />
+        </div>
+      </div>
 
       <main className="max-w-5xl mx-auto px-6">
         {/* Navegación rápida */}
@@ -355,6 +373,35 @@ export function SalesPlaybook() {
             Ambos colegios pueden dar contexto de primera mano si un director lo pide — coordinar
             la referencia con el equipo antes de ofrecerla en la llamada.
           </p>
+        </section>
+
+        {/* Material visual de apoyo */}
+        <section className="py-10 border-t border-slate-200 scroll-mt-24" id="material">
+          <SectionHeader eyebrow="Para compartir" title="Material visual de apoyo" id="material-inner" />
+          <p className="text-sm text-slate-500 leading-relaxed mb-5 max-w-2xl">
+            Imágenes listas para mandar por WhatsApp o correo a un director, o para usar en redes.
+            Toca una para verla en tamaño completo.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <a href="/sales-playbook/infografia-10-ventajas.jpg" target="_blank" rel="noopener noreferrer" className="block group">
+              <img
+                src="/sales-playbook/infografia-10-ventajas.jpg"
+                alt="Infografía: las 10 principales ventajas de Safe Smart Pickup"
+                className="w-full rounded-2xl border border-slate-100 shadow-sm group-hover:shadow-md transition-shadow"
+                loading="lazy"
+              />
+              <p className="text-xs font-bold text-slate-500 mt-2">Las 10 ventajas — infografía completa</p>
+            </a>
+            <a href="/sales-playbook/infografia-futuro.jpg" target="_blank" rel="noopener noreferrer" className="block group">
+              <img
+                src="/sales-playbook/infografia-futuro.jpg"
+                alt="Infografía: El futuro de la salida escolar, seguridad, logística y prestigio escolar"
+                className="w-full rounded-2xl border border-slate-100 shadow-sm group-hover:shadow-md transition-shadow"
+                loading="lazy"
+              />
+              <p className="text-xs font-bold text-slate-500 mt-2">Seguridad, logística y prestigio — resumen ejecutivo</p>
+            </a>
+          </div>
         </section>
 
         {/* CTA final */}
