@@ -29,11 +29,13 @@ import { SetPassword } from './views/SetPassword';
 import { SharedQRDisplay } from './views/SharedQRDisplay';
 import { AppInstallGate } from './components/AppInstallGate';
 import { LandingPage } from './views/LandingPage';
+import { SalesPlaybook } from './views/SalesPlaybook';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSharedQRRoute, setIsSharedQRRoute] = useState(false);
   const [isMarketingLandingRoute, setIsMarketingLandingRoute] = useState(false);
+  const [isSalesPlaybookRoute, setIsSalesPlaybookRoute] = useState(false);
   const { session, loading, profile, isImpersonating, authRedirectType, clearAuthRedirectType, error: authError } = useAuth() as any;
 
   useEffect(() => {
@@ -53,12 +55,27 @@ export default function App() {
     if (path.toLowerCase() === '/landingpage') {
       setIsMarketingLandingRoute(true);
     }
+    // Guía de ventas de uso interno (safesmartpickup.com/speach) — tampoco
+    // requiere sesión, para que el equipo comercial la comparta como enlace
+    // directo sin tener que loguearse. Marcada noindex en SalesPlaybook.tsx
+    // porque no es material de marketing público como /LandingPage.
+    if (path.toLowerCase() === '/speach') {
+      setIsSalesPlaybookRoute(true);
+    }
   }, [session]);
 
   if (isMarketingLandingRoute) {
     return (
       <LanguageProvider>
         <LandingPage />
+      </LanguageProvider>
+    );
+  }
+
+  if (isSalesPlaybookRoute) {
+    return (
+      <LanguageProvider>
+        <SalesPlaybook />
       </LanguageProvider>
     );
   }
