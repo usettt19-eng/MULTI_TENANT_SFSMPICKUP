@@ -5,7 +5,9 @@ en orden, y cómo está armada la base de datos en Supabase. Última actualizaci
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
-liberar, igual al que ya tenía el flujo de reconocimiento facial/QR).
+liberar, igual al que ya tenía el flujo de reconocimiento facial/QR—;
+documentado en la ayuda del Dashboard y de paso se tradujeron al inglés
+dos secciones del manual de recepción que le faltaban desde antes).
 2026-09-25 (**se elimina Gemini por completo** de los anuncios de voz —la
 clave vivía en el plan gratuito de Google, 10 llamadas/día, insuficiente
 para un colegio real— y se usa solo el TTS nativo del navegador/
@@ -2764,10 +2766,12 @@ modal de selección), pero el flujo de PIN no lo reutilizaba. Ahora:
   recepción): nueva sección 9 "Anunciar por PIN en Check-In" /
   "Announcing by PIN at Check-In" en `public/manual-recepcion.html` y
   `public/reception-guide.html` (las secciones siguientes se renumeraron).
-  De paso quedó registrado que la guía en inglés ya venía sin traducir
-  dos secciones completas del manual en español ("Salida Autónoma en
-  Check-In" e "Idioma de tu pantalla") — preexistente a este cambio, no
-  se tocó, ver pendiente en §7.
+  De paso se encontró que la guía en inglés ya venía sin traducir dos
+  secciones completas del manual en español ("Salida Autónoma en
+  Check-In" e "Idioma de tu pantalla") — preexistente a este cambio. Se
+  tradujeron y agregaron como "Autonomous Exit at Check-In" y "Your
+  screen's language" (secciones 10 y 11 en inglés), dejando ambos
+  manuales con las mismas 12 secciones en el mismo orden.
 
 ---
 
@@ -2960,9 +2964,7 @@ relevantes de cara a producción:
 - **Avisar a los 51 padres con PIN corregido** (ver §3, 2026-09-24) cuál
   es su nuevo PIN de 4 dígitos — el viejo (2-3 dígitos, o en un caso un
   correo) nunca había funcionado en Check-In.
-- `public/reception-guide.html` (guía de recepción en inglés) le faltan
-  por completo dos secciones que sí están en el manual en español
-  (`manual-recepcion.html`): "Salida Autónoma en Check-In" e "Idioma de
-  tu pantalla" — encontrado el 2026-09-28 al agregar la sección nueva de
-  PIN, preexistente a ese cambio. Falta traducir y agregar esas dos
-  secciones para que ambos manuales cubran lo mismo.
+- ~~`public/reception-guide.html` le faltaban dos secciones completas
+  frente al manual en español~~ **Resuelto 2026-09-28**: se tradujeron y
+  agregaron "Autonomous Exit at Check-In" e "Your screen's language" —
+  ver §3.
