@@ -2760,6 +2760,14 @@ modal de selección), pero el flujo de PIN no lo reutilizaba. Ahora:
   modal); nuevo estado `pinParentId`, `pinParentName`,
   `pinLinkedStudents`, `pinAnnouncedIds`, `showPinStudentModal`.
 - Verificado: `tsc --noEmit` limpio y `npx vite build` sin errores.
+- Documentado en el manual de ayuda del Dashboard (botón "Ayuda" de
+  recepción): nueva sección 9 "Anunciar por PIN en Check-In" /
+  "Announcing by PIN at Check-In" en `public/manual-recepcion.html` y
+  `public/reception-guide.html` (las secciones siguientes se renumeraron).
+  De paso quedó registrado que la guía en inglés ya venía sin traducir
+  dos secciones completas del manual en español ("Salida Autónoma en
+  Check-In" e "Idioma de tu pantalla") — preexistente a este cambio, no
+  se tocó, ver pendiente en §7.
 
 ---
 
@@ -2952,3 +2960,9 @@ relevantes de cara a producción:
 - **Avisar a los 51 padres con PIN corregido** (ver §3, 2026-09-24) cuál
   es su nuevo PIN de 4 dígitos — el viejo (2-3 dígitos, o en un caso un
   correo) nunca había funcionado en Check-In.
+- `public/reception-guide.html` (guía de recepción en inglés) le faltan
+  por completo dos secciones que sí están en el manual en español
+  (`manual-recepcion.html`): "Salida Autónoma en Check-In" e "Idioma de
+  tu pantalla" — encontrado el 2026-09-28 al agregar la sección nueva de
+  PIN, preexistente a ese cambio. Falta traducir y agregar esas dos
+  secciones para que ambos manuales cubran lo mismo.
