@@ -40,6 +40,14 @@ export function SmartCheckIn() {
   const [recognizedReplacementName, setRecognizedReplacementName] = useState<string | null>(null);
   const [linkedStudents, setLinkedStudents] = useState<any[]>([]);
   const [showStudentModal, setShowStudentModal] = useState(false);
+  // Selección de hijo(s) para el flujo de PIN — cuando el padre tiene más de
+  // un hijo en este colegio, antes se anunciaban todos de una vez; ahora se
+  // muestra esta lista para que el guardia libere solo al que corresponde.
+  const [pinParentId, setPinParentId] = useState<string | null>(null);
+  const [pinParentName, setPinParentName] = useState('');
+  const [pinLinkedStudents, setPinLinkedStudents] = useState<any[]>([]);
+  const [pinAnnouncedIds, setPinAnnouncedIds] = useState<string[]>([]);
+  const [showPinStudentModal, setShowPinStudentModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -395,29 +403,63 @@ export function SmartCheckIn() {
       return;
     }
 
-    const { data: students } = await supabase.from('parent_students').select('student_id, students(tenant_id)').eq('parent_id', parentId);
+    const { data: students } = await supabase.from('parent_students').select('student_id, students(*)').eq('parent_id', parentId);
     // Solo se anuncia a los alumnos de ESTE colegio: un padre con hijos en
     // dos colegios (bus en uno, recogida en carro en el otro) no debe
     // disparar un anuncio de llegada en el colegio donde no está parado.
-    const studentsHere = (students || []).filter((st) => (st.students as any)?.tenant_id === staffProfile.tenant_id);
-    if (studentsHere.length > 0) {
-      for (const st of studentsHere) {
-        await supabase.from('pickup_events').insert({
-          student_id: st.student_id,
-          parent_id: parentId,
-          status: 'announced',
-          announced_at: new Date(),
-          tenant_id: staffProfile.tenant_id,
-        });
-      }
-      setStatusMsg('¡Anuncio Exitoso!');
-      setPin('');
-      setTimeout(() => setStatusMsg(''), 3000);
-    } else {
+    const studentsHere = (students || [])
+      .map((st) => st.students as any)
+      .filter((s) => s?.tenant_id === staffProfile.tenant_id);
+
+    if (studentsHere.length === 0) {
       setStatusMsg('Sin alumnos asignados');
       setPin('');
       setTimeout(() => setStatusMsg(''), 3000);
+      return;
     }
+
+    if (studentsHere.length === 1) {
+      await announcePinPickup(parentId, studentsHere[0].id);
+      setPin('');
+      return;
+    }
+
+    // Varios hijos en este colegio: se deja al guardia escoger a cuál(es)
+    // liberar en vez de anunciarlos todos de una vez.
+    const { data: parentProfile } = await supabase.from('profiles').select('first_name').eq('id', parentId).single();
+    setPinParentId(parentId);
+    setPinParentName(parentProfile?.first_name || '');
+    setPinLinkedStudents(studentsHere);
+    setPinAnnouncedIds([]);
+    setShowPinStudentModal(true);
+    setStatusMsg('');
+    setPin('');
+  };
+
+  const announcePinPickup = async (parentId: string, studentId: string) => {
+    await supabase.from('pickup_events').insert({
+      student_id: studentId,
+      parent_id: parentId,
+      status: 'announced',
+      announced_at: new Date(),
+      tenant_id: staffProfile.tenant_id,
+    });
+    setStatusMsg('¡Anuncio Exitoso!');
+    setTimeout(() => setStatusMsg(''), 3000);
+  };
+
+  const handlePinStudentSelect = async (studentId: string) => {
+    if (!pinParentId) return;
+    await announcePinPickup(pinParentId, studentId);
+    setPinAnnouncedIds((prev) => [...prev, studentId]);
+  };
+
+  const closePinStudentModal = () => {
+    setShowPinStudentModal(false);
+    setPinLinkedStudents([]);
+    setPinAnnouncedIds([]);
+    setPinParentId(null);
+    setPinParentName('');
   };
 
   const startCamera = async () => {
@@ -894,6 +936,69 @@ export function SmartCheckIn() {
                 className="flex-1 py-4 rounded-2xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" /> {isConfirmingSelfDismissal ? 'Registrando...' : 'Confirmar Salida'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Student Selection Modal */}
+      {showPinStudentModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="p-8 text-center border-b border-slate-100">
+              <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-10 h-10 text-primary" />
+              </div>
+              <h3 className="text-2xl font-black text-primary mb-2">Seleccionar Alumno</h3>
+              <p className="text-slate-500">
+                {pinParentName ? `${pinParentName}, ` : ''}¿a quién viene a recoger hoy?
+              </p>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
+              {pinLinkedStudents.map((student) => {
+                const announced = pinAnnouncedIds.includes(student.id);
+                return (
+                  <button
+                    key={student.id}
+                    onClick={() => !announced && handlePinStudentSelect(student.id)}
+                    disabled={announced}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left group ${
+                      announced
+                        ? 'border-green-100 bg-green-50 cursor-default'
+                        : 'border-slate-100 hover:border-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                      {student.photo_url ? (
+                        <img src={student.photo_url} alt={student.first_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-400">
+                          <Users className="w-6 h-6" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-primary text-lg">{student.first_name} {student.last_name}</p>
+                      <p className="text-sm text-slate-500 font-medium">{student.grade || 'Grado no especificado'}</p>
+                    </div>
+                    {announced ? (
+                      <span className="flex items-center gap-1 text-green-600 font-bold text-sm"><CheckCircle2 className="w-5 h-5" /> Anunciado</span>
+                    ) : (
+                      <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-primary transition-colors" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-6 bg-slate-50 flex justify-center">
+              <button
+                onClick={closePinStudentModal}
+                className="text-slate-500 font-bold hover:text-primary transition-colors"
+              >
+                {pinAnnouncedIds.length > 0 ? 'Listo' : 'Cancelar'}
               </button>
             </div>
           </div>

@@ -2,6 +2,10 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
+2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
+hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
+si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
+liberar, igual al que ya tenía el flujo de reconocimiento facial/QR).
 2026-09-25 (**se elimina Gemini por completo** de los anuncios de voz —la
 clave vivía en el plan gratuito de Google, 10 llamadas/día, insuficiente
 para un colegio real— y se usa solo el TTS nativo del navegador/
@@ -2736,6 +2740,26 @@ producción la mayor parte del tiempo de todos modos:
   se le pedía a Gemini ("hable despacio, con calma..."); con la voz
   nativa solo queda controlable la velocidad (`rate`, ya en 0.8) y el
   idioma de la voz del sistema operativo.
+
+### Fix: el PIN de Check-In anunciaba a TODOS los hijos del padre de una vez, sin poder liberar solo a uno (2026-09-28)
+En `SmartCheckIn.tsx`, `handleEnter()` insertaba un `pickup_events` por
+cada hijo del padre en ese colegio apenas se validaba el PIN — si tenía
+tres hijos ahí, los anunciaba los tres de golpe, sin forma de avisar
+solo la llegada de uno. El flujo de reconocimiento facial/QR de la
+misma pantalla sí tenía este control (`handleStudentSelect`, con un
+modal de selección), pero el flujo de PIN no lo reutilizaba. Ahora:
+- Si el padre tiene un solo hijo en ese colegio, se anuncia directo
+  (mismo comportamiento de antes, sin fricción extra).
+- Si tiene más de uno, aparece un modal ("Seleccionar Alumno") con la
+  lista de sus hijos en ese colegio; el guardia toca solo al que están
+  recogiendo. El modal se queda abierto (marca "✓ Anunciado" en los ya
+  liberados) por si el mismo padre recoge a más de uno en la misma
+  visita, y se cierra con "Listo".
+- Nuevas funciones: `announcePinPickup()` (inserta un solo
+  `pickup_events`) y `handlePinStudentSelect()` (la llama desde el
+  modal); nuevo estado `pinParentId`, `pinParentName`,
+  `pinLinkedStudents`, `pinAnnouncedIds`, `showPinStudentModal`.
+- Verificado: `tsc --noEmit` limpio y `npx vite build` sin errores.
 
 ---
 
