@@ -75,6 +75,11 @@ export function SmartCheckIn() {
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [activeFacingMode, setActiveFacingMode] = useState<'environment' | 'user'>('environment');
+  // Lo que el navegador dice que REALMENTE abrió (track.getSettings()),
+  // no lo que se le pidió — para distinguir "pedimos trasera y abrió
+  // frontal sin avisar" de "el navegador cree que abrió trasera pero el
+  // sensor físico es otro" (bug de hardware/driver del equipo).
+  const [runningTrackInfo, setRunningTrackInfo] = useState<any>(null);
 
   // Voz nativa del navegador (speechSynthesis) — antes esta pantalla
   // llamaba a Gemini directamente, con su propio AudioContext nuevo en cada
@@ -176,6 +181,11 @@ export function SmartCheckIn() {
     );
     await Promise.race([startPromise, timeout]);
     setActiveCameraId(resolvedId);
+    try {
+      setRunningTrackInfo(html5QrCode.current.getRunningTrackSettings());
+    } catch (e) {
+      setRunningTrackInfo(null);
+    }
   };
 
   const startQrScanner = async () => {
@@ -834,6 +844,11 @@ export function SmartCheckIn() {
                 {isMobileDevice() && (
                   <div className="text-primary font-bold mb-1">
                     Cámara pedida: {activeFacingMode === 'environment' ? 'trasera (environment)' : 'frontal (user)'}
+                  </div>
+                )}
+                {runningTrackInfo && (
+                  <div className="text-amber-600 font-bold mb-1">
+                    Cámara real (track.getSettings): facingMode={String(runningTrackInfo.facingMode ?? 'desconocido')}, deviceId={String(runningTrackInfo.deviceId ?? '').slice(0, 12)}…
                   </div>
                 )}
                 {availableCameras.map((c, i) => (

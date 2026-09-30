@@ -59,6 +59,11 @@ export function VerificationDisplay() {
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [activeFacingMode, setActiveFacingMode] = useState<'environment' | 'user'>('environment');
+  // Lo que el navegador dice que REALMENTE abrió (track.getSettings()),
+  // no lo que se le pidió — para distinguir "pedimos trasera y abrió
+  // frontal sin avisar" de "el navegador cree que abrió trasera pero el
+  // sensor físico es otro" (bug de hardware/driver del equipo).
+  const [runningTrackInfo, setRunningTrackInfo] = useState<any>(null);
   const [showArrivalToast, setShowArrivalToast] = useState<string | null>(null);
   const [notifiedStaff, setNotifiedStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   // 'idle' | 'sending' | 'sent' — deliberadamente sin diálogo de confirmación
@@ -324,6 +329,11 @@ export function VerificationDisplay() {
     );
     await Promise.race([startPromise, timeout]);
     setActiveCameraId(resolvedId);
+    try {
+      setRunningTrackInfo(html5QrCodeRef.current.getRunningTrackSettings());
+    } catch (e) {
+      setRunningTrackInfo(null);
+    }
   };
 
   const startQrScanner = async () => {
@@ -1173,6 +1183,11 @@ export function VerificationDisplay() {
                     {isMobileDevice() && (
                       <div className="text-indigo-600 font-bold mb-1">
                         Cámara pedida: {activeFacingMode === 'environment' ? 'trasera (environment)' : 'frontal (user)'}
+                      </div>
+                    )}
+                    {runningTrackInfo && (
+                      <div className="text-amber-600 font-bold mb-1">
+                        Cámara real (track.getSettings): facingMode={String(runningTrackInfo.facingMode ?? 'desconocido')}, deviceId={String(runningTrackInfo.deviceId ?? '').slice(0, 12)}…
                       </div>
                     )}
                     {availableCameras.map((c, i) => (
