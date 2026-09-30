@@ -2,7 +2,12 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
-2026-09-30 (**fix de seguridad**: un reemplazo autorizado por QR —ej. la
+2026-09-30 (**corrección**: dos entradas de este documento —09-22 y
+09-23— decían que un fix de JS/React necesitaba un build nuevo de
+Android; eso contradice `capacitor.config.ts` y la regla correcta que
+ya estaba documentada el 09-10 —solo un plugin nativo lo necesita—, así
+que esos dos builds de Android probablemente no hacían falta; **fix de
+seguridad**: un reemplazo autorizado por QR —ej. la
 abuela recogiendo en vez del titular— podía terminar marcado como
 "recogido" por auto-confirm de geocerca usando la ubicación del titular,
 que nunca estuvo en el colegio; ahora esos ciclos no entran al flujo
@@ -2521,10 +2526,19 @@ distancia entre la coordenada default y la real del colegio.
   una decisión de "estoy dentro/fuera del perímetro" con una posición
   poco confiable (pedido explícito: "pareciera que tendría que tomar
   varias lecturas antes de decidir dónde está").
-- Confirmado que pasa igual en Android nativo y web; requiere un build
-  nuevo de la app Android para llegar a quienes ya la tienen instalada
-  (el JS se empaqueta en el APK al compilar, no llega con un deploy del
-  sitio web).
+- Confirmado que pasa igual en Android nativo y web.
+  ~~requiere un build nuevo de la app Android para llegar a quienes ya la
+  tienen instalada (el JS se empaqueta en el APK al compilar, no llega
+  con un deploy del sitio web)~~ **Corrección, 2026-09-30**: esto estaba
+  mal — contradice `capacitor.config.ts` (sin cambios desde el
+  2026-08-10, carga `https://safesmartpickup.com` en vivo, igual en
+  Android que en iOS) y la explicación correcta ya documentada en
+  "Publicación de la app de Android al track de producción" (2026-09-10,
+  más abajo): solo un **plugin nativo** (Java/Kotlin/Swift compilado)
+  necesita un build nuevo; un fix de JS/React como este llega solo con
+  el deploy del sitio web (ver la corrección completa más abajo, en
+  "Fix: modal '¿Quiénes salen juntos?'...", que es donde realmente se
+  disparó el build de Android que menciona este párrafo).
 
 ### PIN del padre siempre visible en su dashboard (2026-09-22)
 Antes el PIN de 4 dígitos del padre (para que recepción lo identifique si
@@ -2643,6 +2657,22 @@ Se disparó un build nuevo de Android (`android-deploy.yml`, track
 `production`) para que este fix y el de GPS lleguen a quienes ya tienen
 la app instalada — un deploy del sitio web no alcanza esos dispositivos
 porque el JS se empaqueta dentro del APK al compilar.
+
+**Corrección, 2026-09-30**: esa última frase está mal, y por lo tanto el
+build de Android disparado acá probablemente no hacía falta. Ni este fix
+ni el de GPS tocan ningún plugin nativo — son cambios de JS/React puro.
+`capacitor.config.ts` no ha cambiado desde el 2026-08-10: la app carga
+`https://safesmartpickup.com` en vivo (igual en Android que en iOS, sin
+distinción en la config), y `nginx.conf` marca `index.html` como
+`no-cache, no-store, must-revalidate` — nada se queda cacheado. La regla
+correcta ya estaba documentada arriba, en "Publicación de la app de
+Android al track de producción" (2026-09-10): solo un plugin nativo
+(Java/Kotlin/Swift compilado) necesita un build nuevo; un fix de
+JS/React llega solo con el deploy del sitio web, igual que a iOS. Para
+la próxima: antes de disparar `android-deploy.yml` por un fix que no
+toca ningún plugin nativo, alcanza con cerrar del todo la app (no solo
+mandarla a segundo plano) y volver a abrirla para confirmar que ya trae
+el cambio.
 
 ### Fix: el modal de "activar altavoces" bloqueaba la pantalla para siempre si fallaba (2026-09-24)
 Reporte real: en Guardian Verification, el modal de activación de audio
