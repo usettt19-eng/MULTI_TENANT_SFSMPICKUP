@@ -20,7 +20,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
-import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay, buildVideoConstraints } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -155,13 +155,13 @@ export function SmartCheckIn() {
           const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
           return { width: edge, height: edge };
         },
-        // Sin esto, el navegador suele entregar video en baja resolución
-        // (ej. 640x480), lo que hace casi imposible decodificar un QR
-        // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
-        videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        // Combina la resolución pedida (si no, el navegador suele entregar
+        // video en baja resolución, ej. 640x480, casi imposible de
+        // decodificar para un QR mostrado en otra pantalla o alejado) CON
+        // el selector de cámara — pasarlos por separado hace que
+        // html5-qrcode ignore el selector por completo (ver
+        // buildVideoConstraints en qrCamera.ts).
+        videoConstraints: buildVideoConstraints(cameraSelector),
       },
       async (decodedText: string) => {
         // Handle success

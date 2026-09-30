@@ -10,7 +10,7 @@ import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, annou
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
-import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay, buildVideoConstraints } from '../lib/qrCamera';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
@@ -313,10 +313,10 @@ export function VerificationDisplay() {
           const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
           return { width: edge, height: edge };
         },
-        videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        // Combina la resolución pedida CON el selector de cámara — pasarlos
+        // por separado hace que html5-qrcode ignore el selector por
+        // completo (ver buildVideoConstraints en qrCamera.ts).
+        videoConstraints: buildVideoConstraints(cameraSelector),
       },
       (decodedText: string) => handleQrDecoded(decodedText),
       () => {} // errores de "no encontrado todavía" por cuadro — se ignoran

@@ -21,21 +21,17 @@ repetirla cada vez; **fix**: un reemplazo recién aprobado por el colegio
 no aparecía en el panel del padre —con su QR nuevo— hasta cerrar y
 volver a abrir la app, porque el perfil solo se cargaba una vez por
 sesión; ahora se refresca solo apenas llega la notificación de
-aprobación; **agregado**: como la heurística automática de cámara no
-acertó en un Android puntual ni con el fix del mismo día, se agregó un
-botón "Cambiar cámara" en el lector de QR como salida manual; **causa
-real encontrada**: ese Android ignora por completo el `deviceId` de
-cámara pedido —confirmado con capturas reales del teléfono—, así que se
-cambió la estrategia a pedir/alternar por `facingMode`
-[environment/user], el único dato confiable ahí; se deja además un
-panel de diagnóstico permanente en pantalla con la lista cruda de
-cámaras detectadas, para poder diagnosticar el próximo equipo raro sin
-pelear con `adb`; **tampoco bastó**: confirmado que pasa igual en el
-navegador móvil normal del teléfono, no solo en la app — probable
-problema de tiempos (Android no suelta la cámara anterior lo bastante
-rápido); se agrega una espera real de 500ms entre cerrar una cámara y
-abrir la siguiente, pendiente de confirmar si resuelve el equipo
-puntual).
+aprobación; **causa real del lector de QR en Android, encontrada tras
+varios intentos fallidos** (deviceId, facingMode, esperas, botón manual
+de cambio de cámara — historia completa en §3): `html5-qrcode` ignora
+por completo el selector de cámara (deviceId/facingMode) en cuanto se le
+manda `videoConstraints` para pedir mejor resolución — nunca se estaba
+pidiendo la cámara correcta, sin importar qué se le mandara. Se corrige
+combinando ambos en un solo objeto (`buildVideoConstraints` en
+`qrCamera.ts`); se deja además un panel de diagnóstico permanente en
+pantalla con la lista de cámaras y lo que el navegador dice haber
+abierto de verdad, útil para el próximo equipo raro sin pelear con
+`adb`. Pendiente de confirmación final del colegio con el equipo real).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3048,8 +3044,50 @@ usada en dos puntos de `SmartCheckIn.tsx` y `VerificationDisplay.tsx`:
 entre `listCameras()` (que ya abrió/cerró una cámara) y el `start()`
 real al abrir el lector, y entre el `.stop()`/`.clear()` y el siguiente
 `start()` al tocar "Cambiar cámara". Verificado: `tsc --noEmit` y
-`npx vite build` limpios. Pendiente de confirmar con el colegio si esto
-sí resuelve el problema en ese equipo puntual.
+`npx vite build` limpios. **No bastó tampoco** (ver más abajo).
+
+**Diagnóstico con `track.getSettings()`, mismo día**: se agrega al panel
+una línea con lo que el navegador dice que REALMENTE abrió (no lo que se
+le pidió). Captura real: se pidió `facingMode: {exact: 'environment'}` y
+el navegador devolvió `facingMode=user` con el `deviceId` de una cámara
+"facing front" — confirma que el navegador sustituye la cámara sin
+avisar, sin lanzar `OverconstrainedError`. Se probó además invertir el
+orden (abrir la cámara real *antes* de enumerar para el diagnóstico, por
+si la enumeración sin restricciones "fijaba" la frontal) — mismo
+resultado exacto, incluso como primerísima llamada de cámara de la
+sesión. Se le pidió entonces al colegio dos pruebas de control, sin nada
+de la app de por medio: (1) la app de Cámara nativa del teléfono cambia
+bien entre frontal y trasera, y (2) la página pública de demo de Google
+(`webrtc.github.io/samples/.../input-output`) **también cambia
+perfectamente** entre cámaras con su propio selector — descarta por
+completo hardware, sistema operativo y navegador como causa. El bug
+tenía que estar en cómo esta app pide la cámara.
+
+**CAUSA REAL encontrada**: en el código fuente de `html5-qrcode`
+(`html5-qrcode.js`, dentro de `.start()`):
+```js
+var videoConstraints = areVideoConstraintsEnabled
+    ? internalConfig.videoConstraints      // si se manda esto...
+    : $this.createVideoConstraints(cameraIdOrConfig); // ...esto NUNCA se llama
+```
+La app siempre mandaba `config.videoConstraints` (para pedir mejor
+resolución, `{width:{ideal:1280}, height:{ideal:720}}`, necesario para
+decodificar un QR mostrado en otra pantalla o alejado) — y en cuanto ese
+campo está presente, la librería lo usa tal cual para `getUserMedia` y
+**el selector de cámara (el primer argumento — deviceId o facingMode,
+lo que fuera) se ignora por completo, sin error ni aviso**. Por eso
+ningún intento anterior (deviceId, facingMode, esperas, reordenar)
+cambió nada: el selector nunca llegaba a pedirse de verdad, el navegador
+siempre abría su cámara por defecto (la frontal).
+
+Fix real: `buildVideoConstraints()` en `qrCamera.ts` combina el selector
+de cámara **dentro** del mismo objeto de resolución (`deviceId`/
+`facingMode` son constraints válidas junto a `width`/`height`, no hay
+conflicto — solo había que no mandarlos por separado), y
+`SmartCheckIn.tsx`/`VerificationDisplay.tsx` usan ese único objeto
+combinado como `videoConstraints`. Verificado: `tsc --noEmit` y
+`npx vite build` limpios. Pendiente de confirmación final del colegio
+con el equipo real.
 
 ---
 

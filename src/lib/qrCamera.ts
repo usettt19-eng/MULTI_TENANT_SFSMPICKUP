@@ -41,18 +41,48 @@ export function setPreferredSelector(selector: unknown) {
   cachedSelector = selector;
 }
 
-// 2026-09-30: confirmado con capturas reales que ni el deviceId ni el
-// facingMode cambian la cámara en un teléfono puntual — ni en la app ni
-// en el navegador móvil normal del mismo equipo (descarta que sea algo
-// específico del WebView de Capacitor). `track.stop()` ya se llama en
-// cada cierre (tanto acá como en `.stop()`/`.clear()` del lector), pero
-// que la promesa resuelva no garantiza que Android haya soltado la
-// cámara a nivel de hardware todavía — pedirla de nuevo casi al instante
-// puede devolver la misma sesión ya abierta en vez de renegociar con el
-// otro sensor. Se da un respiro real entre cerrar una cámara y abrir la
-// siguiente.
+// Respiro entre cerrar una cámara y abrir la siguiente — no era la causa
+// real del bug de abajo, pero no hace daño dejarlo como margen de
+// seguridad para el hardware de cámara.
 export function cameraReleaseDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 500));
+}
+
+// CAUSA REAL encontrada el 2026-09-30, después de que deviceId,
+// facingMode y la espera de arriba no cambiaran nada en un equipo real
+// (confirmado con capturas): en el código fuente de `html5-qrcode`,
+// `Html5Qrcode.start(cameraIdOrConfig, config, ...)` arma el
+// `videoConstraints` real que le pasa a `getUserMedia` así — mirar
+// html5-qrcode.js:
+//
+//   var videoConstraints = areVideoConstraintsEnabled
+//       ? internalConfig.videoConstraints      // si mandamos esto...
+//       : $this.createVideoConstraints(cameraIdOrConfig); // ...esto NUNCA se llama
+//
+// Es decir: en cuanto `config.videoConstraints` viene presente (lo
+// usábamos para pedir mejor resolución, `{width:{ideal:1280}, ...}`),
+// la librería usa ESE objeto tal cual para `getUserMedia` y el selector
+// de cámara (`cameraIdOrConfig`, el primer argumento — deviceId o
+// facingMode) se ignora por completo, sin error ni aviso. Por eso el
+// navegador siempre abría la cámara "por defecto" del dispositivo (la
+// frontal) sin importar qué selector se le pasara — nunca llegaba a
+// pedirse. La prueba con la página de Google
+// (webrtc.github.io/samples/.../input-output) confirmó que el teléfono y
+// Chrome sí pueden cambiar de cámara sin problema quitando esa
+// intermediación.
+//
+// Fix: combinar el selector de cámara DENTRO del mismo objeto que la
+// resolución, para que sea un solo `videoConstraints` completo.
+const RESOLUTION_HINT = { width: { ideal: 1280 }, height: { ideal: 720 } };
+
+export function buildVideoConstraints(cameraSelector: unknown): Record<string, unknown> {
+  const constraints: Record<string, unknown> = { ...RESOLUTION_HINT };
+  if (typeof cameraSelector === 'string') {
+    constraints.deviceId = { exact: cameraSelector };
+  } else if (cameraSelector && typeof cameraSelector === 'object') {
+    Object.assign(constraints, cameraSelector);
+  }
+  return constraints;
 }
 
 // Recibe la clase Html5Qrcode ya importada (import dinámico en los
