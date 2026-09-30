@@ -197,21 +197,21 @@ export function SmartCheckIn() {
       setTimeout(async () => {
         try {
           const cameraSelector = await resolveQrCameraSelector(Html5Qrcode);
-          // Se listan las cámaras (cacheado, no negocia de nuevo) para
-          // poblar el selector manual — la elección automática no siempre
-          // acierta en todos los equipos (reporte real en Android).
-          const cameras = await listCameras(Html5Qrcode);
-          setAvailableCameras(cameras);
           const resolvedId = typeof cameraSelector === 'string' ? cameraSelector : null;
           const facingModeExact = (cameraSelector as any)?.facingMode?.exact;
           if (facingModeExact === 'environment' || facingModeExact === 'user') {
             setActiveFacingMode(facingModeExact);
           }
-          // listCameras() de arriba ya abrió y cerró una cámara para
-          // enumerar — sin este respiro, Android puede no haber soltado el
-          // hardware todavía cuando se pide la cámara real acá abajo.
-          await cameraReleaseDelay();
+          // Confirmado con capturas reales: en un equipo puntual, pedir
+          // primero la cámara SIN restricciones (lo que hace getCameras()
+          // para desbloquear etiquetas) "fija" la frontal para el resto de
+          // la sesión, sin importar qué se pida después — ni por facingMode
+          // ni por deviceId. Se abre primero la cámara real con la
+          // restricción, y solo después se enumera para el panel de
+          // diagnóstico (que ya no puede afectar esta apertura).
           await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
+          const cameras = await listCameras(Html5Qrcode);
+          setAvailableCameras(cameras);
         } catch (err) {
           console.error("Error starting QR scanner", err);
           setStatusMsg("No se pudo iniciar la cámara. Intenta de nuevo.");
