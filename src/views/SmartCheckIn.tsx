@@ -803,6 +803,18 @@ export function SmartCheckIn() {
                 </>
               )}
             </div>
+            {/* Diagnóstico temporal (2026-09-30): para ver en pantalla qué
+                cámaras detecta un equipo puntual sin necesitar chrome://inspect —
+                quitar una vez resuelto el reporte de Android. */}
+            {isQrScannerActive && availableCameras.length > 0 && (
+              <div className="mt-3 text-[10px] text-slate-400 font-mono text-left max-w-xs mx-auto break-all">
+                {availableCameras.map((c, i) => (
+                  <div key={c.id} className={c.id === activeCameraId ? 'text-primary font-bold' : ''}>
+                    {i + 1}. {c.label || '(sin etiqueta)'} — {c.id}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Facial Recognition Section */}

@@ -1141,7 +1141,20 @@ export function VerificationDisplay() {
                       </button>
                     )}
                   </div>
-                ) : (
+                ) : null}
+                {/* Diagnóstico temporal (2026-09-30): para ver en pantalla qué
+                    cámaras detecta un equipo puntual sin necesitar chrome://inspect —
+                    quitar una vez resuelto el reporte de Android. */}
+                {isQrCameraActive && availableCameras.length > 0 && (
+                  <div className="text-[10px] text-slate-400 font-mono text-left break-all">
+                    {availableCameras.map((c, i) => (
+                      <div key={c.id} className={c.id === activeCameraId ? 'text-indigo-600 font-bold' : ''}>
+                        {i + 1}. {c.label || '(sin etiqueta)'} — {c.id}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!isQrCameraActive && (
                   <button
                     onClick={startQrScanner}
                     className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
