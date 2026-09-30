@@ -20,7 +20,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
-import { resolveQrCameraSelector, listCameras, setPreferredCameraId } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -65,12 +65,16 @@ export function SmartCheckIn() {
 
   const [isQrScannerActive, setIsQrScannerActive] = useState(false);
   const html5QrCode = useRef<any>(null);
-  // Selector manual de cámara — la elección automática (facingMode /
-  // etiqueta "back") no siempre acierta en todos los equipos (reporte
-  // real: un Android que igual abría la frontal); este botón deja al
-  // personal cambiarla a mano si hace falta.
+  // Selector manual de cámara — la elección automática no siempre acierta
+  // en todos los equipos (reporte real, con capturas: un Android donde el
+  // WebView ignora por completo el deviceId pedido — el video en pantalla
+  // nunca cambiaba aunque el id sí cambiara). En teléfono el botón
+  // "Cambiar cámara" alterna por facingMode (environment/user), que es lo
+  // único que se confirmó confiable ahí; en computadora sigue ciclando
+  // por id entre las cámaras listadas, que ahí nunca dio problema.
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [activeFacingMode, setActiveFacingMode] = useState<'environment' | 'user'>('environment');
 
   // Voz nativa del navegador (speechSynthesis) — antes esta pantalla
   // llamaba a Gemini directamente, con su propio AudioContext nuevo en cada
@@ -189,6 +193,10 @@ export function SmartCheckIn() {
           const cameras = await listCameras(Html5Qrcode);
           setAvailableCameras(cameras);
           const resolvedId = typeof cameraSelector === 'string' ? cameraSelector : null;
+          const facingModeExact = (cameraSelector as any)?.facingMode?.exact;
+          if (facingModeExact === 'environment' || facingModeExact === 'user') {
+            setActiveFacingMode(facingModeExact);
+          }
           await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
         } catch (err) {
           console.error("Error starting QR scanner", err);
@@ -203,15 +211,13 @@ export function SmartCheckIn() {
     }
   };
 
-  // Botón "Cambiar cámara": la elección automática (facingMode / etiqueta
-  // "back") no acierta en todos los equipos — deja al personal pasar a la
-  // siguiente cámara de la lista a mano. Se recuerda la elección
-  // (setPreferredCameraId) para que la próxima vez que se abra el lector
-  // en esta misma sesión arranque directo con la que funcionó.
+  // Botón "Cambiar cámara". En teléfono: alterna facingMode
+  // environment/user — el deviceId se probó no confiable en Android (ver
+  // comentario arriba y en qrCamera.ts). En computadora: cicla por id
+  // entre las cámaras listadas, como antes.
   const switchToNextCamera = async () => {
-    if (availableCameras.length < 2) return;
-    const currentIndex = activeCameraId ? availableCameras.findIndex(c => c.id === activeCameraId) : -1;
-    const next = availableCameras[(currentIndex + 1) % availableCameras.length];
+    const mobile = isMobileDevice();
+    if (!mobile && availableCameras.length < 2) return;
     try {
       if (html5QrCode.current?.isScanning) {
         await html5QrCode.current.stop();
@@ -222,8 +228,18 @@ export function SmartCheckIn() {
         html5QrCode.current.clear();
       }
       const { Html5Qrcode } = await import('html5-qrcode');
-      await startCameraWith(Html5Qrcode, next.id, next.id);
-      setPreferredCameraId(next.id);
+      if (mobile) {
+        const nextMode = activeFacingMode === 'environment' ? 'user' : 'environment';
+        const selector = { facingMode: { exact: nextMode } };
+        await startCameraWith(Html5Qrcode, selector, null);
+        setActiveFacingMode(nextMode);
+        setPreferredSelector(selector);
+      } else {
+        const currentIndex = activeCameraId ? availableCameras.findIndex(c => c.id === activeCameraId) : -1;
+        const next = availableCameras[(currentIndex + 1) % availableCameras.length];
+        await startCameraWith(Html5Qrcode, next.id, next.id);
+        setPreferredSelector(next.id);
+      }
     } catch (err) {
       console.error("Error cambiando de cámara", err);
       setStatusMsg("No se pudo cambiar de cámara.");
@@ -791,7 +807,7 @@ export function SmartCheckIn() {
               ) : (
                 <>
                   <button onClick={stopQrScanner} className="bg-rose-500 text-white px-6 py-3 rounded-xl font-bold">Detener Lector</button>
-                  {availableCameras.length > 1 && (
+                  {(isMobileDevice() || availableCameras.length > 1) && (
                     <button
                       onClick={switchToNextCamera}
                       title="Cambiar cámara"
@@ -806,8 +822,13 @@ export function SmartCheckIn() {
             {/* Diagnóstico temporal (2026-09-30): para ver en pantalla qué
                 cámaras detecta un equipo puntual sin necesitar chrome://inspect —
                 quitar una vez resuelto el reporte de Android. */}
-            {isQrScannerActive && availableCameras.length > 0 && (
+            {isQrScannerActive && (
               <div className="mt-3 text-[10px] text-slate-400 font-mono text-left max-w-xs mx-auto break-all">
+                {isMobileDevice() && (
+                  <div className="text-primary font-bold mb-1">
+                    Cámara pedida: {activeFacingMode === 'environment' ? 'trasera (environment)' : 'frontal (user)'}
+                  </div>
+                )}
                 {availableCameras.map((c, i) => (
                   <div key={c.id} className={c.id === activeCameraId ? 'text-primary font-bold' : ''}>
                     {i + 1}. {c.label || '(sin etiqueta)'} — {c.id}

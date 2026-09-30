@@ -23,7 +23,14 @@ volver a abrir la app, porque el perfil solo se cargaba una vez por
 sesión; ahora se refresca solo apenas llega la notificación de
 aprobación; **agregado**: como la heurística automática de cámara no
 acertó en un Android puntual ni con el fix del mismo día, se agregó un
-botón "Cambiar cámara" en el lector de QR como salida manual).
+botón "Cambiar cámara" en el lector de QR como salida manual; **causa
+real encontrada**: ese Android ignora por completo el `deviceId` de
+cámara pedido —confirmado con capturas reales del teléfono—, así que se
+cambió la estrategia a pedir/alternar por `facingMode`
+[environment/user], el único dato confiable ahí; se deja además un
+panel de diagnóstico permanente en pantalla con la lista cruda de
+cámaras detectadas, para poder diagnosticar el próximo equipo raro sin
+pelear con `adb`).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -2982,6 +2989,39 @@ que no pasaba nada. Se agrega `html5QrCode.current.clear()` (mismo
 nombre de variable en los dos archivos) después del `.stop()`, antes de
 volver a llamar `.start()`. Verificado: `tsc --noEmit` y
 `npx vite build` limpios.
+
+**Causa real encontrada, mismo día**: el fix de `.clear()` no bastó —
+nuevo reporte real: "la camara seleccionada cambia pero no lo hace en el
+lector". Se agregó un panel de diagnóstico temporal en pantalla (sin
+necesitar `chrome://inspect`/`adb`, que costó mucho conseguir con ese
+colegio) mostrando la lista cruda de `Html5Qrcode.getCameras()` y cuál
+quedaba marcada activa. Con capturas reales del teléfono (Samsung
+SM-A156M, 4 cámaras: `camera 1`/`camera 3` facing front, `camera 2`/
+`camera 0` facing back) quedó probado que **el video en pantalla nunca
+cambiaba**, sin importar cuál de las 4 quedara marcada activa —incluso
+alternando entre las dos "facing back"—, siempre mostraba la cámara
+frontal. Conclusión: el WebView de Android de ese equipo **ignora por
+completo el `deviceId`** que se le pide (`exact` o no), aunque la
+etiqueta "facing back"/"facing front" que reporta `getCameras()` sí es
+correcta.
+
+Se cambia de estrategia por completo en teléfono: en vez de elegir por
+`deviceId` (probado no confiable), `resolveQrCameraSelector()` pide
+siempre `facingMode: { exact: 'environment' }` de entrada, y el botón
+"Cambiar cámara" ahora **alterna facingMode** (`environment` ↔ `user`)
+en vez de ciclar por id — es el único dato que se confirmó confiable en
+ese WebView, porque viene de la metadata real de la cámara, no de una
+lista de dispositivos que el navegador arma mal. En computadora no se
+tocó nada (ahí nunca se reportó este problema): el botón sigue ciclando
+por id entre las cámaras listadas.
+
+Se renombra `setPreferredCameraId()` a `setPreferredSelector()` en
+`qrCamera.ts` (ahora guarda cualquier tipo de selector, no solo un id).
+El panel de diagnóstico en pantalla se deja tal cual, ya no como algo
+"temporal para quitar" sino como ayuda permanente de soporte remoto —
+vale la pena poder ver desde una foto del teléfono qué cámaras detecta
+un equipo puntual sin tener que pelear con `adb`/depuración inalámbrica
+otra vez. Verificado: `tsc --noEmit` y `npx vite build` limpios.
 
 ---
 

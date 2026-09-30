@@ -6,7 +6,7 @@ export type CameraDevice = { id: string; label: string };
 
 type Html5QrcodeClass = { getCameras: () => Promise<CameraDevice[]> };
 
-const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+export const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
 
 // getCameras() de html5-qrcode dispara su propio getUserMedia() interno
 // para desbloquear las etiquetas de los dispositivos, ANTES del
@@ -28,8 +28,7 @@ async function listCamerasCached(Html5QrcodeClass: Html5QrcodeClass): Promise<Ca
   return cachedCameras;
 }
 
-// Para el selector manual de cámara en la UI (ver switchCamera en
-// SmartCheckIn.tsx/VerificationDisplay.tsx) — no dispara ninguna
+// Solo informativo (panel de diagnóstico en la UI) — no dispara ninguna
 // negociación nueva si ya se listaron antes.
 export async function listCameras(Html5QrcodeClass: Html5QrcodeClass): Promise<CameraDevice[]> {
   return listCamerasCached(Html5QrcodeClass);
@@ -38,49 +37,46 @@ export async function listCameras(Html5QrcodeClass: Html5QrcodeClass): Promise<C
 // Guarda la elección manual del usuario (botón "Cambiar cámara") para que
 // la próxima vez que se abra el lector en esta misma sesión arranque
 // directo con esa cámara, sin volver a adivinar.
-export function setPreferredCameraId(id: string) {
-  cachedSelector = id;
-}
-
-// El WebView de Android no siempre respeta bien el constraint
-// `facingMode: 'environment'` — reporte real: en el teléfono elegía la
-// cámara frontal por defecto igual. Se prefiere el id explícito de la
-// cámara cuya etiqueta diga "back"/"rear"/"trasera"/"environment" (así
-// suele venir en Android/Chrome); si ninguna etiqueta ayuda, se apuesta
-// por la última de la lista — por convención la frontal suele enumerar
-// primero. Si ninguna de las dos formas da con la cámara correcta en un
-// equipo puntual, queda el botón "Cambiar cámara" en la UI como salida.
-function pickRearCameraId(cameras: CameraDevice[]): string {
-  const backMatch = cameras.find((c) => /back|rear|trasera|environment/i.test(c.label));
-  if (backMatch) return backMatch.id;
-  return cameras[cameras.length - 1].id;
+export function setPreferredSelector(selector: unknown) {
+  cachedSelector = selector;
 }
 
 // Recibe la clase Html5Qrcode ya importada (import dinámico en los
 // call sites) para no repetir el import acá.
+//
+// 2026-09-30: se probó elegir la trasera por id explícito de dispositivo
+// (enumerando y filtrando por etiqueta "back"/"rear") porque
+// `facingMode: 'environment'` solo no bastaba en Android — pero un reporte
+// con capturas de pantalla reales probó que ESE Android WebView ignora el
+// `deviceId` por completo: cambiar de id (incluso entre dos cámaras
+// distintas, ambas etiquetadas "facing back") nunca cambió el video en
+// pantalla, siempre quedaba la frontal. La etiqueta "facing back"/"facing
+// front" que reporta `getCameras()` sí viene correcta (por eso el
+// diagnóstico la mostraba bien), así que el dato confiable es el
+// `facingMode`, no el `deviceId`. Se vuelve a pedir por `facingMode`
+// exacto en teléfono, sin intentar afinar por id.
 export async function resolveQrCameraSelector(Html5QrcodeClass: Html5QrcodeClass): Promise<unknown> {
   if (cachedSelector !== null) return cachedSelector;
 
-  const mobile = isMobileDevice();
-  // Selector de respaldo si la enumeración de abajo falla o no ayuda:
-  // en teléfono, `exact` fuerza la trasera (o falla con error visible, en
-  // vez de caer en silencio a la frontal); en laptop, 'environment' sin
-  // `exact` para no colgarse si de verdad solo hay una cámara frontal.
-  let selector: unknown = mobile ? { facingMode: { exact: 'environment' } } : { facingMode: 'environment' };
+  if (isMobileDevice()) {
+    const selector = { facingMode: { exact: 'environment' } };
+    cachedSelector = selector;
+    return selector;
+  }
 
+  // En una laptop (ej. Mac) normalmente hay una sola cámara, frontal —
+  // pedir facingMode: 'environment' ahí deja a getUserMedia esperando una
+  // cámara trasera que no existe, y no todos los navegadores caen de
+  // vuelta a la única cámara disponible: la pantalla queda pegada
+  // esperando el video, sin cámara ni error visible. Se listan las
+  // cámaras reales primero — con una sola, se usa su id directo en vez
+  // del selector por facingMode. (En desktop el deviceId sí funciona bien
+  // — el problema de arriba es específico del WebView de Android.)
+  let selector: unknown = { facingMode: 'environment' };
   const cameras = await listCamerasCached(Html5QrcodeClass);
   if (cameras.length === 1) {
-    // Una sola cámara (ej. laptop sin cámara trasera, o un teléfono cuya
-    // enumeración no reportó las dos): pedir 'environment' ahí puede
-    // colgarse esperando una cámara que no va a aparecer — se usa el id
-    // de la única que hay.
     selector = cameras[0].id;
-  } else if (mobile && cameras.length > 1) {
-    selector = pickRearCameraId(cameras);
   }
-  // En desktop con más de una cámara se deja el facingMode: 'environment'
-  // de respaldo — caso poco común (webcams externas) y no es lo que
-  // reportaron con problemas.
 
   cachedSelector = selector;
   return selector;
