@@ -31,7 +31,8 @@ combinando ambos en un solo objeto (`buildVideoConstraints` en
 `qrCamera.ts`); se deja además un panel de diagnóstico permanente en
 pantalla con la lista de cámaras y lo que el navegador dice haber
 abierto de verdad, útil para el próximo equipo raro sin pelear con
-`adb`. Pendiente de confirmación final del colegio con el equipo real).
+`adb`. **Confirmado resuelto** por el colegio con el equipo real que
+reportó el problema).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3086,8 +3087,9 @@ de cámara **dentro** del mismo objeto de resolución (`deviceId`/
 conflicto — solo había que no mandarlos por separado), y
 `SmartCheckIn.tsx`/`VerificationDisplay.tsx` usan ese único objeto
 combinado como `videoConstraints`. Verificado: `tsc --noEmit` y
-`npx vite build` limpios. Pendiente de confirmación final del colegio
-con el equipo real.
+`npx vite build` limpios. **Confirmado resuelto** por el colegio con el
+equipo real que reportó el problema — el botón "Cambiar cámara" ya
+cambia de verdad lo que se ve en pantalla.
 
 ---
 
