@@ -10,7 +10,7 @@ import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, annou
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
-import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay } from '../lib/qrCamera';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
@@ -345,6 +345,10 @@ export function VerificationDisplay() {
           if (facingModeExact === 'environment' || facingModeExact === 'user') {
             setActiveFacingMode(facingModeExact);
           }
+          // listCameras() de arriba ya abrió y cerró una cámara para
+          // enumerar — sin este respiro, Android puede no haber soltado el
+          // hardware todavía cuando se pide la cámara real acá abajo.
+          await cameraReleaseDelay();
           await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
         } catch (err) {
           console.error('Error starting QR camera', err);
@@ -375,6 +379,9 @@ export function VerificationDisplay() {
         // pintado encima.
         html5QrCodeRef.current.clear();
       }
+      // Respiro real antes de pedir la otra cámara — ver cameraReleaseDelay
+      // en qrCamera.ts.
+      await cameraReleaseDelay();
       const { Html5Qrcode } = await import('html5-qrcode');
       if (mobile) {
         const nextMode = activeFacingMode === 'environment' ? 'user' : 'environment';

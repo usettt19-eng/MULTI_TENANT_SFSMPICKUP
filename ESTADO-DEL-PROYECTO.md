@@ -30,7 +30,12 @@ cambió la estrategia a pedir/alternar por `facingMode`
 [environment/user], el único dato confiable ahí; se deja además un
 panel de diagnóstico permanente en pantalla con la lista cruda de
 cámaras detectadas, para poder diagnosticar el próximo equipo raro sin
-pelear con `adb`).
+pelear con `adb`; **tampoco bastó**: confirmado que pasa igual en el
+navegador móvil normal del teléfono, no solo en la app — probable
+problema de tiempos (Android no suelta la cámara anterior lo bastante
+rápido); se agrega una espera real de 500ms entre cerrar una cámara y
+abrir la siguiente, pendiente de confirmar si resuelve el equipo
+puntual).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3000,17 +3005,16 @@ SM-A156M, 4 cámaras: `camera 1`/`camera 3` facing front, `camera 2`/
 `camera 0` facing back) quedó probado que **el video en pantalla nunca
 cambiaba**, sin importar cuál de las 4 quedara marcada activa —incluso
 alternando entre las dos "facing back"—, siempre mostraba la cámara
-frontal. Conclusión: el WebView de Android de ese equipo **ignora por
-completo el `deviceId`** que se le pide (`exact` o no), aunque la
-etiqueta "facing back"/"facing front" que reporta `getCameras()` sí es
-correcta.
+frontal. Conclusión: ese equipo **ignora por completo el `deviceId`**
+que se le pide (`exact` o no), aunque la etiqueta "facing back"/"facing
+front" que reporta `getCameras()` sí es correcta.
 
 Se cambia de estrategia por completo en teléfono: en vez de elegir por
 `deviceId` (probado no confiable), `resolveQrCameraSelector()` pide
 siempre `facingMode: { exact: 'environment' }` de entrada, y el botón
 "Cambiar cámara" ahora **alterna facingMode** (`environment` ↔ `user`)
 en vez de ciclar por id — es el único dato que se confirmó confiable en
-ese WebView, porque viene de la metadata real de la cámara, no de una
+ese equipo, porque viene de la metadata real de la cámara, no de una
 lista de dispositivos que el navegador arma mal. En computadora no se
 tocó nada (ahí nunca se reportó este problema): el botón sigue ciclando
 por id entre las cámaras listadas.
@@ -3022,6 +3026,30 @@ El panel de diagnóstico en pantalla se deja tal cual, ya no como algo
 vale la pena poder ver desde una foto del teléfono qué cámaras detecta
 un equipo puntual sin tener que pelear con `adb`/depuración inalámbrica
 otra vez. Verificado: `tsc --noEmit` y `npx vite build` limpios.
+
+**El cambio a `facingMode` tampoco bastó, mismo día**: nuevo reporte con
+captura — el panel de diagnóstico mostraba correctamente "Cámara pedida:
+trasera (environment)", pero el video en pantalla seguía siendo la
+frontal. Y confirmado explícitamente por el colegio: pasa igual **en el
+navegador móvil normal del teléfono**, no solo en la app — descarta que
+sea un problema específico del WebView de Capacitor. Causa más probable:
+`html5-qrcode` sí llama a `track.stop()` al cerrar una cámara (verificado
+en su código fuente), pero que esa promesa resuelva no garantiza que
+Android haya soltado el hardware de cámara todavía — y encima, antes de
+cada apertura real, `listCameras()` ya hizo su propio ciclo de abrir y
+cerrar una cámara solo para enumerar. Pedir la cámara real casi al
+instante después de cerrar la anterior puede hacer que Android devuelva
+la misma sesión de cámara ya abierta en vez de renegociar con el otro
+sensor — un problema de tiempos a nivel de hardware, no de qué
+constraint se le manda.
+
+Se agrega `cameraReleaseDelay()` en `qrCamera.ts` (una espera de 500ms),
+usada en dos puntos de `SmartCheckIn.tsx` y `VerificationDisplay.tsx`:
+entre `listCameras()` (que ya abrió/cerró una cámara) y el `start()`
+real al abrir el lector, y entre el `.stop()`/`.clear()` y el siguiente
+`start()` al tocar "Cambiar cámara". Verificado: `tsc --noEmit` y
+`npx vite build` limpios. Pendiente de confirmar con el colegio si esto
+sí resuelve el problema en ese equipo puntual.
 
 ---
 

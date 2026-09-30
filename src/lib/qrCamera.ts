@@ -41,20 +41,35 @@ export function setPreferredSelector(selector: unknown) {
   cachedSelector = selector;
 }
 
+// 2026-09-30: confirmado con capturas reales que ni el deviceId ni el
+// facingMode cambian la cámara en un teléfono puntual — ni en la app ni
+// en el navegador móvil normal del mismo equipo (descarta que sea algo
+// específico del WebView de Capacitor). `track.stop()` ya se llama en
+// cada cierre (tanto acá como en `.stop()`/`.clear()` del lector), pero
+// que la promesa resuelva no garantiza que Android haya soltado la
+// cámara a nivel de hardware todavía — pedirla de nuevo casi al instante
+// puede devolver la misma sesión ya abierta en vez de renegociar con el
+// otro sensor. Se da un respiro real entre cerrar una cámara y abrir la
+// siguiente.
+export function cameraReleaseDelay(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 500));
+}
+
 // Recibe la clase Html5Qrcode ya importada (import dinámico en los
 // call sites) para no repetir el import acá.
 //
 // 2026-09-30: se probó elegir la trasera por id explícito de dispositivo
 // (enumerando y filtrando por etiqueta "back"/"rear") porque
 // `facingMode: 'environment'` solo no bastaba en Android — pero un reporte
-// con capturas de pantalla reales probó que ESE Android WebView ignora el
-// `deviceId` por completo: cambiar de id (incluso entre dos cámaras
-// distintas, ambas etiquetadas "facing back") nunca cambió el video en
+// con capturas de pantalla reales probó que en ese teléfono, tanto en la
+// app como en el navegador móvil normal (no es algo específico del
+// WebView de Capacitor), cambiar de `deviceId` nunca cambió el video en
 // pantalla, siempre quedaba la frontal. La etiqueta "facing back"/"facing
-// front" que reporta `getCameras()` sí viene correcta (por eso el
-// diagnóstico la mostraba bien), así que el dato confiable es el
-// `facingMode`, no el `deviceId`. Se vuelve a pedir por `facingMode`
-// exacto en teléfono, sin intentar afinar por id.
+// front" que reporta `getCameras()` sí viene correcta, así que el dato
+// confiable es el `facingMode`, no el `deviceId` — se pide por
+// `facingMode` exacto en teléfono. Ver también `cameraReleaseDelay()` más
+// abajo: el problema de fondo parece ser que Android no suelta la cámara
+// anterior a tiempo para la siguiente negociación.
 export async function resolveQrCameraSelector(Html5QrcodeClass: Html5QrcodeClass): Promise<unknown> {
   if (cachedSelector !== null) return cachedSelector;
 

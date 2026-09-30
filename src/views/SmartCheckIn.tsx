@@ -20,7 +20,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
-import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -197,6 +197,10 @@ export function SmartCheckIn() {
           if (facingModeExact === 'environment' || facingModeExact === 'user') {
             setActiveFacingMode(facingModeExact);
           }
+          // listCameras() de arriba ya abrió y cerró una cámara para
+          // enumerar — sin este respiro, Android puede no haber soltado el
+          // hardware todavía cuando se pide la cámara real acá abajo.
+          await cameraReleaseDelay();
           await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
         } catch (err) {
           console.error("Error starting QR scanner", err);
@@ -227,6 +231,9 @@ export function SmartCheckIn() {
         // pintado encima.
         html5QrCode.current.clear();
       }
+      // Respiro real antes de pedir la otra cámara — ver cameraReleaseDelay
+      // en qrCamera.ts.
+      await cameraReleaseDelay();
       const { Html5Qrcode } = await import('html5-qrcode');
       if (mobile) {
         const nextMode = activeFacingMode === 'environment' ? 'user' : 'environment';
