@@ -215,6 +215,11 @@ export function SmartCheckIn() {
     try {
       if (html5QrCode.current?.isScanning) {
         await html5QrCode.current.stop();
+        // Sin esto, el <video> anterior se queda en el DOM (stop() no lo
+        // saca) — start() de abajo sí abre la cámara nueva, pero en
+        // pantalla parecía "no cambió nada" porque el video viejo seguía
+        // pintado encima.
+        html5QrCode.current.clear();
       }
       const { Html5Qrcode } = await import('html5-qrcode');
       await startCameraWith(Html5Qrcode, next.id, next.id);

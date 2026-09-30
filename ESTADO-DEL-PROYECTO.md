@@ -2969,6 +2969,20 @@ Nuevas exportaciones en `src/lib/qrCamera.ts`: `listCameras()`
 cámara de nuevo) y `setPreferredCameraId()`. Verificado: `tsc --noEmit`
 y `npx vite build` limpios.
 
+**Bug de seguimiento, mismo día**: reporte real — "aparece pero no
+cambia a la cámara en la app de Android". El botón sí disparaba
+`stop()` + `start()` con el id de la siguiente cámara, pero
+`switchToNextCamera` solo llamaba a `.stop()`, no a `.clear()` — a
+diferencia de `stopQrScanner()`, que sí llama a las dos. `stop()` de
+`html5-qrcode` no saca el `<video>` del DOM (solo cierra el stream
+internamente); sin `.clear()` (que vacía el contenedor,
+`element.innerHTML = ""`), el `<video>` viejo se quedaba pintado encima
+del nuevo — la cámara sí cambiaba por debajo, pero en pantalla parecía
+que no pasaba nada. Se agrega `html5QrCode.current.clear()` (mismo
+nombre de variable en los dos archivos) después del `.stop()`, antes de
+volver a llamar `.start()`. Verificado: `tsc --noEmit` y
+`npx vite build` limpios.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
