@@ -38,6 +38,22 @@ import {
 // dato que el propio sistema operativo ya marca como poco confiable.
 const MAX_LOCATION_ACCURACY_METERS = 100;
 
+// Colores para distinguir de un vistazo los botones "Anunciar llegada de
+// [hijo]" cuando hay más de uno — pedido real: si el padre no recuerda
+// cuáles marcó como "salen juntos", debería verse a simple vista; y si
+// ninguno está agrupado, cada botón debería tener su propio color para
+// no confundirse al elegir. Los agrupados comparten el índigo de
+// siempre (ya asociado a "juntos" en el modal); cada hijo suelto rota
+// por esta paleta.
+const SINGLE_CHILD_COLORS = [
+  'bg-emerald-600',
+  'bg-sky-600',
+  'bg-rose-600',
+  'bg-amber-600',
+  'bg-violet-600',
+  'bg-teal-600',
+];
+
 export function ParentDashboard() {
   const { profile, profiles, switchProfile, signOut, refreshProfile } = useAuth();
   const { language, t, setLanguage, hasManualLanguage } = useLanguage();
@@ -2393,6 +2409,17 @@ export function ParentDashboard() {
           </div>
         )}
 
+        {(() => {
+          // Hijos agrupados como "salen juntos" comparten el índigo de
+          // siempre; el resto (o todos, si nadie está agrupado) rota por
+          // SINGLE_CHILD_COLORS para distinguirse entre sí.
+          const groupedIds = new Set(kidsTogetherGroup.length > 1 ? kidsTogetherGroup : []);
+          const ungroupedStudents = pickupStudents.filter(s => !groupedIds.has(s.id));
+          const singleColorByStudentId: Record<string, string> = {};
+          ungroupedStudents.forEach((s, i) => {
+            singleColorByStudentId[s.id] = SINGLE_CHILD_COLORS[i % SINGLE_CHILD_COLORS.length];
+          });
+          return (
         <div className="space-y-4">
            {pickupStudents.map(s => {
              const canAnnounceThis = status === 'idle' && !loading && (canAnnounceArrivalNow || earlyWithdrawalStudentIds.has(s.id)) && !doorSelectionRequired
@@ -2451,7 +2478,9 @@ export function ParentDashboard() {
                   onClick={() => handleAnnounceArrival(!isLocationEnabled, [s.id])}
                   disabled={!canAnnounceThis}
                   className={`w-full py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                    canAnnounceThis ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                    canAnnounceThis
+                      ? `${groupedIds.has(s.id) ? 'bg-indigo-600' : singleColorByStudentId[s.id]} text-white`
+                      : 'bg-slate-100 text-slate-400'
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4" />
@@ -2461,6 +2490,8 @@ export function ParentDashboard() {
              </div>
            );})}
         </div>
+          );
+        })()}
       </div>
 
       {/* FORM MODAL */}

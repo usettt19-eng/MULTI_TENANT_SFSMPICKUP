@@ -35,7 +35,10 @@ abierto de verdad, útil para el próximo equipo raro sin pelear con
 reportó el problema; **fix**: escanear el QR de un reemplazo volvía a
 preguntarle al personal a cuál hijo aplicaba, aunque el padre ya lo
 había declarado al pedir el reemplazo —ahora se anuncian de una vez
-todos los hijos elegibles, sin modal de selección).
+todos los hijos elegibles, sin modal de selección; **agregado**: los
+botones de "Anunciar llegada de [hijo]" ya no son todos del mismo color
+— los que "salen juntos" comparten índigo, y cada hijo suelto (o todos,
+si nadie está agrupado) tiene su propio color de una paleta de 6).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3117,6 +3120,33 @@ hacía falta tocar `VerificationDisplay.tsx` (Monitor Externo): ese
 escaneo de QR solo confirma identidad contra un alumno que ya está en la
 fila, no crea el anuncio, así que no tenía este problema. Verificado:
 `tsc --noEmit` y `npx vite build` limpios.
+
+### Botones de "Anunciar llegada de [hijo]" con color distinto por alumno (2026-09-30)
+Pedido real, a partir de las capturas del modal "¿Quiénes salen
+juntos?": "cuando el papá selecciona que dos se van juntos y llega para
+solicitar y no se acuerda cuáles seleccionó juntos, esos deberían tener
+otro color distinto, y si todos van en forma diferente cada uno debería
+tener un color distinto para seleccionar al que vino a buscar". Antes
+los botones por hijo (`ParentDashboard.tsx`, la lista bajo el botón
+combinado) eran todos del mismo índigo, sin ninguna pista visual de cuál
+está agrupado con cuál — solo el texto pequeño "Leave together: Joaquín
+· Lucía" arriba de la lista lo decía.
+
+Ahora, justo antes de renderizar la lista, se calcula de qué color pinta
+cada botón:
+- Los hijos que sí están en el grupo "salen juntos"
+  (`kidsTogetherGroup`, solo cuenta si tiene más de uno) comparten el
+  índigo de siempre — mismo color ya asociado a "juntos" en el modal de
+  selección.
+- Cada hijo que NO está en ningún grupo (o todos, si nadie está
+  agrupado) rota por una paleta nueva de 6 colores
+  (`SINGLE_CHILD_COLORS`: esmeralda, cielo, rosa, ámbar, violeta, verde
+  azulado) — cada uno queda con un color propio, fácil de diferenciar
+  entre varios botones parecidos.
+
+El color solo se aplica cuando el botón está habilitado
+(`canAnnounceThis`); deshabilitado sigue gris neutro como antes.
+Verificado: `tsc --noEmit` y `npx vite build` limpios.
 
 ---
 
