@@ -13,13 +13,14 @@ import {
   ShieldCheck,
   Camera,
   Footprints,
-  X
+  X,
+  SwitchCamera
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
-import { resolveQrCameraSelector } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredCameraId } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -64,6 +65,12 @@ export function SmartCheckIn() {
 
   const [isQrScannerActive, setIsQrScannerActive] = useState(false);
   const html5QrCode = useRef<any>(null);
+  // Selector manual de cámara — la elección automática (facingMode /
+  // etiqueta "back") no siempre acierta en todos los equipos (reporte
+  // real: un Android que igual abría la frontal); este botón deja al
+  // personal cambiarla a mano si hace falta.
+  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
 
   // Voz nativa del navegador (speechSynthesis) — antes esta pantalla
   // llamaba a Gemini directamente, con su propio AudioContext nuevo en cada
@@ -117,6 +124,56 @@ export function SmartCheckIn() {
     };
   }, [stream]);
 
+  // cameraSelector: id de cámara (string) o constraint (ej. facingMode).
+  // resolvedId: si se conoce el id explícito que corresponde (para marcar
+  // cuál está activa en el selector manual de abajo).
+  const startCameraWith = async (Html5Qrcode: any, cameraSelector: unknown, resolvedId: string | null) => {
+    if (!html5QrCode.current) {
+      html5QrCode.current = new Html5Qrcode("qr-reader");
+    }
+
+    const startPromise = html5QrCode.current.start(
+      cameraSelector,
+      {
+        fps: 10,
+        // Caja fija en px: si el contenedor real termina siendo más chico
+        // que 200x200 (pantallas angostas, o el layout no terminó de
+        // asentarse en los 100ms de espera), html5-qrcode puede ignorar
+        // la caja o calcular mal la región de escaneo y nunca detecta
+        // nada aunque la cámara se vea bien. Con una función se recalcula
+        // contra el tamaño real del viewfinder en cada intento.
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+          return { width: edge, height: edge };
+        },
+        // Sin esto, el navegador suele entregar video en baja resolución
+        // (ej. 640x480), lo que hace casi imposible decodificar un QR
+        // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
+        videoConstraints: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      },
+      async (decodedText: string) => {
+        // Handle success
+        handleQrSuccess(decodedText);
+      },
+      (errorMessage: string) => {
+        // Handle error (ignore usually)
+      }
+    );
+
+    // Salvavidas: si getUserMedia se queda esperando indefinidamente
+    // (ej. una cámara que el navegador no logra abrir), la pantalla no
+    // debe quedar pegada para siempre sin ningún aviso ni forma de
+    // reintentar.
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
+    );
+    await Promise.race([startPromise, timeout]);
+    setActiveCameraId(resolvedId);
+  };
+
   const startQrScanner = async () => {
     setIsQrScannerActive(true);
     try {
@@ -125,51 +182,14 @@ export function SmartCheckIn() {
       // Small delay to ensure the DOM element is rendered
       setTimeout(async () => {
         try {
-          if (!html5QrCode.current) {
-            html5QrCode.current = new Html5Qrcode("qr-reader");
-          }
-
           const cameraSelector = await resolveQrCameraSelector(Html5Qrcode);
-
-          const startPromise = html5QrCode.current.start(
-            cameraSelector,
-            {
-              fps: 10,
-              // Caja fija en px: si el contenedor real termina siendo más chico
-              // que 200x200 (pantallas angostas, o el layout no terminó de
-              // asentarse en los 100ms de espera), html5-qrcode puede ignorar
-              // la caja o calcular mal la región de escaneo y nunca detecta
-              // nada aunque la cámara se vea bien. Con una función se recalcula
-              // contra el tamaño real del viewfinder en cada intento.
-              qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-                const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
-                return { width: edge, height: edge };
-              },
-              // Sin esto, el navegador suele entregar video en baja resolución
-              // (ej. 640x480), lo que hace casi imposible decodificar un QR
-              // mostrado en otra pantalla (moiré) o algo alejado de la cámara.
-              videoConstraints: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              },
-            },
-            async (decodedText: string) => {
-              // Handle success
-              handleQrSuccess(decodedText);
-            },
-            (errorMessage: string) => {
-              // Handle error (ignore usually)
-            }
-          );
-
-          // Salvavidas: si getUserMedia se queda esperando indefinidamente
-          // (ej. una cámara que el navegador no logra abrir), la pantalla no
-          // debe quedar pegada para siempre sin ningún aviso ni forma de
-          // reintentar.
-          const timeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
-          );
-          await Promise.race([startPromise, timeout]);
+          // Se listan las cámaras (cacheado, no negocia de nuevo) para
+          // poblar el selector manual — la elección automática no siempre
+          // acierta en todos los equipos (reporte real en Android).
+          const cameras = await listCameras(Html5Qrcode);
+          setAvailableCameras(cameras);
+          const resolvedId = typeof cameraSelector === 'string' ? cameraSelector : null;
+          await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
         } catch (err) {
           console.error("Error starting QR scanner", err);
           setStatusMsg("No se pudo iniciar la cámara. Intenta de nuevo.");
@@ -180,6 +200,28 @@ export function SmartCheckIn() {
       console.error("Error starting QR scanner", err);
       setStatusMsg("Error al iniciar la cámara para QR");
       setIsQrScannerActive(false);
+    }
+  };
+
+  // Botón "Cambiar cámara": la elección automática (facingMode / etiqueta
+  // "back") no acierta en todos los equipos — deja al personal pasar a la
+  // siguiente cámara de la lista a mano. Se recuerda la elección
+  // (setPreferredCameraId) para que la próxima vez que se abra el lector
+  // en esta misma sesión arranque directo con la que funcionó.
+  const switchToNextCamera = async () => {
+    if (availableCameras.length < 2) return;
+    const currentIndex = activeCameraId ? availableCameras.findIndex(c => c.id === activeCameraId) : -1;
+    const next = availableCameras[(currentIndex + 1) % availableCameras.length];
+    try {
+      if (html5QrCode.current?.isScanning) {
+        await html5QrCode.current.stop();
+      }
+      const { Html5Qrcode } = await import('html5-qrcode');
+      await startCameraWith(Html5Qrcode, next.id, next.id);
+      setPreferredCameraId(next.id);
+    } catch (err) {
+      console.error("Error cambiando de cámara", err);
+      setStatusMsg("No se pudo cambiar de cámara.");
     }
   };
 
@@ -738,11 +780,22 @@ export function SmartCheckIn() {
               )}
             </div>
 
-            <div className="mt-6">
+            <div className="mt-6 flex items-center gap-3">
               {!isQrScannerActive ? (
                 <button onClick={startQrScanner} className="bg-primary text-white px-6 py-3 rounded-xl font-bold">Activar Lector QR</button>
               ) : (
-                <button onClick={stopQrScanner} className="bg-rose-500 text-white px-6 py-3 rounded-xl font-bold">Detener Lector</button>
+                <>
+                  <button onClick={stopQrScanner} className="bg-rose-500 text-white px-6 py-3 rounded-xl font-bold">Detener Lector</button>
+                  {availableCameras.length > 1 && (
+                    <button
+                      onClick={switchToNextCamera}
+                      title="Cambiar cámara"
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl transition-colors"
+                    >
+                      <SwitchCamera className="w-5 h-5" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

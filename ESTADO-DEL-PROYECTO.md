@@ -21,7 +21,9 @@ repetirla cada vez; **fix**: un reemplazo recién aprobado por el colegio
 no aparecía en el panel del padre —con su QR nuevo— hasta cerrar y
 volver a abrir la app, porque el perfil solo se cargaba una vez por
 sesión; ahora se refresca solo apenas llega la notificación de
-aprobación).
+aprobación; **agregado**: como la heurística automática de cámara no
+acertó en un Android puntual ni con el fix del mismo día, se agregó un
+botón "Cambiar cámara" en el lector de QR como salida manual).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -2942,6 +2944,30 @@ dispararlo acá). El listado de reemplazos ahora se actualiza solo,
 dentro de la misma ventana de 10s del poll normal, sin que el padre
 tenga que hacer nada. Verificado: `tsc --noEmit` y `npx vite build`
 limpios.
+
+### Selector manual de cámara en el lector de QR, de respaldo cuando la elección automática falla (2026-09-30)
+Seguimiento del fix de cámara del mismo día: en un Android puntual, ni
+`facingMode: { exact: 'environment' }` ni elegir por id/etiqueta
+("back"/"rear"/"trasera") lograron dar con la cámara trasera — se
+intentó depurar en vivo con `chrome://inspect` (requiere USB debugging o
+depuración inalámbrica vía `adb pair`/`adb connect`, cubierto también en
+el manual de recepción más abajo) pero no se pudo confirmar el WebView
+de la app a tiempo. En vez de seguir adivinando la heurística automática
+a ciegas, se agregó un **botón "Cambiar cámara"** (ícono, junto a
+"Detener Lector"/"Detener Cámara") en `SmartCheckIn.tsx` y
+`VerificationDisplay.tsx`, visible siempre que `html5-qrcode` detecte
+más de una cámara — al tocarlo, pasa a la siguiente cámara de la lista
+(deteniendo y reiniciando el lector con ese id explícito) y recuerda la
+elección (`setPreferredCameraId` en `qrCamera.ts`) para que la próxima
+apertura del lector en esa misma sesión arranque directo con la que
+funcionó. Esto no reemplaza la heurística automática (que sigue
+intentando acertar primero), es la salida manual para el equipo puntual
+donde no acierta.
+
+Nuevas exportaciones en `src/lib/qrCamera.ts`: `listCameras()`
+(enumeración cacheada, reutilizable para poblar el selector sin negociar
+cámara de nuevo) y `setPreferredCameraId()`. Verificado: `tsc --noEmit`
+y `npx vite build` limpios.
 
 ---
 

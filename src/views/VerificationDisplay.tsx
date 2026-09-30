@@ -4,13 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car, UserX, Search } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, QrCode, CheckCircle2, Lock, Unlock, X, User, Bell, Video, Zap, Clock, Car, UserX, Search, SwitchCamera } from 'lucide-react';
 
 import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, announceBilingual, setVoiceLanguageSetting, getAudioContext } from '../lib/audioManager';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
-import { resolveQrCameraSelector } from '../lib/qrCamera';
+import { resolveQrCameraSelector, listCameras, setPreferredCameraId } from '../lib/qrCamera';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
@@ -49,6 +49,12 @@ export function VerificationDisplay() {
   const [isQrCameraActive, setIsQrCameraActive] = useState(false);
   const [qrScanMessage, setQrScanMessage] = useState('');
   const html5QrCodeRef = useRef<any>(null);
+  // Selector manual de cámara — la elección automática (facingMode /
+  // etiqueta "back") no siempre acierta en todos los equipos (reporte
+  // real: un Android que igual abría la frontal); este botón deja al
+  // personal cambiarla a mano si hace falta.
+  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [showArrivalToast, setShowArrivalToast] = useState<string | null>(null);
   const [notifiedStaff, setNotifiedStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   // 'idle' | 'sending' | 'sent' — deliberadamente sin diálogo de confirmación
@@ -282,6 +288,40 @@ export function VerificationDisplay() {
     }
   };
 
+  // cameraSelector: id de cámara (string) o constraint (ej. facingMode).
+  // resolvedId: si se conoce el id explícito que corresponde (para marcar
+  // cuál está activa en el selector manual de abajo).
+  const startCameraWith = async (Html5Qrcode: any, cameraSelector: unknown, resolvedId: string | null) => {
+    if (!html5QrCodeRef.current) {
+      html5QrCodeRef.current = new Html5Qrcode('qr-reader-monitor');
+    }
+
+    const startPromise = html5QrCodeRef.current.start(
+      cameraSelector,
+      {
+        fps: 10,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+          return { width: edge, height: edge };
+        },
+        videoConstraints: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      },
+      (decodedText: string) => handleQrDecoded(decodedText),
+      () => {} // errores de "no encontrado todavía" por cuadro — se ignoran
+    );
+
+    // Salvavidas: si getUserMedia se queda esperando indefinidamente,
+    // no dejar la pantalla pegada para siempre sin ningún aviso.
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
+    );
+    await Promise.race([startPromise, timeout]);
+    setActiveCameraId(resolvedId);
+  };
+
   const startQrScanner = async () => {
     setQrScanMessage('');
     setIsQrCameraActive(true);
@@ -290,35 +330,14 @@ export function VerificationDisplay() {
       // Pequeña espera para que el div del lector ya esté en el DOM.
       setTimeout(async () => {
         try {
-          if (!html5QrCodeRef.current) {
-            html5QrCodeRef.current = new Html5Qrcode('qr-reader-monitor');
-          }
-
           const cameraSelector = await resolveQrCameraSelector(Html5Qrcode);
-
-          const startPromise = html5QrCodeRef.current.start(
-            cameraSelector,
-            {
-              fps: 10,
-              qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-                const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
-                return { width: edge, height: edge };
-              },
-              videoConstraints: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              },
-            },
-            (decodedText: string) => handleQrDecoded(decodedText),
-            () => {} // errores de "no encontrado todavía" por cuadro — se ignoran
-          );
-
-          // Salvavidas: si getUserMedia se queda esperando indefinidamente,
-          // no dejar la pantalla pegada para siempre sin ningún aviso.
-          const timeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout iniciando la cámara')), 8000)
-          );
-          await Promise.race([startPromise, timeout]);
+          // Se listan las cámaras (cacheado, no negocia de nuevo) para
+          // poblar el selector manual — la elección automática no siempre
+          // acierta en todos los equipos (reporte real en Android).
+          const cameras = await listCameras(Html5Qrcode);
+          setAvailableCameras(cameras);
+          const resolvedId = typeof cameraSelector === 'string' ? cameraSelector : null;
+          await startCameraWith(Html5Qrcode, cameraSelector, resolvedId);
         } catch (err) {
           console.error('Error starting QR camera', err);
           setQrScanMessage(t('monitor.qrCameraError'));
@@ -329,6 +348,28 @@ export function VerificationDisplay() {
       console.error('Error loading QR scanner', err);
       setQrScanMessage(t('monitor.qrCameraError'));
       setIsQrCameraActive(false);
+    }
+  };
+
+  // Botón "Cambiar cámara": la elección automática no acierta en todos los
+  // equipos — deja al personal pasar a la siguiente cámara de la lista a
+  // mano. Se recuerda la elección (setPreferredCameraId) para que la
+  // próxima vez que se abra el lector en esta misma sesión arranque
+  // directo con la que funcionó.
+  const switchToNextCamera = async () => {
+    if (availableCameras.length < 2) return;
+    const currentIndex = activeCameraId ? availableCameras.findIndex(c => c.id === activeCameraId) : -1;
+    const next = availableCameras[(currentIndex + 1) % availableCameras.length];
+    try {
+      if (html5QrCodeRef.current?.isScanning) {
+        await html5QrCodeRef.current.stop();
+      }
+      const { Html5Qrcode } = await import('html5-qrcode');
+      await startCameraWith(Html5Qrcode, next.id, next.id);
+      setPreferredCameraId(next.id);
+    } catch (err) {
+      console.error('Error cambiando de cámara', err);
+      setQrScanMessage(t('monitor.qrCameraError'));
     }
   };
 
@@ -1078,12 +1119,23 @@ export function VerificationDisplay() {
                   {qrScanMessage || t('monitor.demoQRNote')}
                 </p>
                 {isQrCameraActive ? (
-                  <button
-                    onClick={stopQrScanner}
-                    className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
-                  >
-                    {t('monitor.stopCamera')}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={stopQrScanner}
+                      className="flex-1 bg-rose-500 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 text-xs uppercase tracking-widest"
+                    >
+                      {t('monitor.stopCamera')}
+                    </button>
+                    {availableCameras.length > 1 && (
+                      <button
+                        onClick={switchToNextCamera}
+                        title="Cambiar cámara"
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-4 rounded-2xl shadow-sm transition-colors"
+                      >
+                        <SwitchCamera className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button
                     onClick={startQrScanner}
