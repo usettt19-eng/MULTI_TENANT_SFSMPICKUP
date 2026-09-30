@@ -17,7 +17,11 @@ cada uso —se sentía lento en computadora— y en teléfono podía quedarse
 pegado en la cámara frontal por una enumeración de cámaras poco
 confiable; ahora detecta teléfono por user agent y pide la trasera
 directo, y en computadora cachea la enumeración por sesión en vez de
-repetirla cada vez).
+repetirla cada vez; **fix**: un reemplazo recién aprobado por el colegio
+no aparecía en el panel del padre —con su QR nuevo— hasta cerrar y
+volver a abrir la app, porque el perfil solo se cargaba una vez por
+sesión; ahora se refresca solo apenas llega la notificación de
+aprobación).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -2901,6 +2905,30 @@ archivos:
   por sesión del navegador, no cada vez que se abre el lector.
 
 Verificado: `tsc --noEmit` y `npx vite build` limpios.
+
+### Fix: un reemplazo recién aprobado no aparecía en el panel del padre sin cerrar y volver a entrar a la app (2026-09-30)
+Reporte real: "cuando se autoriza el reemplazo por parte del colegio en
+la app del padre no aparece si no sale y entra de la app". Causa: al
+aprobar una solicitud de reemplazo (`RequestsCenter.tsx`,
+`handleProcessRequest`), el QR nuevo se guarda en
+`profiles.additional_tutor_name` (el mismo perfil del padre, no una
+tabla aparte) y se le manda una notificación ("Reemplazo Autorizado...
+el código QR ya está disponible en tu panel"). Pero `profile` en
+`AuthContext.tsx` solo se carga **una vez por sesión** (al iniciar
+sesión), no en cada poll — así que aunque `ParentDashboard.tsx` sondea
+`notifications` cada 10s (o 3s dentro del perímetro) y sí mostraba el
+aviso/beep, el listado de reemplazos (`useMemo` sobre
+`profile.additional_tutor_name`, línea ~809) seguía viendo el perfil
+viejo, sin el QR nuevo, hasta que algo forzara un `fetchProfiles` — cerrar
+y volver a abrir la app.
+
+Fix: en `fetchNotifications()`, cuando llega una notificación nueva con
+título exacto `'Reemplazo Autorizado'`, se llama a `refreshProfile()`
+(ya existía en `AuthContext.tsx`, usado en otro lado — solo faltaba
+dispararlo acá). El listado de reemplazos ahora se actualiza solo,
+dentro de la misma ventana de 10s del poll normal, sin que el padre
+tenga que hacer nada. Verificado: `tsc --noEmit` y `npx vite build`
+limpios.
 
 ---
 

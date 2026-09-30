@@ -1006,6 +1006,16 @@ export function ParentDashboard() {
             setSuccessMessage(bannerable.message);
             setTimeout(() => setSuccessMessage(null), 10000);
           }
+          // Un reemplazo recién aprobado se guarda en
+          // profiles.additional_tutor_name (ver RequestsCenter.tsx), no en
+          // `notifications` — y `profile` solo se carga una vez por sesión
+          // (AuthContext.tsx), no en cada poll. Sin este refresh, el padre
+          // veía el aviso de "aprobado, tu QR ya está disponible" pero el QR
+          // no aparecía en su panel hasta cerrar y volver a entrar a la app
+          // (reporte real: "no aparece si no sale y entra de la app").
+          if (freshOnes.some(n => n.title === 'Reemplazo Autorizado')) {
+            refreshProfile();
+          }
         }
       }
       seenNotificationIdsRef.current = new Set(data.map(n => n.id));
