@@ -18,7 +18,7 @@ import { subscribeToAudioState, enableGlobalAudio, announceBilingual, setVoiceLa
 import { ParentPerimeterPanel } from '../components/ParentPerimeterPanel';
 import { DailyReportModal } from '../components/DailyReportModal';
 import { BusRoutesPanel } from '../components/BusRoutesPanel';
-import { resolveArrivalLabel } from '../lib/pickupHelpers';
+import { resolveArrivalLabel, getReplacementNameFromNotes } from '../lib/pickupHelpers';
 import type { TranslationKey } from '../i18n/translations';
 
 // carpool_authorizations.day_of_week: 0=domingo...6=sábado (igual que
@@ -553,10 +553,17 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
       );
 
       // 2. Persistent Notification for Parent
+      // Con un reemplazo autorizado (abuela, niñera, etc.) el titular no va
+      // a estar en el vehículo — decirle "reúnete con él" y pedirle que
+      // confirme algo que no le corresponde hacer. Se le avisa en modo
+      // informativo: ya lo retiraron, y quién.
+      const replacementName = getReplacementNameFromNotes(pickup?.notes);
       await supabase.from('notifications').insert({
         user_id: pickup.parent_id,
-        title: '¡Alumno en camino!',
-        message: `El maestro ha autorizado la salida de ${pickup?.student?.first_name}. Reúnete con él en el vehículo y confirma la recepción en tu App.`,
+        title: replacementName ? `¡${pickup?.student?.first_name || 'Tu hijo'} ya fue retirado!` : '¡Alumno en camino!',
+        message: replacementName
+          ? `El maestro autorizó la salida de ${pickup?.student?.first_name} con ${replacementName}, la persona que autorizaste.`
+          : `El maestro ha autorizado la salida de ${pickup?.student?.first_name}. Reúnete con él en el vehículo y confirma la recepción en tu App.`,
         type: 'success',
         tenant_id: pickup?.tenant_id
       });

@@ -2803,6 +2803,30 @@ notificación de la campana ("El Personal de Puerta ha validado la
 salida..."), separada de este flujo. Verificado: `tsc --noEmit` y
 `npx vite build` limpios.
 
+**Ampliado el mismo día**, a partir de una precisión del colegio ("si
+nunca fue al colegio no debería intervenir en el ciclo, a lo sumo
+recibir un mensaje que ya lo retiraron"):
+- La notificación de campana que dispara la liberación decía
+  "Reúnete con él en el vehículo" **incluso para reemplazos** — instrucción
+  para algo que al titular no le toca hacer. Corregido en los 3 lugares
+  donde se libera un alumno: `VerificationDisplay.tsx`
+  (`handleConfirmRelease`, Monitor Externo), `OperationsDashboard.tsx`
+  (`updateStatus`, cola del Dashboard) y `MyClassroom.tsx`
+  (`handleAuthorize`, Mi Salón) — si `notes` trae el prefijo de
+  reemplazo, el mensaje pasa a ser informativo ("ya fue retirado por
+  [nombre], la persona que autorizaste") en vez de instructivo.
+- Se encontró un **segundo lugar con el mismo bug de fondo, en el
+  backend**: `autoCompleteStalePickups()` (`server/src/index.ts`) corre
+  cada cierto tiempo en el servidor (no depende de que el padre tenga la
+  app abierta) y cierra sola cualquier recogida `released` con más de 20
+  minutos sin confirmar — sin distinguir reemplazos, así que sin el fix
+  de `ParentDashboard.tsx` de arriba esto igual habría cerrado el ciclo
+  de un reemplazo solo por tiempo, sin ninguna señal real. Ahora filtra
+  igual que el cliente, por el mismo prefijo en `notes` (duplicado como
+  literal porque el backend no puede importar del frontend, tsconfig
+  separado). Verificado: `tsc --noEmit` limpio en `server/` y en el
+  proyecto raíz, `npx vite build` limpio.
+
 ---
 
 ## 4. Modelo de permisos (resumen)

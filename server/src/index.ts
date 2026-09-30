@@ -3160,11 +3160,16 @@ app.post(
 // porque no puede depender de que el navegador/app del padre siga activo.
 const AUTO_COMPLETE_STALE_MS = 20 * 60 * 1000; // 20 min, igual al umbral de "obsoleto" del frontend (ver src/lib/pickupHelpers.ts)
 
+// Debe coincidir con REPLACEMENT_NOTE_PREFIX de src/lib/pickupHelpers.ts —
+// el backend no puede importar del frontend (rootDir/tsconfig separados),
+// así que se duplica el literal.
+const REPLACEMENT_NOTE_PREFIX = '[REEMPLAZO] ';
+
 async function autoCompleteStalePickups() {
   const cutoffIso = new Date(Date.now() - AUTO_COMPLETE_STALE_MS).toISOString();
   const {data: stale, error} = await admin
     .from('pickup_events')
-    .select('id, tenant_id, parent_id, students:student_id(first_name, last_name)')
+    .select('id, tenant_id, parent_id, notes, students:student_id(first_name, last_name)')
     .eq('status', 'released')
     .lt('announced_at', cutoffIso);
 
@@ -3174,7 +3179,18 @@ async function autoCompleteStalePickups() {
   }
   if (!stale || stale.length === 0) return;
 
-  for (const pickup of stale as any[]) {
+  // Un reemplazo autorizado (abuela, niñera, etc.) lo retira él, no el
+  // titular de la cuenta — el titular puede no haber estado nunca en el
+  // colegio, así que "pasaron 20 min sin que confirmara" no dice nada sobre
+  // si la recogida ocurrió. Ese cierre queda solo del lado del personal, en
+  // En Tránsito (mismo criterio que el fix de ParentDashboard.tsx del
+  // 2026-09-30, a raíz de un reporte real de seguridad).
+  const ownPickups = (stale as any[]).filter(
+    (pickup) => !String(pickup.notes ?? '').startsWith(REPLACEMENT_NOTE_PREFIX),
+  );
+  if (ownPickups.length === 0) return;
+
+  for (const pickup of ownPickups) {
     // El filtro por status: 'released' evita pisar una confirmación real
     // del padre que haya llegado justo entre el select y este update.
     const {error: updateError} = await admin

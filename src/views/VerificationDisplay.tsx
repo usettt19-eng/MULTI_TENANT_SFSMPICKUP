@@ -548,10 +548,17 @@ export function VerificationDisplay() {
         });
 
         // 3. Notification for Parent
+        // Con un reemplazo autorizado (abuela, niñera, etc.) el titular no
+        // va a estar en el vehículo — decirle "reúnete con él" es
+        // instrucción para algo que no le corresponde hacer. Se le avisa
+        // en modo informativo: ya lo retiraron, y quién.
+        const replacementName = getReplacementNameFromNotes(currentPickup.notes);
         await supabase.from('notifications').insert({
           user_id: currentPickup.parent_id,
-          title: '¡Saliendo por Puerta!',
-          message: `El Personal de Puerta ha validado la salida de ${studentName || 'tu hijo'}. Reúnete con él en el vehículo.`,
+          title: replacementName ? `¡${studentName || 'Tu hijo'} ya fue retirado!` : '¡Saliendo por Puerta!',
+          message: replacementName
+            ? `El Personal de Puerta validó la salida de ${studentName || 'tu hijo'} con ${replacementName}, la persona que autorizaste.`
+            : `El Personal de Puerta ha validado la salida de ${studentName || 'tu hijo'}. Reúnete con él en el vehículo.`,
           type: 'success',
           tenant_id: currentPickup?.tenant_id,
         });
