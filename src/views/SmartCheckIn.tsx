@@ -19,7 +19,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
-import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
+import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, hasActivePickupEvent } from '../lib/pickupHelpers';
 import { resolveQrCameraSelector, listCameras, setPreferredSelector, isMobileDevice, cameraReleaseDelay, buildVideoConstraints } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
@@ -327,7 +327,13 @@ export function SmartCheckIn() {
               // lleva... ¿por qué preguntas de nuevo?"). Se anuncian todos
               // los elegibles de una vez, sin modal de selección.
               const parentName = `${parentProfile.first_name || ''} ${parentProfile.last_name || ''}`.trim();
+              const newlyAnnounced: string[] = [];
               for (const student of eligibleStudents as any[]) {
+                // Evita duplicar la fila si el mismo QR se escanea dos veces
+                // seguidas (reporte real: el mismo alumno dos veces en la
+                // cola, un minuto de diferencia) — ver hasActivePickupEvent
+                // en pickupHelpers.ts.
+                if (await hasActivePickupEvent(supabase, student.id)) continue;
                 await supabase.from('pickup_events').insert({
                   student_id: student.id,
                   parent_id: parentProfile.id,
@@ -343,10 +349,14 @@ export function SmartCheckIn() {
                   { parent_id: parentProfile.id, student_id: student.id, replacement_name: data.replacement_name },
                   student.tenant_id,
                 );
+                newlyAnnounced.push(student.first_name);
               }
-              const names = eligibleStudents.map((s: any) => s.first_name).join(', ');
-              setStatusMsg(`¡QR Válido! ${data.replacement_name} anunciado para: ${names}`);
-              playVoiceMessage(`Código verificado para ${data.replacement_name}.`);
+              if (newlyAnnounced.length > 0) {
+                setStatusMsg(`¡QR Válido! ${data.replacement_name} anunciado para: ${newlyAnnounced.join(', ')}`);
+                playVoiceMessage(`Código verificado para ${data.replacement_name}.`);
+              } else {
+                setStatusMsg(`${data.replacement_name} ya estaba anunciado para todos sus alumnos.`);
+              }
               setTimeout(() => setStatusMsg(''), 4000);
             } else {
               setStatusMsg('Padre reconocido pero no tiene alumnos asignados en este colegio.');
@@ -522,6 +532,14 @@ export function SmartCheckIn() {
   };
 
   const announcePinPickup = async (parentId: string, studentId: string) => {
+    // Evita duplicar la fila si el mismo PIN se ingresa dos veces seguidas
+    // (reporte real: el mismo alumno dos veces en la cola, un minuto de
+    // diferencia) — ver hasActivePickupEvent en pickupHelpers.ts.
+    if (await hasActivePickupEvent(supabase, studentId)) {
+      setStatusMsg('Ya estaba anunciado');
+      setTimeout(() => setStatusMsg(''), 3000);
+      return;
+    }
     await supabase.from('pickup_events').insert({
       student_id: studentId,
       parent_id: parentId,
@@ -761,6 +779,14 @@ export function SmartCheckIn() {
     if (!recognizedParent) return;
 
     try {
+      // Evita duplicar la fila si se toca dos veces seguidas antes de que
+      // cierre el modal — ver hasActivePickupEvent en pickupHelpers.ts.
+      if (await hasActivePickupEvent(supabase, studentId)) {
+        setShowStudentModal(false);
+        setStatusMsg('Ya estaba anunciado');
+        setTimeout(() => setStatusMsg(''), 3000);
+        return;
+      }
       const student = linkedStudents.find(s => s.id === studentId);
       const parentName = `${recognizedParent.first_name || ''} ${recognizedParent.last_name || ''}`.trim();
       // parent_id sigue siendo el titular (así se ubica su ficha/relación con

@@ -50,6 +50,24 @@ export async function resolveArrivalLabel(
   return { isBus: false, label, labelEn };
 }
 
+// Un alumno ya con un pickup_events activo (anunciado/en fila/liberado) no
+// debería recibir otro — eso es lo que produce filas duplicadas en la cola
+// (reporte real: el mismo alumno dos veces, un minuto de diferencia, en el
+// panel de En Tránsito/Monitor Externo). Puede pasar por varios caminos:
+// el padre toca "Anunciar" dos veces, el rastreo automático por geocerca se
+// dispara otra vez, o el mismo QR/PIN se escanea/ingresa más de una vez
+// antes de que el primer anuncio se resuelva. Se usa como guardia ANTES de
+// insertar, en cada lugar del código que crea un pickup_events nuevo.
+export async function hasActivePickupEvent(supabase: any, studentId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('pickup_events')
+    .select('id')
+    .eq('student_id', studentId)
+    .in('status', ['announced', 'in_queue', 'released'])
+    .limit(1);
+  return !!data && data.length > 0;
+}
+
 // Umbral para marcar un anuncio de llegada como atrasado en las pantallas de
 // personal (no para nada visible al padre).
 export const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutos

@@ -38,7 +38,11 @@ había declarado al pedir el reemplazo —ahora se anuncian de una vez
 todos los hijos elegibles, sin modal de selección; **agregado**: los
 botones de "Anunciar llegada de [hijo]" ya no son todos del mismo color
 — los que "salen juntos" comparten índigo, y cada hijo suelto (o todos,
-si nadie está agrupado) tiene su propio color de una paleta de 6).
+si nadie está agrupado) tiene su propio color de una paleta de 6; **fix
+de seguridad de datos**: anunciar/escanear dos veces seguidas —PIN, QR,
+botón del padre, o "Anunciar" de un bus— duplicaba al mismo alumno en la
+cola de En Tránsito/Monitor Externo; ahora cada punto que crea un
+`pickup_events` primero revisa si el alumno ya tiene un ciclo activo).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3147,6 +3151,40 @@ cada botón:
 El color solo se aplica cuando el botón está habilitado
 (`canAnnounceThis`); deshabilitado sigue gris neutro como antes.
 Verificado: `tsc --noEmit` y `npx vite build` limpios.
+
+### Fix: anunciar/escanear dos veces seguidas duplicaba la fila del mismo alumno en la cola (2026-09-30)
+Reporte real, con captura: "Cesar Conto" aparecía dos veces en la cola
+de En Tránsito/Monitor Externo, un minuto de diferencia, con números de
+turno consecutivos (3 y 4) — "¿parece que si pasan el QR varias veces
+los valida repetido?". Confirmado: ninguno de los lugares que insertan
+en `pickup_events` con `status: 'announced'` verificaba antes si ese
+alumno ya tenía un ciclo activo — así que un PIN ingresado dos veces, un
+QR escaneado dos veces, el botón del padre tocado de nuevo (o el rastreo
+automático por geocerca disparándose otra vez), o "Anunciar" de un bus
+tocado dos veces, cada uno creaba una fila nueva en vez de reconocer que
+ya había una.
+
+Se agrega `hasActivePickupEvent(supabase, studentId)` en
+`pickupHelpers.ts` — verifica si el alumno ya tiene un `pickup_events`
+con `status` en `announced`/`in_queue`/`released`, y se usa como guardia
+antes de cada `insert` nuevo:
+- `SmartCheckIn.tsx`: `announcePinPickup()` (cubre las dos rutas del flujo
+  de PIN), el anuncio automático por QR de reemplazo (ahora salta a los
+  hijos que ya estaban anunciados y solo anuncia a los que faltan, con
+  mensaje distinto si todos ya estaban), y `handleStudentSelect()` (modal
+  de reconocimiento facial).
+- `ParentDashboard.tsx`: el loop de `handleAnnounceArrival()` (ya tenía
+  un `isAnnouncingRef` contra doble-toque instantáneo, pero no contra un
+  segundo disparo minutos después, ej. geocerca).
+- `BusRoutesPanel.tsx`: el anuncio masivo de un bus ahora consulta de una
+  vez (no por alumno) cuáles de sus estudiantes ya tienen ciclo activo y
+  los excluye del `insert`; si todos ya estaban, muestra un aviso nuevo
+  (`busRoutes.allAlreadyAnnouncedTemplate`, agregado en los dos idiomas)
+  en vez de intentar duplicar toda la ruta.
+
+No se tocaron los duplicados que ya existen en producción de este
+incidente — quedan para revisar/cerrar a mano si hace falta. Verificado:
+`tsc --noEmit` y `npx vite build` limpios.
 
 ---
 

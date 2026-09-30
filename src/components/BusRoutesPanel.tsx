@@ -338,7 +338,23 @@ export function BusRoutesPanel() {
         return;
       }
 
-      const rows = studentIds.map((student_id) => ({
+      // Evita duplicar filas si se toca "Anunciar" dos veces seguidas para
+      // el mismo bus — un alumno que ya tiene un ciclo activo (anunciado/en
+      // fila/liberado) no recibe otro.
+      const { data: alreadyActive } = await supabase
+        .from('pickup_events')
+        .select('student_id')
+        .in('student_id', studentIds)
+        .in('status', ['announced', 'in_queue', 'released']);
+      const alreadyActiveIds = new Set((alreadyActive || []).map((r: any) => r.student_id));
+      const newStudentIds = studentIds.filter((id) => !alreadyActiveIds.has(id));
+
+      if (newStudentIds.length === 0) {
+        alert(t('busRoutes.allAlreadyAnnouncedTemplate').replace('{name}', route.name));
+        return;
+      }
+
+      const rows = newStudentIds.map((student_id) => ({
         student_id,
         parent_id: route.profile_id,
         status: 'announced',

@@ -8,7 +8,7 @@ import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { PICKUP_WINDOW_START_HOUR as ANNOUNCE_ARRIVAL_MIN_HOUR } from '../lib/dismissalSchedule';
-import { getReplacementNameFromNotes } from '../lib/pickupHelpers';
+import { getReplacementNameFromNotes, hasActivePickupEvent } from '../lib/pickupHelpers';
 import { MobileAppBanner } from '../components/MobileAppBanner';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
@@ -1721,6 +1721,11 @@ export function ParentDashboard() {
         // sin que la exclusión se lo impida, es información para el bus,
         // no una restricción sobre él.
         if (isBusMonitorAccount && busExclusionsToday[student.id]) continue;
+        // Evita duplicar la fila si el rastreo automático por geocerca se
+        // dispara otra vez, o el botón se toca de nuevo desde otro
+        // dispositivo/pestaña, mientras ya hay un ciclo activo para este
+        // alumno — ver hasActivePickupEvent en pickupHelpers.ts.
+        if (await hasActivePickupEvent(supabase, student.id)) continue;
         // El pickup_events queda con el tenant_id del ALUMNO, no el del
         // perfil del padre: para la enorme mayoría son el mismo colegio,
         // pero un padre con hijos en dos colegios (parent_school_access)
