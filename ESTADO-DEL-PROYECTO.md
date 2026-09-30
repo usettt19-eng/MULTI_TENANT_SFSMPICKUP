@@ -32,7 +32,10 @@ combinando ambos en un solo objeto (`buildVideoConstraints` en
 pantalla con la lista de cámaras y lo que el navegador dice haber
 abierto de verdad, útil para el próximo equipo raro sin pelear con
 `adb`. **Confirmado resuelto** por el colegio con el equipo real que
-reportó el problema).
+reportó el problema; **fix**: escanear el QR de un reemplazo volvía a
+preguntarle al personal a cuál hijo aplicaba, aunque el padre ya lo
+había declarado al pedir el reemplazo —ahora se anuncian de una vez
+todos los hijos elegibles, sin modal de selección).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3090,6 +3093,30 @@ combinado como `videoConstraints`. Verificado: `tsc --noEmit` y
 `npx vite build` limpios. **Confirmado resuelto** por el colegio con el
 equipo real que reportó el problema — el botón "Cambiar cámara" ya
 cambia de verdad lo que se ve en pantalla.
+
+### Fix: escanear el QR de un reemplazo volvía a preguntar a cuál hijo aplicaba, aunque el padre ya lo había dicho al pedirlo (2026-09-30)
+Reporte real: "ya deberías saber a quién se lleva, porque en la
+solicitud lo llenó el padre que autorizó ¿no? ¿por qué preguntas de
+nuevo?". En `SmartCheckIn.tsx`, `handleQrSuccess` (flujo de Check-In por
+QR de reemplazo) ya filtraba correctamente a los hijos elegibles según
+`student_ids` del reemplazo (los que el padre marcó en "¿A cuál(es) de
+tus hijos aplica?" al pedir el reemplazo, `RequestsCenter.tsx`), pero
+igual abría el modal "Seleccionar Alumno" para que el personal volviera
+a elegir entre ellos — redundante, esa respuesta ya estaba dada.
+
+Ahora, en cuanto se valida el QR, se anuncian de una vez **todos** los
+hijos elegibles (un `pickup_events` por cada uno, igual que hacía
+`handleStudentSelect` al tocar uno en el modal) sin mostrar ningún
+selector — el mensaje de éxito lista los nombres anunciados
+("¡QR Válido! [nombre] anunciado para: Diego, Joaquín, Lucía"). El modal
+de selección (`showStudentModal`) se deja intacto para el otro flujo que
+lo usa, reconocimiento facial del **titular** (no un reemplazo): ahí sí
+tiene sentido preguntar, porque no existe ningún formulario previo que
+ya haya declarado a cuál hijo puntual viene a buscar ese día. Tampoco
+hacía falta tocar `VerificationDisplay.tsx` (Monitor Externo): ese
+escaneo de QR solo confirma identidad contra un alumno que ya está en la
+fila, no crea el anuncio, así que no tenía este problema. Verificado:
+`tsc --noEmit` y `npx vite build` limpios.
 
 ---
 

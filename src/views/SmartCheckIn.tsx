@@ -306,13 +306,6 @@ export function SmartCheckIn() {
           }
 
           if (isValid) {
-            setStatusMsg(`¡QR Válido! Bienvenido/a ${data.replacement_name}`);
-            playVoiceMessage(`Código verificado para ${data.replacement_name}. Por favor, seleccione al alumno.`);
-            setRecognizedReplacementName(data.replacement_name);
-
-            // Set recognized parent so the modal works
-            setRecognizedParent(parentProfile);
-            
             // Fetch students — solo los de ESTE colegio (un padre con hijos
             // en dos colegios, parent_school_access, no debe poder marcar
             // acá al hijo del otro) y, si el reemplazo se limitó a ciertos
@@ -327,12 +320,38 @@ export function SmartCheckIn() {
               .filter((s: any) => s && s.tenant_id === staffProfile?.tenant_id && isReplacementForStudent(match, s.id));
 
             if (eligibleStudents.length > 0) {
-              setLinkedStudents(eligibleStudents);
-              setShowStudentModal(true);
+              // El padre ya declaró a cuáles hijos aplica este reemplazo al
+              // pedirlo (checkboxes de "¿A cuál(es) de tus hijos aplica?" en
+              // Solicitar Reemplazo) — volver a preguntarle al personal es
+              // redundante (reporte real: "ya deberías saber a quién se
+              // lleva... ¿por qué preguntas de nuevo?"). Se anuncian todos
+              // los elegibles de una vez, sin modal de selección.
+              const parentName = `${parentProfile.first_name || ''} ${parentProfile.last_name || ''}`.trim();
+              for (const student of eligibleStudents as any[]) {
+                await supabase.from('pickup_events').insert({
+                  student_id: student.id,
+                  parent_id: parentProfile.id,
+                  status: 'announced',
+                  announced_at: new Date(),
+                  tenant_id: student.tenant_id,
+                  notes: `[REEMPLAZO] ${data.replacement_name}`,
+                });
+                await logActivity(
+                  'PICKUP',
+                  `LLEGADA (REEMPLAZO): ${data.replacement_name}, autorizado por ${parentName}, retira a ${student.first_name || ''} ${student.last_name || ''}.`,
+                  'Check-In QR',
+                  { parent_id: parentProfile.id, student_id: student.id, replacement_name: data.replacement_name },
+                  student.tenant_id,
+                );
+              }
+              const names = eligibleStudents.map((s: any) => s.first_name).join(', ');
+              setStatusMsg(`¡QR Válido! ${data.replacement_name} anunciado para: ${names}`);
+              playVoiceMessage(`Código verificado para ${data.replacement_name}.`);
+              setTimeout(() => setStatusMsg(''), 4000);
             } else {
               setStatusMsg('Padre reconocido pero no tiene alumnos asignados en este colegio.');
             }
-            
+
             // Log success
             await supabase.from('audit_logs').insert({
               event_type: 'SECURITY',
