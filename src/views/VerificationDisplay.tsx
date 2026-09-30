@@ -10,6 +10,7 @@ import { subscribeToAudioState, enableGlobalAudio, playGlobalVoiceMessage, annou
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement, findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent, resolveArrivalLabel } from '../lib/pickupHelpers';
 import { useMonitoredDoor } from '../lib/monitoredDoor';
 import { apiJson } from '../lib/apiFetch';
+import { resolveQrCameraSelector } from '../lib/qrCamera';
 
 export function VerificationDisplay() {
   const { t } = useLanguage();
@@ -293,22 +294,7 @@ export function VerificationDisplay() {
             html5QrCodeRef.current = new Html5Qrcode('qr-reader-monitor');
           }
 
-          // En una laptop (ej. Mac) solo hay una cámara, frontal — pedir
-          // facingMode: 'environment' ahí deja a getUserMedia esperando una
-          // cámara trasera que no existe, y no todos los navegadores caen de
-          // vuelta a la única cámara disponible: la pantalla queda pegada
-          // esperando el video, sin cámara ni error visible (ver mismo fix
-          // en SmartCheckIn.tsx). Se listan las cámaras reales primero — con
-          // una sola, se usa su id directo en vez del selector por facingMode.
-          let cameraSelector: any = { facingMode: 'environment' };
-          try {
-            const cameras = await Html5Qrcode.getCameras();
-            if (cameras.length === 1) {
-              cameraSelector = cameras[0].id;
-            }
-          } catch (listErr) {
-            console.error('No se pudieron listar las cámaras, se sigue con facingMode:', listErr);
-          }
+          const cameraSelector = await resolveQrCameraSelector(Html5Qrcode);
 
           const startPromise = html5QrCodeRef.current.start(
             cameraSelector,

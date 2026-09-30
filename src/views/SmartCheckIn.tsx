@@ -19,6 +19,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useBrowserFallbackWait } from '../lib/audioManager';
 import { apiJson } from '../lib/apiFetch';
 import { findMatchingReplacement, isReplacementAuthorizedNow, isReplacementForStudent } from '../lib/pickupHelpers';
+import { resolveQrCameraSelector } from '../lib/qrCamera';
 
 export function SmartCheckIn() {
   const { t } = useLanguage();
@@ -128,22 +129,7 @@ export function SmartCheckIn() {
             html5QrCode.current = new Html5Qrcode("qr-reader");
           }
 
-          // En una laptop (ej. Mac) solo hay una cámara, frontal — pedir
-          // facingMode: 'environment' ahí deja a getUserMedia intentando
-          // encontrar una cámara trasera que no existe, y no todos los
-          // navegadores caen de vuelta a la única cámara disponible: la
-          // pantalla se queda pegada esperando el video, sin cámara ni
-          // error visible. Se listan las cámaras reales primero — con una
-          // sola, se usa su id directo en vez del selector por facingMode.
-          let cameraSelector: any = { facingMode: 'environment' };
-          try {
-            const cameras = await Html5Qrcode.getCameras();
-            if (cameras.length === 1) {
-              cameraSelector = cameras[0].id;
-            }
-          } catch (listErr) {
-            console.error('No se pudieron listar las cámaras, se sigue con facingMode:', listErr);
-          }
+          const cameraSelector = await resolveQrCameraSelector(Html5Qrcode);
 
           const startPromise = html5QrCode.current.start(
             cameraSelector,

@@ -12,7 +12,12 @@ abuela recogiendo en vez del titular— podía terminar marcado como
 "recogido" por auto-confirm de geocerca usando la ubicación del titular,
 que nunca estuvo en el colegio; ahora esos ciclos no entran al flujo
 "activo" de la app del titular, se cierran del lado del personal en En
-Tránsito).
+Tránsito; **fix**: el lector de QR abría la cámara dos veces seguidas en
+cada uso —se sentía lento en computadora— y en teléfono podía quedarse
+pegado en la cámara frontal por una enumeración de cámaras poco
+confiable; ahora detecta teléfono por user agent y pide la trasera
+directo, y en computadora cachea la enumeración por sesión en vez de
+repetirla cada vez).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -2856,6 +2861,46 @@ recibir un mensaje que ya lo retiraron"):
   literal porque el backend no puede importar del frontend, tsconfig
   separado). Verificado: `tsc --noEmit` limpio en `server/` y en el
   proyecto raíz, `npx vite build` limpio.
+
+### Fix: lector de QR lento en computadora, y pegado en la cámara frontal en teléfonos (2026-09-30)
+Reporte real: "en la computadora tarda en leerlo, y los teléfonos solo
+activa la cámara delantera". El código de `SmartCheckIn.tsx` y
+`VerificationDisplay.tsx` (duplicado idéntico en los dos, mismo lector
+`html5-qrcode`) decidía la cámara con un solo criterio para ambos casos:
+listar cámaras con `Html5Qrcode.getCameras()` y, si devolvía exactamente
+una, usar su id directo (fix de un incidente anterior: en una laptop con
+una sola cámara, frontal, pedir `facingMode: 'environment'` se queda
+pegado esperando una trasera que no existe); con más de una, pedía
+`facingMode: 'environment'` (sin `exact`, un pedido "ideal" que el
+navegador puede no cumplir).
+
+Dos problemas de fondo:
+- `getCameras()` primero llama a su propio `getUserMedia()` para
+  desbloquear las etiquetas de los dispositivos, y **luego** `.start()`
+  hace su propio `getUserMedia()` con la cámara elegida — abrir el lector
+  significaba negociar la cámara **dos veces seguidas**, cada vez que se
+  abría. Eso es lo que se sentía como lento en computadora, sobre todo
+  con uso repetido durante el día.
+- En teléfono, la enumeración de `getCameras()` no es 100% confiable
+  antes/durante el otorgamiento de permiso en todos los navegadores —
+  podía reportar una sola cámara en un teléfono que en realidad tiene
+  dos, cayendo en la rama pensada para laptops y quedando pegado en la
+  que haya enumerado primero (casi siempre la frontal).
+
+Se extrajo la lógica a un helper compartido nuevo,
+`src/lib/qrCamera.ts` (`resolveQrCameraSelector`), usado por los dos
+archivos:
+- **Detecta teléfono por `navigator.userAgent`** (Android/iPhone/iPad/
+  iPod/Mobi) y ahí pide la cámara directo con
+  `{ facingMode: { exact: 'environment' } }` — sin enumerar cámaras
+  primero (una sola negociación, no dos) y con `exact` en vez de
+  `ideal`, para no depender de una enumeración que puede fallar.
+- **En computadora**, mantiene el criterio de enumerar y usar el id si
+  hay una sola cámara, pero **cachea el resultado a nivel de módulo** —
+  la enumeración (y su negociación extra de cámara) ya solo pasa una vez
+  por sesión del navegador, no cada vez que se abre el lector.
+
+Verificado: `tsc --noEmit` y `npx vite build` limpios.
 
 ---
 
