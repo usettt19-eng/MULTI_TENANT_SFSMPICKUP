@@ -2,6 +2,12 @@
 
 Documento único de referencia: qué hace el software hoy, todo lo que se le agregó
 en orden, y cómo está armada la base de datos en Supabase. Última actualización:
+2026-09-30 (**fix de seguridad**: un reemplazo autorizado por QR —ej. la
+abuela recogiendo en vez del titular— podía terminar marcado como
+"recogido" por auto-confirm de geocerca usando la ubicación del titular,
+que nunca estuvo en el colegio; ahora esos ciclos no entran al flujo
+"activo" de la app del titular, se cierran del lado del personal en En
+Tránsito).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -2772,6 +2778,30 @@ modal de selección), pero el flujo de PIN no lo reutilizaba. Ahora:
   tradujeron y agregaron como "Autonomous Exit at Check-In" y "Your
   screen's language" (secciones 10 y 11 en inglés), dejando ambos
   manuales con las mismas 12 secciones en el mismo orden.
+
+### Fix de seguridad: un reemplazo autorizado por QR podía auto-confirmarse "recogido" usando la ubicación del titular, sin que él estuviera presente (2026-09-30)
+Reporte real de una mamá (Sandra Arango): autorizó a su madre (abuela) a
+recoger a su hija por QR. El sistema la puso en pantalla de "reúnete con
+él en el vehículo" y, sin que ella tocara nada, la marcó como recogida
+sola — aunque ella nunca estuvo en el colegio y no tenía forma de saber
+si la recogida en verdad había ocurrido. Causa: en `ParentDashboard.tsx`,
+`checkActivePickups()` trae los `pickup_events` por `parent_id` (el
+titular que autorizó, no quien retira físicamente) y los trata como "mi
+ciclo activo" sin distinguir si lo retira el titular o un reemplazo. Un
+efecto aparte (`status === 'released' && !isInside`, espera 20s) asume
+que "el titular salió del perímetro sin confirmar" = "ya lo recogió y se
+le olvidó tocar el botón" — pero en un reemplazo el titular puede no
+haber estado *nunca* en el perímetro, así que esa señal no significa
+nada. Fix: `checkActivePickups()` ahora filtra los eventos cuyo `notes`
+trae el prefijo de reemplazo (`REPLACEMENT_NOTE_PREFIX`,
+`src/lib/pickupHelpers.ts`) antes de decidir el estado — esos ciclos
+nunca entran al flujo "activo" del titular (nada de pantalla de
+confirmación, nada de auto-confirm por geocerca). Se siguen cerrando
+del lado del personal en En Tránsito (`TransitMonitor.tsx`), que sí ve
+al alumno salir físicamente; el titular se sigue enterando por la
+notificación de la campana ("El Personal de Puerta ha validado la
+salida..."), separada de este flujo. Verificado: `tsc --noEmit` y
+`npx vite build` limpios.
 
 ---
 

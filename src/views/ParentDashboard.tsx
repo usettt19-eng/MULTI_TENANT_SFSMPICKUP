@@ -8,6 +8,7 @@ import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { PICKUP_WINDOW_START_HOUR as ANNOUNCE_ARRIVAL_MIN_HOUR } from '../lib/dismissalSchedule';
+import { getReplacementNameFromNotes } from '../lib/pickupHelpers';
 import { MobileAppBanner } from '../components/MobileAppBanner';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
@@ -1174,10 +1175,24 @@ export function ParentDashboard() {
       .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced', 'in_queue', 'released']);
 
-    if (data && data.length > 0) {
+    // Un reemplazo autorizado por QR (abuela, niñera, etc. — ver
+    // REPLACEMENT_NOTE_PREFIX) lo retira él, no el titular de esta cuenta.
+    // El titular puede no estar nunca físicamente en el colegio, así que ese
+    // ciclo NO debe entrar al flujo "activo" de su propia app: nada de
+    // pantalla "reúnete en el vehículo", nada de auto-confirmar por geocerca
+    // (su ubicación no dice nada sobre si la recogida ocurrió). Antes sí
+    // entraba, y el auto-confirm por geocerca terminaba marcando el ciclo
+    // como completado solo, sin que el titular pudiera confirmar ni negar si
+    // la recogida realmente pasó (reporte real de una mamá, 2026-09-30). El
+    // cierre de estos ciclos queda del lado del personal, en En Tránsito
+    // (TransitMonitor.tsx), que sí ve al alumno salir físicamente; el
+    // titular igual se entera por la notificación de la campana.
+    const ownPickups = (data || []).filter(event => !getReplacementNameFromNotes(event.notes));
+
+    if (ownPickups.length > 0) {
       hadActivePickupRef.current = true;
       // Prioritize 'released' status: if any child is released, show the released UI
-      const releasedEvent = data.find(event => event.status === 'released');
+      const releasedEvent = ownPickups.find(event => event.status === 'released');
       if (releasedEvent) {
         if (!releasedAnnouncedRef.current) {
           releasedAnnouncedRef.current = true;
@@ -1530,6 +1545,10 @@ export function ParentDashboard() {
   // probablemente ya recogió al alumno y olvidó tocar el botón. Se espera 20s
   // fuera del perímetro (no al primer instante) para evitar falsos positivos
   // por ruido del GPS cerca del borde de la geocerca.
+  //
+  // Los ciclos de un reemplazo autorizado por QR nunca llegan a `status`
+  // 'released' aquí — `checkActivePickups` los filtra antes (ver comentario
+  // ahí) — así que este efecto ya no se dispara para ellos.
   useEffect(() => {
     if (status !== 'released' || !isLocationEnabled || isInside) return;
 
