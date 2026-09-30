@@ -2893,16 +2893,29 @@ Dos problemas de fondo:
 
 Se extrajo la lógica a un helper compartido nuevo,
 `src/lib/qrCamera.ts` (`resolveQrCameraSelector`), usado por los dos
-archivos:
-- **Detecta teléfono por `navigator.userAgent`** (Android/iPhone/iPad/
-  iPod/Mobi) y ahí pide la cámara directo con
-  `{ facingMode: { exact: 'environment' } }` — sin enumerar cámaras
-  primero (una sola negociación, no dos) y con `exact` en vez de
-  `ideal`, para no depender de una enumeración que puede fallar.
-- **En computadora**, mantiene el criterio de enumerar y usar el id si
-  hay una sola cámara, pero **cachea el resultado a nivel de módulo** —
-  la enumeración (y su negociación extra de cámara) ya solo pasa una vez
-  por sesión del navegador, no cada vez que se abre el lector.
+archivos. Primer intento: en teléfono, pedir la cámara directo con
+`{ facingMode: { exact: 'environment' } }` sin enumerar cámaras
+primero. **Insuficiente** — nuevo reporte real el mismo día: "no me deja
+seleccionar la cámara para leer el QR desde el teléfono y escoge la
+cámara delantera por defecto" en **Android**. El WebView de Android (y
+al parecer algunos navegadores móviles) no respeta de forma confiable el
+constraint `facingMode`, ni siquiera con `exact` — puede resolver la
+petición contra la cámara frontal igual, sin lanzar error.
+
+Fix definitivo: en teléfono, sí se enumeran las cámaras (como en
+computadora), pero en vez de confiar en `facingMode` se elige el **id
+explícito** de la cámara cuya etiqueta contenga "back"/"rear"/"trasera"/
+"environment" (`pickRearCameraId`) — así suelen venir etiquetadas en
+Android/Chrome; si ninguna etiqueta ayuda, se usa la última de la
+lista (por convención la frontal suele enumerar primero). El
+`facingMode` por constraint queda solo como respaldo si la enumeración
+falla. Esto reintroduce la doble negociación de cámara en teléfono en la
+**primera** apertura del lector por sesión, pero el resultado (la cámara
+correcta) se cachea igual que en computadora, así que las aperturas
+siguientes no la repiten.
+
+Aplica solo a teléfonos — en computadora no se tocó nada (ahí la cámara
+ya se elegía bien, solo tardaba por la doble negociación).
 
 Verificado: `tsc --noEmit` y `npx vite build` limpios.
 
