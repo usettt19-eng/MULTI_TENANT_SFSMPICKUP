@@ -42,7 +42,14 @@ si nadie está agrupado) tiene su propio color de una paleta de 6; **fix
 de seguridad de datos**: anunciar/escanear dos veces seguidas —PIN, QR,
 botón del padre, o "Anunciar" de un bus— duplicaba al mismo alumno en la
 cola de En Tránsito/Monitor Externo; ahora cada punto que crea un
-`pickup_events` primero revisa si el alumno ya tiene un ciclo activo).
+`pickup_events` primero revisa si el alumno ya tiene un ciclo activo;
+**incidente de rendimiento**: el servidor se puso lento, logs reales de
+Supabase mostraron timeouts de Postgres — `pickup_events` y
+`notifications` solo tenían índice por `tenant_id`, pero se consultan
+por `parent_id`/`student_id`/`user_id` en bucles de sondeo cada 3-10s
+por cada padre activo; agregados los índices que faltaban en
+`sql/fix_pickup_events_indexes.sql`, pendiente de confirmar si resolvió
+del todo).
 2026-09-28 (**fix**: el PIN de Check-In anunciaba de golpe a todos los
 hijos del padre en ese colegio, sin forma de liberar solo a uno —ahora,
 si tiene más de un hijo ahí, aparece un modal para elegir cuál(es)
@@ -3186,6 +3193,42 @@ No se tocaron los duplicados que ya existen en producción de este
 incidente — quedan para revisar/cerrar a mano si hace falta. Verificado:
 `tsc --noEmit` y `npx vite build` limpios.
 
+### Incidente: el servidor "se puso lento" — faltaban índices clave en `pickup_events` y `notifications` (2026-09-30)
+Reporte real: "¿puedes chequear el server que se puso lento?" → "parece
+que hay algo con supabase". El colegio pegó logs reales de Postgres con
+`canceling statement due to statement timeout` (código `57014`)
+repetido muchas veces en un minuto, más un checkpoint que tardó 68
+segundos (normal es milisegundos) y conexiones cortadas
+(`could not send data to client: Broken pipe`) — todo apunta a la base
+de datos bajo presión real, no a un problema del contenedor Docker del
+colegio.
+
+Causa encontrada revisando `sql/tenant_isolation_rls.sql` (el único
+lugar que crea índices en este proyecto — no hay carpeta de migraciones
+formal, ver §7): `pickup_events` solo tenía índice por `tenant_id`, y
+`notifications` lo mismo. Pero varias pantallas consultan
+`pickup_events` por `parent_id`/`student_id`/`status`, y `notifications`
+por `user_id`, en bucles de sondeo cada 3-10 segundos —
+`ParentDashboard.checkActivePickups()`/`fetchNotifications()` corren
+así para **cada padre con la app abierta**, más
+`OperationsDashboard`/`TransitMonitor`/`VerificationDisplay`/
+`GuardianVerification` sondeando por su lado. Sin índice en esas
+columnas, cada sondeo escanea todas las filas del tenant — y como
+`pickup_events` no archiva nada (crece para siempre desde agosto), ese
+escaneo es cada vez más caro. El fix de hoy mismo de duplicados (ver
+entrada anterior) agregó además una consulta nueva por `student_id` en
+cada anuncio (`hasActivePickupEvent`), justo sobre la columna más
+desprotegida — probablemente el empujón final que cruzó el límite.
+
+**Fix**: `sql/fix_pickup_events_indexes.sql` (nuevo) — agrega
+`(parent_id, status)`, `(student_id, status)`, `(tenant_id, status)` y
+`(tenant_id, completed_at) WHERE status='completed'` a `pickup_events`,
+y `(user_id, tenant_id)` a `notifications`. Usa `CREATE INDEX
+CONCURRENTLY` (no bloquea la tabla mientras se construye, para no cortar
+el servicio en vivo) — el colegio lo corrió a mano en el SQL Editor de
+Supabase (el asistente no tiene acceso de escritura a la base). Pendiente
+de confirmar si bajaron los timeouts después de correrlo.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -3319,6 +3362,12 @@ relevantes de cara a producción:
 
 - Activar plan **Pro** en Supabase antes del primer colegio que pague (sin
   backups hoy).
+- **Confirmar que los índices de `sql/fix_pickup_events_indexes.sql`
+  (2026-09-30) resolvieron los timeouts reales** vistos en los logs de
+  Postgres — y evaluar una política de archivado/borrado de
+  `pickup_events` viejos (la tabla crece sin límite desde agosto, nunca se
+  poda), para que este mismo problema no vuelva a aparecer más adelante
+  aunque ya tenga índices.
 - Webhook propio de cámaras con `service_role` (el `INSERT` anónimo se cerró).
 - ~~Sacar la clave de Gemini del navegador (proxy en el backend)~~
   **Resuelto por eliminación, 2026-09-25**: se retiró Gemini del proyecto
