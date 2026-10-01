@@ -166,6 +166,21 @@ export function RequestsCenter() {
 
           if (!additionalData.replacements) additionalData.replacements = [];
 
+          // Poda las entradas de un solo uso ya consumidas (is_recurring
+          // false + used_at seteado) antes de agregar la nueva: una vez
+          // usado, isReplacementAuthorizedNow() en lib/pickupHelpers.ts las
+          // trata como inválidas para siempre, así que quitarlas no cambia
+          // ningún comportamiento. Sin esto, este array crece sin límite con
+          // cada aprobación (y cada una trae su propia foto en base64) —
+          // llegó a pesar 19.5MB para un solo padre, haciendo lenta cada
+          // aprobación/rechazo posterior de ese mismo padre (ver
+          // ESTADO-DEL-PROYECTO.md, 2026-10-01). Las recurrentes no se podan
+          // acá: no tienen vencimiento y seguir activas es responsabilidad
+          // del colegio, no de esta limpieza automática.
+          additionalData.replacements = additionalData.replacements.filter(
+            (r: any) => !(r.is_recurring === false && r.used_at)
+          );
+
           // Add the new replacement — recurrente = queda autorizado
           // indefinidamente pero solo los días marcados; de un solo uso
           // (is_recurring false) se consume la primera vez que se escanea
