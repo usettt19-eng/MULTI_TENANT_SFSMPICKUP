@@ -9,6 +9,7 @@ import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { PICKUP_WINDOW_START_HOUR as ANNOUNCE_ARRIVAL_MIN_HOUR } from '../lib/dismissalSchedule';
 import { getReplacementNameFromNotes, hasActivePickupEvent } from '../lib/pickupHelpers';
+import { compressImageFile } from '../lib/photoCompression';
 import { MobileAppBanner } from '../components/MobileAppBanner';
 import {
   isNativeApp, hasSeenLocationRationale, markLocationRationaleSeen,
@@ -199,6 +200,7 @@ export function ParentDashboard() {
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const photoVideoRef = useRef<HTMLVideoElement>(null);
   const photoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const replacementPhotoCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // "Pool day": otro padre registrado recoge a mi hijo/a ciertos días (fijo
   // cada semana o solo un día puntual), con aviso al encargado y al admin.
@@ -700,11 +702,15 @@ export function ParentDashboard() {
 
   const handleReplacementPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !replacementPhotoCanvasRef.current) return;
     setReplacementPhotoFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setReplacementPhotoPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    // Mismo recorte/compresión que la foto de perfil del padre (ver
+    // src/lib/photoCompression.ts): sin esto, una foto de cámara/galería sin
+    // comprimir pesa varios MB en base64 directo en replacement_requests.photo_url,
+    // y esa columna se trae completa en cada carga del Inbox de reemplazos.
+    compressImageFile(file, replacementPhotoCanvasRef.current)
+      .then(setReplacementPhotoPreview)
+      .catch(err => console.error('Error comprimiendo la foto de reemplazo:', err));
   };
 
   const handleRequestReplacement = async (e: React.FormEvent) => {
@@ -2743,6 +2749,7 @@ export function ParentDashboard() {
                         onChange={handleReplacementPhotoChange}
                         className="hidden"
                       />
+                      <canvas ref={replacementPhotoCanvasRef} className="hidden" />
                     </label>
                     <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
                       {t('parent.replacement.photoHelp')}

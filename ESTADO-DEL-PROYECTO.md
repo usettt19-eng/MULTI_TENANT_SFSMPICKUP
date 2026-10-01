@@ -3229,6 +3229,31 @@ el servicio en vivo) — el colegio lo corrió a mano en el SQL Editor de
 Supabase (el asistente no tiene acceso de escritura a la base). Pendiente
 de confirmar si bajaron los timeouts después de correrlo.
 
+### Fix: el mismo problema de fotos sin comprimir, ahora en `replacement_requests` (2026-10-01)
+
+El Inbox de reemplazos (`RequestsCenter.tsx`) de TCS Costa del Este tardaba
+~28s en cargar (confirmado con curl: 13.6MB de respuesta, con solo 375ms
+de TTFB — el cuello de botella era la descarga, no la consulta ni las
+políticas RLS, que corren en <10ms). Causa: 2 de las 41 solicitudes de
+reemplazo tenían la foto de la persona autorizada guardada sin comprimir
+en `replacement_requests.photo_url` (9.3MB y 3.6MB en base64, sumando casi
+exacto el total de la respuesta) — el mismo problema ya visto y resuelto
+en `profiles.photo_url` el 2026-08-31 (ver entradas "Fix: foto de perfil
+del padre sin comprimir..." y "El mismo problema de fotos sin comprimir,
+ahora en TCS Albrook"), pero nunca aplicado a este formulario en
+particular: `handleReplacementPhotoChange` (`ParentDashboard.tsx`) seguía
+usando `FileReader.readAsDataURL` crudo en vez de pasar por
+`src/lib/photoCompression.ts`.
+
+**Fix**: `handleReplacementPhotoChange` ahora usa `compressImageFile()` de
+`src/lib/photoCompression.ts` (mismo helper que ya usan
+`GuardiansRegistry.tsx`/`StaffManagement.tsx` — recorte a 480px de lado,
+JPEG calidad 0.72), con su propio `<canvas>` oculto
+(`replacementPhotoCanvasRef`) en el modal de solicitud de reemplazo. Las 2
+fotos ya guardadas sin comprimir se recomprimieron a mano en la base (nube
+y respaldo local) para aliviar de inmediato; el fix de código evita que
+vuelva a pasar con solicitudes nuevas, en cualquier colegio.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
