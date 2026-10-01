@@ -3254,6 +3254,26 @@ fotos ya guardadas sin comprimir se recomprimieron a mano en la base (nube
 y respaldo local) para aliviar de inmediato; el fix de código evita que
 vuelva a pasar con solicitudes nuevas, en cualquier colegio.
 
+### Fix: `profiles.additional_tutor_name` crecía sin límite con cada reemplazo aprobado (2026-10-01)
+
+Aprobar/rechazar una solicitud en el Inbox (`RequestsCenter.tsx`) tardaba
+varios segundos para ciertos padres. Causa: `handleProcessRequest` hace
+`SELECT`, `JSON.parse` y `UPDATE` del campo completo
+`profiles.additional_tutor_name` en cada aprobación — y cada aprobación le
+agrega una entrada nueva a `additionalData.replacements[]` (con su propia
+foto en base64) sin podar nunca las viejas. Un padre llegó a **19.5MB** en
+ese único campo de texto; otros 5 estaban entre 430KB y 9.4MB.
+
+**Fix**: antes de agregar la nueva entrada, se podan las que ya están
+permanentemente inválidas — de un solo uso (`is_recurring: false`) con
+`used_at` ya seteado, que `isReplacementAuthorizedNow()`
+(`lib/pickupHelpers.ts`) trata como inválidas para siempre de todos modos,
+así que quitarlas no cambia ningún comportamiento. Las recurrentes no se
+tocan (no tienen vencimiento). Los 6 perfiles ya inflados se arreglaron a
+mano (nube + respaldo local): se comprimió cualquier foto embebida todavía
+pesada (>100KB) y se aplicó la misma poda — el peor caso bajó de 19.5MB a
+69KB.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -3378,6 +3398,98 @@ reemplaza.
 Para el paso a paso de `docker compose build/up` y el detalle de cada
 decisión de infraestructura, ver `DESPLIEGUE.md` y `DISENO-Y-AVANCE.md`.
 
+### Respaldo local de Supabase (self-hosted), 2026-09-30 / 2026-10-01
+
+Ante incidentes de red de Supabase Cloud (el proyecto está en plan FREE,
+sin SLA), se montó un segundo stack de Supabase **self-hosted** completo en
+el mismo servidor (`use-services2026`), para poder seguir operando aunque
+la nube esté caída.
+
+- **Ubicación**: `/root/sfsmpickup-backup-stack/docker` (stack Docker Compose
+  separado, `COMPOSE_PROJECT_NAME=sfsmpickup_backup`). Todos los
+  `container_name` llevan prefijo `sfsmpickup-*` (en vez del `supabase-*`
+  por defecto de la plantilla) — nombres iguales entre dos proyectos de
+  Compose distintos en el mismo host hacen que uno "adopte"/recree los
+  contenedores del otro si ambos resuelven al mismo nombre de proyecto;
+  esto rompió brevemente la producción del CRM al montar este stack.
+- **Puertos propios** (para no chocar con el stack original): API
+  gateway/Envoy `8010`/`8445`, Postgres `5433`, pooler `6544` — todos
+  bloqueados a acceso externo vía `iptables` (`DOCKER-USER` + `INPUT`,
+  ambas cadenas: el `docker-proxy` userspace puede saltarse `DOCKER-USER`
+  para ciertos puertos).
+- **Dominio propio con HTTPS**: `backup.safesmartpickup.com` → nginx del
+  host → `127.0.0.1:8010` (el api-gw del stack de respaldo). Certificado
+  por separado con `certbot certonly` (nunca `--nginx` en modo automático:
+  pisó una vez el certificado del sitio principal por un `server_name`
+  con punto inicial que hacía de wildcard).
+- **Replicación**: lógica de Postgres, **nube → local únicamente**,
+  `CREATE PUBLICATION ... FOR TABLES IN SCHEMA public` del lado de la
+  nube, las 40 tablas de `public`. El rol replicador necesita
+  `BYPASSRLS` (sin eso, las políticas RLS filtran filas silenciosamente y
+  la "suscripción exitosa" queda con datos incompletos). `auth.users` /
+  `auth.identities` **no se replican en vivo** — Supabase Cloud no deja
+  dar `GRANT USAGE ON SCHEMA auth` a un rol custom, ni siquiera como
+  `postgres`. Se sincronizan a mano, de vez en cuando, con
+  `pg_dump --data-only -t auth.users -t auth.identities` + restore (no
+  hace falta que sea en vivo: son cuentas ya creadas, solo hace falta que
+  existan para poder loguearse contra el respaldo).
+- **Mismo JWT/ANON_KEY/SERVICE_ROLE_KEY que la nube** en el `.env` del
+  respaldo, para que el mismo token de sesión sirva contra cualquiera de
+  los dos backends sin tener que volver a loguearse.
+- **Switch manual**: cambiar `VITE_SUPABASE_URL` en `/root/sfsmpickup/.env`
+  (nube ↔ `https://backup.safesmartpickup.com`) y
+  `docker compose up -d --build sfsmpickup api` (las vars `VITE_*` son de
+  build, no de runtime). Nada automático — es una decisión manual cada
+  vez.
+- **Reconciliación nube↔local**: como la réplica es de un solo sentido,
+  todo lo que se crea mientras la app apunta al local (pickups,
+  notificaciones, solicitudes de reemplazo reales) no llega solo a la
+  nube. Al volver a apuntar a la nube hay que correr una reconciliación a
+  mano (tabla `stg_*` temporal en la nube + `\copy` del CSV exportado del
+  local + `INSERT ... ON CONFLICT (id) DO NOTHING`, para no pisar ni
+  duplicar lo que ya se haya replicado).
+
+**Incidente de red en la nube + corte real del 2026-10-01**: Supabase
+Cloud tuvo errores reales ("Thread killed by timeout manager" en
+`postgrest_logs`) durante varias horas. Se pasó la app de producción real
+a este respaldo local (no solo una prueba) mientras duraba. Al volver a
+revisar el respaldo a fondo, aparecieron varios problemas arrastrados de
+cuando se armó el stack, todos arreglados hoy:
+- Secreto JWT desactualizado en el contenedor `realtime` (quedó afuera de
+  un `--force-recreate` anterior que sí actualizó `auth`/`rest`) — causaba
+  `unhealthy` permanente.
+- `auth.identities` vacía (0 filas) rompía `GoTrueAdminApi.listUsers()`
+  con `AuthRetryableFetchError: Database error finding users` — restaurada
+  (715 filas, igual que la nube).
+- Columnas de token (`confirmation_token`, `recovery_token`, etc.) en
+  `auth.users` con `NULL` en vez de `''` tras el restore por `pg_dump` —
+  GoTrue no puede escanear `NULL` ahí (`sql: Scan error ... converting
+  NULL to string is unsupported`), rompía `/admin/users` con 500. Fix:
+  `UPDATE auth.users SET confirmation_token = COALESCE(...), ...`.
+- Tokens de sesión viejos (firmados ES256, de antes del switch) cacheados
+  en el navegador seguían rechazándose contra el GoTrue local (que solo
+  valida HS256) — se resolvió cerrando sesión y volviendo a entrar.
+- **Causa real de que el WebSocket de Realtime nunca conectara**
+  (`wss://backup.safesmartpickup.com/realtime/v1/websocket` fallaba
+  siempre, `no healthy upstream` desde Envoy): el `cds.yaml` de Envoy
+  (`volumes/api/envoy/cds.yaml`) tiene **hardcodeado** el nombre DNS del
+  contenedor de `realtime` — seguía apuntando a `realtime-dev.supabase-
+  realtime` (el nombre por defecto), nunca se actualizó al renombrar los
+  contenedores a `sfsmpickup-*` para evitar la colisión mencionada arriba.
+  Corregido el nombre en `cds.yaml` + `docker compose restart api-gw`.
+
+**Reconciliación corrida hoy**: 75 `pickup_events`, 437 `notifications` y 8
+`replacement_requests` reales (creados solo en local durante el corte) se
+copiaron a la nube. Los 120 estudiantes/padres de prueba (`SIMTEST`, de
+una simulación de carga de 120 padres corrida contra el tenant demo "The
+Casco School") se dejaron **deliberadamente solo en local** — son datos
+de prueba para demos, no deben aparecer en la nube de producción.
+
+**Pendiente**: la contraseña de `postgres` de la nube quedó expuesta en
+texto plano varias veces durante estas sesiones de mantenimiento —
+rotarla desde el dashboard de Supabase (Settings → Database → Reset
+database password) en cuanto se pueda.
+
 ---
 
 ## 7. Pendientes activos
@@ -3387,6 +3499,10 @@ relevantes de cara a producción:
 
 - Activar plan **Pro** en Supabase antes del primer colegio que pague (sin
   backups hoy).
+- **Rotar la contraseña de `postgres` de la nube** — quedó expuesta en
+  texto plano varias veces durante las sesiones de mantenimiento del
+  respaldo local (dump/restore de `auth.*`, reconciliaciones). Dashboard
+  de Supabase → Settings → Database → Reset database password.
 - **Confirmar que los índices de `sql/fix_pickup_events_indexes.sql`
   (2026-09-30) resolvieron los timeouts reales** vistos en los logs de
   Postgres — y evaluar una política de archivado/borrado de
