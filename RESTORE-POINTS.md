@@ -24,6 +24,40 @@ docker compose up -d
 
 ---
 
+## 2026-10-01 — `3b1d210b6dd685d8a3d6c1970d0a1f47fd1e2fd4`
+
+**Fotos sin comprimir en solicitudes de reemplazo + `additional_tutor_name` descontrolado + índices de `pickup_events`/`notifications`**
+
+Desplegado y verificado contra el respaldo local (`backup.safesmartpickup.com`,
+activo mientras dura el incidente de red de Supabase Cloud). Incluye todo
+lo del punto anterior (2026-09-22) más:
+
+- **Fix**: `handleReplacementPhotoChange` (`ParentDashboard.tsx`) ahora
+  comprime la foto de la persona autorizada antes de guardarla (mismo
+  `compressImageFile()` ya usado en Guardianes/Staff) — evita el mismo
+  problema de fotos sin comprimir ya visto antes en `profiles.photo_url`,
+  esta vez en `replacement_requests.photo_url`. 2 solicitudes ya pesadas
+  (9.3MB/3.6MB) recomprimidas a mano en nube y local.
+- **Fix**: `handleProcessRequest` (`RequestsCenter.tsx`) ahora poda, antes
+  de cada aprobación, las entradas de reemplazo de un solo uso ya
+  consumidas de `profiles.additional_tutor_name` — ese campo crecía sin
+  límite (un padre llegó a 19.5MB), haciendo lenta cada aprobación de ese
+  padre. 6 perfiles ya inflados recomprimidos/podados a mano en nube y
+  local.
+- **Fix**: índices faltantes en `pickup_events`/`notifications`
+  (`sql/fix_pickup_events_indexes.sql`) que causaban timeouts reales en
+  los sondeos cada 3-10s del Dashboard/Monitor/`ParentDashboard`.
+- **Infraestructura**: resuelto el incidente del Realtime del respaldo
+  local (secreto JWT viejo, `auth.identities` faltante, columnas de token
+  NULL en `auth.users`, y la causa raíz — DNS hardcodeado en el `cds.yaml`
+  de Envoy apuntando al nombre de contenedor de antes del rename
+  anti-colisión). Detalle completo en `ESTADO-DEL-PROYECTO.md` §6.
+- Reconciliada a la nube la actividad real (no de prueba) generada
+  mientras la app apuntaba al respaldo local: 75 `pickup_events`, 437
+  `notifications`, 8 `replacement_requests`.
+
+---
+
 ## 2026-09-22 — `94734a4232967357801f172b639f04cee3c95f01`
 
 **Retiro Anticipado + botón de Ayuda de recepción + fix del enlace de reemplazo**
