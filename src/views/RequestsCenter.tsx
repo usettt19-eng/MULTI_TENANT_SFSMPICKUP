@@ -10,6 +10,13 @@ import {
 
 const CARPOOL_DAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
+// replacement_requests no tiene límite de fecha ni paginación — en un
+// colegio con meses de historial, el Inbox trae TODO cada vez que entra o
+// cada 10s de polling. Por defecto se muestran solo las últimas 2 semanas;
+// "Ver más antiguas" las trae todas bajo demanda (ver ESTADO-DEL-PROYECTO.md,
+// 2026-10-02).
+const RECENT_WINDOW_DAYS = 14;
+
 export function RequestsCenter() {
   const { t } = useLanguage();
   const { profile } = useAuth() as any;
@@ -20,6 +27,7 @@ export function RequestsCenter() {
   const [carpoolEvents, setCarpoolEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [showOlder, setShowOlder] = useState(false);
 
   const playArrivalSound = () => {
     try {
@@ -91,7 +99,7 @@ export function RequestsCenter() {
     return () => {
       clearInterval(pollInterval);
     };
-  }, [profile?.tenant_id]);
+  }, [profile?.tenant_id, showOlder]);
 
   // Une reemplazos/mensajes con pool day en un solo feed ordenado por fecha,
   // para que recepción/admin revisen todo en un único lugar.
@@ -105,11 +113,19 @@ export function RequestsCenter() {
   const fetchRequests = async (isInitial = false) => {
     if (!profile?.tenant_id) return;
     if (isInitial) setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from('replacement_requests')
       .select('*, parent:profiles(first_name, last_name, tenant_id, parent_students(students(id, first_name, last_name, tenant_id)))')
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false });
+
+    if (!showOlder) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - RECENT_WINDOW_DAYS);
+      query = query.gte('created_at', cutoff.toISOString());
+    }
+
+    const { data } = await query;
 
     if (data) {
       const seen = seenRequestIdsRef.current;
@@ -269,6 +285,16 @@ export function RequestsCenter() {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('requests.liveMonitoring')}</span>
           </div>
         </header>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => { setLoading(true); setShowOlder((v) => !v); }}
+            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+          >
+            {showOlder ? t('requests.showRecentOnly') : t('requests.showOlder')}
+          </button>
+        </div>
 
         {loading && combinedFeed.length === 0 ? (
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
