@@ -3499,6 +3499,17 @@ relevantes de cara a producción:
 
 - Activar plan **Pro** en Supabase antes del primer colegio que pague (sin
   backups hoy).
+- **SMTP bloqueado en el servidor del respaldo local** (2026-10-02):
+  recuperación de contraseña y demás correos de Auth fallan
+  (`context deadline exceeded` al conectar a `smtp.zoho.com:587`) porque
+  Clouding.io bloquea tráfico SMTP de salida por defecto en este VPS
+  (`use-services2026`) — confirmado en su panel, "Red → Tráfico SMTP de
+  salida: bloqueado para este servidor". El `.env` del respaldo
+  (`/root/sfsmpickup-backup-stack/docker/.env`) ya tiene las credenciales
+  reales de Zoho (antes tenía los valores de prueba de la plantilla,
+  `fake_mail_user`), así que una vez que Clouding.io habilite el tráfico
+  saliente debería funcionar sin más cambios. Se pidió a Clouding.io que
+  lo habilite — pendiente de confirmación de su lado.
 - **Rotar la contraseña de `postgres` de la nube** — quedó expuesta en
   texto plano varias veces durante las sesiones de mantenimiento del
   respaldo local (dump/restore de `auth.*`, reconciliaciones). Dashboard
