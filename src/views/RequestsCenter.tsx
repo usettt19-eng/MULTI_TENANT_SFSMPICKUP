@@ -53,6 +53,26 @@ export function RequestsCenter() {
     if (!profile?.tenant_id) return;
     const parentFields = 'first_name, last_name';
     const studentFields = 'first_name, last_name';
+
+    // carpool_authorizations es recurrente (config activa, sin fecha de
+    // vencimiento — se sigue mostrando siempre, igual que en la tarjeta
+    // "Car Pools Configurados" del Dashboard). carpool_overrides es una
+    // excepción de UN día puntual: pasado ese día ya no aplica, así que sí
+    // respeta la misma ventana de 2 semanas que las solicitudes de
+    // reemplazo.
+    let overridesQuery = supabase
+      .from('carpool_overrides')
+      .select(`id, created_at, override_date, student:students(${studentFields}), authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${parentFields})`)
+      .eq('tenant_id', profile.tenant_id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!showOlder) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - RECENT_WINDOW_DAYS);
+      overridesQuery = overridesQuery.gte('override_date', cutoff.toISOString().slice(0, 10));
+    }
+
     const [weekly, overrides] = await Promise.all([
       supabase
         .from('carpool_authorizations')
@@ -60,12 +80,7 @@ export function RequestsCenter() {
         .eq('tenant_id', profile.tenant_id)
         .order('created_at', { ascending: false })
         .limit(50),
-      supabase
-        .from('carpool_overrides')
-        .select(`id, created_at, override_date, student:students(${studentFields}), authorizing:profiles!carpool_overrides_authorizing_parent_id_fkey(${parentFields}), driver:profiles!carpool_overrides_driver_parent_id_fkey(${parentFields})`)
-        .eq('tenant_id', profile.tenant_id)
-        .order('created_at', { ascending: false })
-        .limit(50),
+      overridesQuery,
     ]);
 
     const events = [
