@@ -3612,6 +3612,22 @@ herramienta MCP (`execute_sql`/`apply_migration`) dio timeout dos veces
 seguidas — mismo incidente de red que se viene monitoreando. Funcionó
 con una conexión directa `psql` desde el servidor en su lugar.
 
+**Revertido el mismo día — rompía subir el logo**: el fix de arriba
+causó `new row violates row-level security policy` al guardar el logo
+del colegio (`Settings.tsx`, `handleLogoUpload`). Causa real, confirmada
+en los logs de `storage-api`: ese `.upload()` usa `{upsert: true}`, que
+genera `INSERT ... ON CONFLICT (name, bucket_id) DO UPDATE ...` — y para
+que Postgres pueda **detectar el conflicto** (si ya existe una fila con
+ese nombre), necesita poder hacer `SELECT` bajo RLS sobre esa tabla,
+sin importar que el bucket sea público. Sin ninguna política de
+`SELECT`, ni siquiera el chequeo de conflicto se puede resolver, y todo
+el `INSERT` falla — aunque sea la primera subida de ese archivo. Se
+restauró `Logos_Select 1peuqw_0` (nube y local) y de paso se agregó la
+política de `UPDATE` que tampoco existía (`Logos_Update`, necesaria para
+la rama `DO UPDATE` del mismo upsert). El riesgo de poder *listar*
+nombres de archivos de logos vía la API es menor que romper la función
+real — queda así, sin "arreglar" ese advisor.
+
 ---
 
 ## 7. Pendientes activos
