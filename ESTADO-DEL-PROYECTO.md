@@ -3572,6 +3572,30 @@ de hoy/ayer (fotos, `additional_tutor_name`, índices, buckets, trigger de
 nueva. Los dos pendientes reales (leaked password protection apagado,
 CORS amplio) quedan a decisión del usuario, no son urgentes.
 
+### Fix: slot de replicación nube→local invalidado (`wal_removed`) (2026-10-03)
+
+Los reinicios completos del stack de respaldo del día anterior (varios
+`docker compose up -d --force-recreate` de todo el stack, incluyendo
+`db`) dejaron al suscriptor desconectado el tiempo suficiente para que la
+nube reciclara los segmentos de WAL que el slot `pickup_backup_sub`
+necesitaba — error recurrente cada 5s en los logs de la nube: `can no
+longer get changes from replication slot "pickup_backup_sub"` (SQLSTATE
+`55000`). Confirmado con `pg_replication_slots`:
+`wal_status: lost, invalidation_reason: wal_removed`. Un slot así no se
+recupera solo, hay que recrear la suscripción desde cero.
+
+**Fix**: en vez de la recreación "normal" (que por defecto hace un
+resync completo — trunca y vuelve a copiar todas las tablas de la
+publicación, lo que habría borrado la actividad real creada solo en
+local desde que el slot se rompió), se recreó con `WITH (copy_data =
+false)`: descarta la copia inicial y retoma solo los cambios nuevos de
+acá en adelante. Pasos: `ALTER SUBSCRIPTION ... SET (slot_name = NONE)`
++ `DROP SUBSCRIPTION` en el local (sin intentar tocar el slot roto
+remoto), `pg_drop_replication_slot()` del lado de la nube, contraseña
+nueva para el rol `replicator_pickup_backup`, y `CREATE SUBSCRIPTION`
+con la conexión y esa flag. Verificado activo de nuevo en
+`pg_stat_subscription` (worker `apply` con PID y LSN corriendo).
+
 ---
 
 ## 7. Pendientes activos
