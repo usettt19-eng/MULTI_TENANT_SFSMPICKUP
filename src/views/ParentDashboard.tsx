@@ -21,7 +21,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle, Check, Bus, Users, KeyRound
+  HelpCircle, Check, Bus, Users, KeyRound, Instagram, Facebook
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -1857,6 +1857,24 @@ export function ParentDashboard() {
               className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
             >
               <HelpCircle className="w-5 h-5 text-white" />
+            </a>
+            <a
+              href="https://www.instagram.com/safesmartpickup/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Instagram de Safe Smart Pickup"
+              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
+            >
+              <Instagram className="w-5 h-5 text-white" />
+            </a>
+            <a
+              href="https://www.facebook.com/people/Safe-Smart-Pickup/61594088620118"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Facebook de Safe Smart Pickup"
+              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
+            >
+              <Facebook className="w-5 h-5 text-white" />
             </a>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
