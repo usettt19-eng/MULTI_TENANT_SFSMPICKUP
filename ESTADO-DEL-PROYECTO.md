@@ -3490,6 +3490,44 @@ texto plano varias veces durante estas sesiones de mantenimiento —
 rotarla desde el dashboard de Supabase (Settings → Database → Reset
 database password) en cuanto se pueda.
 
+### Más gaps del respaldo local encontrados y arreglados (2026-10-02/03)
+
+Después de lo anterior, se encontraron y arreglaron varios gaps más —
+todos del mismo tipo: cosas que viven fuera del schema `public` (o fuera
+de la base de datos directamente) y que por lo tanto **nunca llegan** por
+la replicación lógica, que solo cubre tablas de `public`.
+
+- **Buckets de Storage inexistentes** (`storage.buckets` tenía 0 filas):
+  se crearon los 5 buckets de la nube (`avatars`, `detections`,
+  `daily-reports`, `downloads`, `logos`) con las mismas 11 políticas RLS
+  de `storage.objects` que tiene la nube ahora mismo (consultadas en vivo
+  con `pg_policies`, no copiadas de los `.sql` del repo que ya estaban
+  desactualizados).
+- **Secreto JWT viejo también en el contenedor `storage`** — mismo
+  síntoma que `realtime` el día anterior (`signature verification
+  failed` al listar buckets). Se hizo `docker compose up -d
+  --force-recreate` de **todo el stack de una sola vez** (no servicio por
+  servicio) para evitar seguir descubriendo contenedores con secretos
+  desactualizados de a uno.
+- **Trigger `on_auth_user_created` faltante en `auth.users`**: causaba
+  `Cannot coerce the result to a single JSON object` al crear un padre
+  nuevo desde "Directorio de Padres" (`POST /api/parents` en
+  `server/src/index.ts` hace `inviteUserByEmail()` y después un `UPDATE
+  profiles ... .single()` sobre ese mismo id, asumiendo que el trigger ya
+  creó la fila). La función `handle_new_user()` sí existía (vive en
+  `public`), pero el trigger que la conecta a `auth.users` nunca se creó
+  en el local (vive en el schema `auth`, invisible a la replicación).
+  Fix: `CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();` — es el único trigger
+  de ese tipo en la nube, no hay más gaps de este tipo pendientes.
+
+**CORS transitorio**: durante el `--force-recreate` del stack completo
+se vieron errores de CORS en el navegador (`No 'Access-Control-Allow-
+Origin' header`) — resultaron ser solo el breve reinicio de `envoy`;
+confirmado con un `curl -X OPTIONS` directo que el CORS real (configurado
+con `allow_origin_string_match: safe_regex: ".*"` a nivel de virtual
+host en `lds.template.yaml`) está bien y no fue la causa real de nada.
+
 ---
 
 ## 7. Pendientes activos
