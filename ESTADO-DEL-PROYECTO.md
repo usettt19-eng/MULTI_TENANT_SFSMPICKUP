@@ -3528,6 +3528,50 @@ confirmado con un `curl -X OPTIONS` directo que el CORS real (configurado
 con `allow_origin_string_match: safe_regex: ".*"` a nivel de virtual
 host en `lds.template.yaml`) está bien y no fue la causa real de nada.
 
+### Revisión de seguridad post-cambios (2026-10-03)
+
+El usuario pidió revisar la seguridad después de toda la tanda de cambios
+de hoy/ayer (fotos, `additional_tutor_name`, índices, buckets, trigger de
+`auth.users`). Revisado:
+
+- **Git**: los 10 commits de hoy/ayer, línea por línea — ninguna
+  contraseña, clave o secreto real quedó commiteado (las menciones a
+  "password"/"SMTP"/"secret" son todas texto descriptivo de los
+  incidentes, no valores).
+- **Trigger nuevo `on_auth_user_created`**: `handle_new_user()` es
+  `SECURITY DEFINER` como corresponde (necesario para escribir en
+  `profiles` desde un trigger de `auth.users`), idéntico a la nube.
+- **Políticas de Storage nuevas**: copiadas exactas de las que corren en
+  la nube ahora mismo (consultadas en vivo con `pg_policies`, no de los
+  `.sql` del repo que estaban desactualizados) — mismo nivel de acceso,
+  nada ampliado.
+- **Advisors de seguridad de Supabase** (nube): revisados todos.
+  - 6 funciones `SECURITY DEFINER` ejecutables por `anon`/`authenticated`
+    vía RPC (`is_staff_of`, `user_tenant_ids`, `find_parent_by_pin`,
+    etc.) — son los helpers que usan las políticas RLS en toda la app,
+    diseño intencional, preexistente.
+  - `early_withdrawals` tiene RLS activado sin ninguna política — **revisado
+    a fondo y confirmado correcto**: los dos únicos endpoints que la tocan
+    (`POST /api/tenants/:tenantId/early-withdrawals` y `GET
+    /api/parents/early-withdrawals-today` en `server/src/index.ts`) usan
+    `service_role` con `requireAuth` + `isStaffOf()`/filtro por los
+    propios hijos del padre antes de tocar la tabla — el control de acceso
+    vive en el backend a propósito (comentario explícito en el código,
+    `sql/early_withdrawals.sql`), no es un descuido.
+  - `_backfill_20260808` también con RLS sin política — tabla de trabajo
+    de una migración vieja, candidata a borrar (ver §5).
+  - "Leaked Password Protection" desactivado en Auth — Supabase puede
+    chequear contraseñas contra HaveIBeenPwned.org; sigue apagado,
+    pendiente de decidir si activarlo.
+  - CORS de Envoy en `/rest/v1/*` permite cualquier origen (`regex:
+    ".*"`) — es el default de la plantilla self-hosted, la API igual
+    exige `apikey` válida; se podría restringir a los dominios reales
+    pero no es una vulnerabilidad activa.
+
+**Conclusión**: ningún cambio de esta sesión introdujo una vulnerabilidad
+nueva. Los dos pendientes reales (leaked password protection apagado,
+CORS amplio) quedan a decisión del usuario, no son urgentes.
+
 ---
 
 ## 7. Pendientes activos
@@ -3537,6 +3581,14 @@ relevantes de cara a producción:
 
 - Activar plan **Pro** en Supabase antes del primer colegio que pague (sin
   backups hoy).
+- **Activar "Leaked Password Protection"** en Supabase Auth (Dashboard →
+  Authentication → Policies) — chequea contraseñas nuevas contra
+  HaveIBeenPwned.org, hoy desactivado (hallazgo de la revisión de
+  seguridad del 2026-10-03).
+- **Restringir el CORS de Envoy** (`lds.template.yaml`, respaldo local)
+  a los dominios reales de la app en vez de cualquier origen (`regex:
+  ".*"`) — no es una vulnerabilidad activa (la API igual exige `apikey`),
+  pero conviene acotarlo.
 - **SMTP bloqueado en el servidor del respaldo local** (2026-10-02):
   recuperación de contraseña y demás correos de Auth fallan
   (`context deadline exceeded` al conectar a `smtp.zoho.com:587`) porque
