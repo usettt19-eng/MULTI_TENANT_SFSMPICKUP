@@ -3596,6 +3596,22 @@ nueva para el rol `replicator_pickup_backup`, y `CREATE SUBSCRIPTION`
 con la conexión y esa flag. Verificado activo de nuevo en
 `pg_stat_subscription` (worker `apply` con PID y LSN corriendo).
 
+### Fix: política de Storage permitía listar todos los logos (2026-10-03)
+
+Advisor `public_bucket_allows_listing`: el bucket `logos` (público) tenía
+una política de `SELECT` sin restricción (`Logos_Select 1peuqw_0`) que
+permitía **listar** todos los archivos vía la API, no solo traerlos por
+URL directa — un bucket público no necesita política de `SELECT` para
+que las imágenes se vean (`/storage/v1/object/public/...` no pasa por
+RLS), esa política solo habilitaba enumerar nombres de archivo de más.
+Se borró la política (nube y local) — no afecta cómo la app muestra los
+logos, solo bloquea el listado.
+
+**Nota operativa**: aplicar el `DROP POLICY` en la nube vía la
+herramienta MCP (`execute_sql`/`apply_migration`) dio timeout dos veces
+seguidas — mismo incidente de red que se viene monitoreando. Funcionó
+con una conexión directa `psql` desde el servidor en su lugar.
+
 ---
 
 ## 7. Pendientes activos
