@@ -135,9 +135,15 @@ export function RequestsCenter() {
       .order('created_at', { ascending: false });
 
     if (!showOlder) {
+      // Las pendientes siempre se muestran sin importar su antigüedad —
+      // necesitan acción de recepción/admin. La ventana de 2 semanas solo
+      // oculta las ya resueltas (approved/rejected) para no saturar el
+      // Inbox con historial. Sin esto, el badge del Dashboard (que cuenta
+      // TODAS las pendientes) podía mostrar un número mayor al de tarjetas
+      // visibles en el Inbox.
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - RECENT_WINDOW_DAYS);
-      query = query.gte('created_at', cutoff.toISOString());
+      query = query.or(`status.eq.pending,created_at.gte.${cutoff.toISOString()}`);
     }
 
     const { data } = await query;
