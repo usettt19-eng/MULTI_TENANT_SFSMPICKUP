@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { captureVideoFrameCompressed, compressImageFile } from '../lib/photoCompression';
 
 export function Students() {
   const { t } = useLanguage();
@@ -29,7 +30,6 @@ export function Students() {
   const [grade, setGrade] = useState('');
   const [section, setSection] = useState('');
   const [photoPayload, setPhotoPayload] = useState('');
-  const [photoFile, setPhotoFile] = useState<File | Blob | null>(null);
   const [photoMode, setPhotoMode] = useState<'url' | 'upload' | 'camera'>('url');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [schoolGrades, setSchoolGrades] = useState<any[]>([]);
@@ -165,35 +165,17 @@ export function Students() {
 
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-        
-        // Setup payload for preview
-        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8);
-        setPhotoPayload(dataUrl);
-
-        // Setup File payload for upload
-        canvasRef.current.toBlob((blob) => {
-          if (blob) setPhotoFile(blob);
-        }, 'image/jpeg', 0.8);
-
-        stopCamera();
-      }
+      setPhotoPayload(captureVideoFrameCompressed(videoRef.current, canvasRef.current));
+      stopCamera();
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPayload(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (file && canvasRef.current) {
+      compressImageFile(file, canvasRef.current)
+        .then(setPhotoPayload)
+        .catch(err => console.error('Error comprimiendo la foto:', err));
     }
   };
 
@@ -201,30 +183,7 @@ export function Students() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    let finalPhotoUrl = photoPayload;
-
-    if (photoFile && profile?.tenant_id && (photoMode === 'upload' || photoMode === 'camera')) {
-      const fileExt = photoFile instanceof File ? photoFile.name.split('.').pop() : 'jpeg';
-      const fileName = `student_${Date.now()}.${fileExt}`;
-      const filePath = `${profile.tenant_id}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, photoFile);
-
-      if (uploadError) {
-        console.error("Error subiendo:", uploadError);
-        alert('Error al subir la imagen: ' + uploadError.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      finalPhotoUrl = publicUrlData.publicUrl;
-    }
+    const finalPhotoUrl = photoPayload;
 
     const studentData = {
       first_name: firstName,
@@ -382,7 +341,6 @@ export function Students() {
     setGrade('');
     setSection('');
     setPhotoPayload('');
-    setPhotoFile(null);
     setPhotoMode('url');
     setSelfDismissalAllowed(false);
     setSelfDismissalQrToken(null);

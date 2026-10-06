@@ -127,6 +127,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchSchoolSettings();
     fetchDailyDepartures();
     fetchSelfDismissalsToday();
+    fetchSelfDismissalAuthorizedRoster();
     fetchConfiguredCarpools();
 
     // pickup_events, self_dismissal_events, replacement_requests,
@@ -316,29 +317,40 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const [{ data, error }, { data: authorized, error: authorizedError }] = await Promise.all([
-      supabase
-        .from('self_dismissal_events')
-        .select('id, method, created_at, student:students(id, first_name, last_name, grade, section, photo_url)')
-        .eq('tenant_id', profile.tenant_id)
-        .gte('created_at', startOfDay.toISOString())
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('students')
-        .select('id, first_name, last_name, grade, section, photo_url')
-        .eq('tenant_id', profile.tenant_id)
-        .eq('self_dismissal_allowed', true)
-        .order('first_name', { ascending: true }),
-    ]);
+    const { data, error } = await supabase
+      .from('self_dismissal_events')
+      .select('id, method, created_at, student:students(id, first_name, last_name, grade, section, photo_url)')
+      .eq('tenant_id', profile.tenant_id)
+      .gte('created_at', startOfDay.toISOString())
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error cargando salidas autónomas del día:', error);
       return;
     }
-    if (authorizedError) console.error('Error cargando alumnos autorizados para Salida Autónoma:', authorizedError);
 
     setSelfDismissalsToday(data || []);
-    setSelfDismissalAuthorized(authorized || []);
+  };
+
+  // Roster de alumnos con Salida Autónoma habilitada — a diferencia de los
+  // eventos de arriba, casi no cambia en tiempo real, así que se trae solo
+  // al montar el dashboard y no en cada ciclo del polling de 10s (eran 30-50
+  // fotos de alumnos re-descargándose cada 10s sin necesidad).
+  const fetchSelfDismissalAuthorizedRoster = async () => {
+    if (!profile?.tenant_id) return;
+    const { data, error } = await supabase
+      .from('students')
+      .select('id, first_name, last_name, grade, section, photo_url')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('self_dismissal_allowed', true)
+      .order('first_name', { ascending: true });
+
+    if (error) {
+      console.error('Error cargando alumnos autorizados para Salida Autónoma:', error);
+      return;
+    }
+
+    setSelfDismissalAuthorized(data || []);
   };
 
   const fetchConfiguredCarpools = async () => {
@@ -828,7 +840,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       <div key={student.id} className={`flex items-center gap-3 rounded-xl p-3 border ${ev ? 'bg-[#f8fafc] border-slate-100' : 'bg-amber-50/50 border-amber-100'}`}>
                         <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-slate-200 flex items-center justify-center">
                           {student.photo_url ? (
-                            <img src={student.photo_url} alt={student.first_name} className="w-full h-full object-cover" />
+                            <img src={student.photo_url} alt={student.first_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           ) : (
                             <Footprints className="w-4 h-4 text-slate-400" />
                           )}
