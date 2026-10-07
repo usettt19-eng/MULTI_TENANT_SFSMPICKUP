@@ -598,7 +598,7 @@ export function VerificationDisplay() {
         // 1. Update pickup event
         const { error: updateError } = await supabase
           .from('pickup_events')
-          .update({ status: 'released' })
+          .update({ status: 'released', released_by: profile?.id })
           .eq('id', pickupIdToRelease);
 
         if (updateError) throw updateError;

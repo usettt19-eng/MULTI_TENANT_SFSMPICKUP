@@ -551,7 +551,11 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   const updateStatus = async (id: string, newStatus: string) => {
     const pickup = pickups.find(p => p.id === id);
     const { error } = await supabase.from('pickup_events')
-      .update({ status: newStatus, picked_up_at: new Date() })
+      .update({
+        status: newStatus,
+        picked_up_at: new Date(),
+        ...(newStatus === 'released' ? { released_by: profile?.id } : {}),
+      })
       .eq('id', id);
 
     if (!error && newStatus === 'released') {

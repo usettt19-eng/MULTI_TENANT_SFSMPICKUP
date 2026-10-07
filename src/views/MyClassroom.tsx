@@ -218,7 +218,7 @@ export function MyClassroom() {
     try {
       const { error: updateError } = await supabase
         .from('pickup_events')
-        .update({ status: 'released' })
+        .update({ status: 'released', released_by: profile?.id })
         .eq('id', pickup.id);
       if (updateError) throw updateError;
 
