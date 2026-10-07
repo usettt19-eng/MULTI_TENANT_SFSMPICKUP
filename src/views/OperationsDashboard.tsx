@@ -107,7 +107,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // avisos de llegada le llegaron a su Mi Salón hoy, y cuántos retiros
   // autorizó él mismo — para ver de un vistazo quién está activo durante
   // la salida y a quién nunca le está tocando autorizar a nadie.
-  const [staffActivity, setStaffActivity] = useState<{ id: string; name: string; logged_in_today: boolean; requests_received_today: number; authorized_today: number }[]>([]);
+  const [staffActivity, setStaffActivity] = useState<{ id: string; name: string; logged_in_today: boolean; requests_received_today: number; authorized_today: number; expected_today: number }[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -1101,8 +1101,10 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
                       <span className="text-[11px] font-black text-slate-700 truncate">{s.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-[9px] font-black">
-                        {s.requests_received_today} {t('dashboard.staffActivityRequests')}
+                      <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-[9px] font-black" title={s.expected_today > 0 ? t('dashboard.staffActivityExpectedTitle') : undefined}>
+                        {s.expected_today > 0
+                          ? `${s.requests_received_today}/${s.expected_today} ${t('dashboard.staffActivityExpected')}`
+                          : `${s.requests_received_today} ${t('dashboard.staffActivityRequests')}`}
                       </span>
                       <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md text-[9px] font-black">
                         {s.authorized_today} {t('dashboard.staffActivityAuthorized')}

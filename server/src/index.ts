@@ -493,21 +493,35 @@ app.get(
     if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
 
     const todayLocalStart = startOfTodayInPanamaUTC().toISOString();
+    const todayDow = new Date().getDay();
+    const todayDateStr = new Date().toISOString().slice(0, 10);
 
     const [
       {data: staffProfiles, error: staffError},
       lastSignIns,
       {data: notifRows, error: notifError},
       {data: releasedRows, error: releasedError},
+      {data: grades, error: gradesError},
+      {data: assignmentRows, error: assignmentError},
+      {data: overrideRows, error: overrideError},
+      {data: students, error: studentsError},
     ] = await Promise.all([
       admin.from('profiles').select('id, first_name, last_name, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'admin'),
       fetchAllAuthUsersLastSignIn(),
       admin.from('notifications').select('user_id').eq('tenant_id', tenantId).not('pickup_event_id', 'is', null).gte('created_at', todayLocalStart),
       admin.from('pickup_events').select('released_by').eq('tenant_id', tenantId).not('released_by', 'is', null).gte('announced_at', todayLocalStart),
+      admin.from('school_grades').select('id, name, sections').eq('tenant_id', tenantId),
+      admin.from('dismissal_assignments').select('grade_id, staff_id, staff_id_2, section').eq('tenant_id', tenantId).eq('schedule_type', 'regular').eq('day_of_week', todayDow),
+      admin.from('dismissal_overrides').select('grade_id, staff_id, section, slot').eq('tenant_id', tenantId).eq('schedule_type', 'regular').eq('override_date', todayDateStr),
+      admin.from('students').select('grade, section, self_dismissal_allowed').eq('tenant_id', tenantId),
     ]);
     if (staffError) return fail(res, 500, staffError.message);
     if (notifError) return fail(res, 500, notifError.message);
     if (releasedError) return fail(res, 500, releasedError.message);
+    if (gradesError) return fail(res, 500, gradesError.message);
+    if (assignmentError) return fail(res, 500, assignmentError.message);
+    if (overrideError) return fail(res, 500, overrideError.message);
+    if (studentsError) return fail(res, 500, studentsError.message);
 
     const staff = (staffProfiles ?? []).filter((p) => {
       try {
@@ -529,6 +543,51 @@ app.get(
       authorizedCount.set(row.released_by, (authorizedCount.get(row.released_by) || 0) + 1);
     }
 
+    // "Esperados": alumnos del grado+sección asignado hoy a cada staff (slot1
+    // o slot2, excepción del día sobre horario recurrente — mismo criterio
+    // que resolveMyGradeSectionsToday en dismissalSchedule.ts), descontando
+    // Salida Autónoma (nunca pasa por notificación al maestro, va por
+    // self_dismissal_events aparte). Bus y Pool Day SÍ cuentan como
+    // esperados — también generan notificación vía
+    // /api/pickup/notify-staff, solo se resuelven más rápido.
+    const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+    const pickExact = <T extends {section: string | null}>(rows: T[], sectionValue: string): T | undefined =>
+      rows.find((r) => norm(r.section) === sectionValue) || rows.find((r) => norm(r.section) === '');
+
+    const expectedCount = new Map<string, number>();
+    for (const grade of grades ?? []) {
+      const sections: string[] = grade.sections && grade.sections.length > 0 ? grade.sections : [''];
+      for (const section of sections) {
+        const sectionValue = norm(section);
+
+        const gradeAssignments = (assignmentRows ?? []).filter((r) => r.grade_id === grade.id);
+        const assignment = gradeAssignments.length > 0 ? pickExact(gradeAssignments, sectionValue) : undefined;
+        let slot1: string | null = assignment?.staff_id ?? null;
+        let slot2: string | null = assignment?.staff_id_2 ?? null;
+
+        const gradeOverrides = (overrideRows ?? []).filter((r) => r.grade_id === grade.id);
+        if (gradeOverrides.length > 0) {
+          const slot1Overrides = gradeOverrides.filter((o) => o.slot === 1);
+          const slot2Overrides = gradeOverrides.filter((o) => o.slot === 2);
+          const slot1Pick = slot1Overrides.length > 0 ? pickExact(slot1Overrides, sectionValue) : undefined;
+          const slot2Pick = slot2Overrides.length > 0 ? pickExact(slot2Overrides, sectionValue) : undefined;
+          if (slot1Pick) slot1 = slot1Pick.staff_id;
+          if (slot2Pick) slot2 = slot2Pick.staff_id;
+        }
+
+        const staffIds = [...new Set([slot1, slot2].filter((id): id is string => !!id))];
+        if (staffIds.length === 0) continue;
+
+        const studentCount = (students ?? []).filter(
+          (s) => norm(s.grade) === norm(grade.name) && norm(s.section) === sectionValue && !s.self_dismissal_allowed,
+        ).length;
+
+        for (const staffId of staffIds) {
+          expectedCount.set(staffId, (expectedCount.get(staffId) || 0) + studentCount);
+        }
+      }
+    }
+
     const result = staff
       .map((p) => {
         const lastSignIn = lastSignIns.get(p.id);
@@ -538,6 +597,7 @@ app.get(
           logged_in_today: !!lastSignIn && lastSignIn >= todayLocalStart,
           requests_received_today: requestsCount.get(p.id) || 0,
           authorized_today: authorizedCount.get(p.id) || 0,
+          expected_today: expectedCount.get(p.id) || 0,
         };
       })
       .sort((a, b) => b.requests_received_today - a.requests_received_today || a.name.localeCompare(b.name));
