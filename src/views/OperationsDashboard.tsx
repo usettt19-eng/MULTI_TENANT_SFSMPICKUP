@@ -102,6 +102,12 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
   // desaparecer de la vista aunque siguiera activo. Acá se listan TODOS los
   // configurados ahora mismo, sin límite de fecha de creación.
   const [configuredCarpools, setConfiguredCarpools] = useState<any[]>([]);
+  // A raíz de la investigación de "Mi Salón" vacío de Ingrid Carrasco
+  // (2026-10-07): para cada maestro/admin, si inició sesión hoy, cuántos
+  // avisos de llegada le llegaron a su Mi Salón hoy, y cuántos retiros
+  // autorizó él mismo — para ver de un vistazo quién está activo durante
+  // la salida y a quién nunca le está tocando autorizar a nadie.
+  const [staffActivity, setStaffActivity] = useState<{ id: string; name: string; logged_in_today: boolean; requests_received_today: number; authorized_today: number }[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAudioState((enabled) => {
@@ -129,6 +135,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     fetchSelfDismissalsToday();
     fetchSelfDismissalAuthorizedRoster();
     fetchConfiguredCarpools();
+    fetchStaffActivity();
 
     // pickup_events, self_dismissal_events, replacement_requests,
     // camera_detections, audit_logs, health_alerts, carpool_authorizations y
@@ -154,8 +161,13 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     }, 10000);
 
     // Aparte del poll de 10s de arriba — ver comentario en
-    // fetchParentsLoggedToday sobre por qué va separado.
-    const loggedTodayInterval = window.setInterval(fetchParentsLoggedToday, 120000);
+    // fetchParentsLoggedToday sobre por qué va separado. Misma razón para
+    // fetchStaffActivity: también llama a auth.admin.listUsers() por
+    // debajo (vía el endpoint), no conviene pegarle cada 10s.
+    const loggedTodayInterval = window.setInterval(() => {
+      fetchParentsLoggedToday();
+      fetchStaffActivity();
+    }, 120000);
 
     return () => {
       clearInterval(pollInterval);
@@ -351,6 +363,16 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     }
 
     setSelfDismissalAuthorized(data || []);
+  };
+
+  const fetchStaffActivity = async () => {
+    if (!profile?.tenant_id) return;
+    try {
+      const res = await apiJson(`/api/tenants/${profile.tenant_id}/staff-dismissal-activity`);
+      setStaffActivity(res?.data?.staff || []);
+    } catch (e) {
+      console.error('Error cargando actividad de hoy del staff:', e);
+    }
   };
 
   const fetchConfiguredCarpools = async () => {
@@ -1064,6 +1086,31 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
               <p className="text-xl font-black text-emerald-700">{stats.parentsActiveToday}</p>
             </div>
           </section>
+
+          {/* Staff Dismissal Activity */}
+          {staffActivity.length > 0 && (
+            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">{t('dashboard.staffActivityTitle')}</h3>
+              <div className="space-y-3">
+                {staffActivity.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-3 p-3 bg-[#f8fafc] rounded-lg border border-slate-100">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${s.logged_in_today ? 'bg-emerald-500' : 'bg-slate-300'}`} title={s.logged_in_today ? t('dashboard.staffActivityLoggedIn') : t('dashboard.staffActivityNotLoggedIn')} />
+                      <span className="text-[11px] font-black text-slate-700 truncate">{s.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-[9px] font-black">
+                        {s.requests_received_today} {t('dashboard.staffActivityRequests')}
+                      </span>
+                      <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md text-[9px] font-black">
+                        {s.authorized_today} {t('dashboard.staffActivityAuthorized')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Verification Activity */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[300px]">

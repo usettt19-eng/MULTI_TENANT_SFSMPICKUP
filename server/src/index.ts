@@ -474,6 +474,79 @@ app.get(
 );
 
 /**
+ * Para el widget de "Actividad de hoy del staff" del Dashboard — a raíz de
+ * la investigación de "Mi Salón" vacío de Ingrid Carrasco (TCS Albrook,
+ * 2026-10-07): por cada miembro del staff, si inició sesión hoy, cuántos
+ * avisos de llegada le llegaron a su Mi Salón hoy (notifications con
+ * pickup_event_id), y cuántos retiros autorizó él mismo hoy
+ * (pickup_events.released_by, agregado ese mismo día). El de login usa
+ * auth.users.last_sign_in_at con la misma limitación ya documentada en
+ * staffActiveToday más arriba: no se actualiza por seguir usando una
+ * sesión ya abierta, solo por un login nuevo — puede subestimar a quien
+ * entró ayer y dejó la pestaña abierta toda la noche.
+ */
+app.get(
+  '/api/tenants/:tenantId/staff-dismissal-activity',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {tenantId} = req.params;
+    if (!isStaffOf(req.caller, tenantId)) return fail(res, 403, 'No tienes permisos en ese colegio.');
+
+    const todayLocalStart = startOfTodayInPanamaUTC().toISOString();
+
+    const [
+      {data: staffProfiles, error: staffError},
+      lastSignIns,
+      {data: notifRows, error: notifError},
+      {data: releasedRows, error: releasedError},
+    ] = await Promise.all([
+      admin.from('profiles').select('id, first_name, last_name, additional_tutor_name').eq('tenant_id', tenantId).eq('role', 'admin'),
+      fetchAllAuthUsersLastSignIn(),
+      admin.from('notifications').select('user_id').eq('tenant_id', tenantId).not('pickup_event_id', 'is', null).gte('created_at', todayLocalStart),
+      admin.from('pickup_events').select('released_by').eq('tenant_id', tenantId).not('released_by', 'is', null).gte('announced_at', todayLocalStart),
+    ]);
+    if (staffError) return fail(res, 500, staffError.message);
+    if (notifError) return fail(res, 500, notifError.message);
+    if (releasedError) return fail(res, 500, releasedError.message);
+
+    const staff = (staffProfiles ?? []).filter((p) => {
+      try {
+        return JSON.parse(p.additional_tutor_name || '{}')?.is_staff === true;
+      } catch {
+        return false;
+      }
+    });
+
+    const requestsCount = new Map<string, number>();
+    for (const row of notifRows ?? []) {
+      if (!row.user_id) continue;
+      requestsCount.set(row.user_id, (requestsCount.get(row.user_id) || 0) + 1);
+    }
+
+    const authorizedCount = new Map<string, number>();
+    for (const row of releasedRows ?? []) {
+      if (!row.released_by) continue;
+      authorizedCount.set(row.released_by, (authorizedCount.get(row.released_by) || 0) + 1);
+    }
+
+    const result = staff
+      .map((p) => {
+        const lastSignIn = lastSignIns.get(p.id);
+        return {
+          id: p.id,
+          name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          logged_in_today: !!lastSignIn && lastSignIn >= todayLocalStart,
+          requests_received_today: requestsCount.get(p.id) || 0,
+          authorized_today: authorizedCount.get(p.id) || 0,
+        };
+      })
+      .sort((a, b) => b.requests_received_today - a.requests_received_today || a.name.localeCompare(b.name));
+
+    return ok(res, {staff: result});
+  }),
+);
+
+/**
  * Padres del colegio que nunca se han logueado, para el Reporte del Día —
  * mismo cálculo de "nunca logueado" que /api/parents/resend-invites, pero
  * excluyendo cuatro grupos de menor prioridad: (a) padres cuyo alumno ya
