@@ -25,6 +25,11 @@ export function TransitMonitor() {
   const [pickups, setPickups] = useState<any[]>([]);
   const [doors, setDoors] = useState<any[]>([]);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  // Para el "X de Y" de cada grupo de bus: Y no puede salir solo de
+  // `pickups` (son solo los que siguen en 'released' — uno ya confirmado
+  // desaparece de ahí), así que se trae aparte el total y los ya
+  // completados HOY para cada parent_id que tenga 2+ en tránsito ahora.
+  const [busGroupDayStats, setBusGroupDayStats] = useState<Record<string, { total: number; completed: number }>>({});
   // Compartida con Monitor Externo y con el widget de "carritos" (Padres en
   // el Perímetro): la puerta elegida en cualquiera de las tres se adopta
   // automáticamente en las otras.
@@ -118,6 +123,32 @@ export function TransitMonitor() {
     if (data) {
       setPickups(data);
 
+      // Grupos de bus actuales (2+ en tránsito con el mismo parent_id) —
+      // para cada uno, cuántos en total se anunciaron hoy y cuántos ya se
+      // confirmaron, sin importar si siguen en pantalla o no.
+      const parentCounts = new Map<string, number>();
+      data.forEach(p => parentCounts.set(p.parent_id, (parentCounts.get(p.parent_id) || 0) + 1));
+      const busParentIds = Array.from(parentCounts.entries()).filter(([, c]) => c > 1).map(([id]) => id);
+      if (busParentIds.length > 0) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const { data: dayRows } = await supabase
+          .from('pickup_events')
+          .select('parent_id, status')
+          .eq('tenant_id', profile.tenant_id)
+          .in('parent_id', busParentIds)
+          .gte('announced_at', todayStart.toISOString());
+        const stats: Record<string, { total: number; completed: number }> = {};
+        (dayRows || []).forEach(row => {
+          if (!stats[row.parent_id]) stats[row.parent_id] = { total: 0, completed: 0 };
+          stats[row.parent_id].total++;
+          if (row.status === 'completed') stats[row.parent_id].completed++;
+        });
+        setBusGroupDayStats(stats);
+      } else {
+        setBusGroupDayStats({});
+      }
+
       if (isFirstFetch.current) {
         data.forEach(p => announcedTransitIds.current.add(p.id));
         isFirstFetch.current = false;
@@ -159,26 +190,49 @@ export function TransitMonitor() {
   // confirma (sin señal, sin batería, etc.). Se filtra por el id del
   // pickup, no por parent_id, así que no interfiere con
   // handleFinalConfirm en ParentDashboard.tsx.
-  const handleStaffComplete = async (pickup: any) => {
-    setCompletingId(pickup.id);
+  // Extraído de handleStaffComplete para poder reusarlo tanto para una
+  // tarjeta suelta como para confirmar un grupo de bus completo de una.
+  const completePickup = async (pickup: any) => {
     const { error } = await supabase
       .from('pickup_events')
       .update({ status: 'completed', completed_at: new Date() })
       .eq('id', pickup.id)
       .eq('status', 'released');
+    if (error) throw error;
 
-    if (error) {
-      alert(t('transit.staffCompleteError'));
-    } else {
-      const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
-      await logActivity(
-        'PICKUP',
-        `CICLO COMPLETADO (personal): ${profile?.first_name || 'Personal'} confirmó la entrega de ${fullName} directamente desde En Tránsito, sin esperar la confirmación del padre.`,
-        profile?.first_name || 'Personal',
-        { student_id: pickup.student_id, pickup_event_id: pickup.id, staff_confirmed: true },
-        profile?.tenant_id
-      );
+    const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
+    await logActivity(
+      'PICKUP',
+      `CICLO COMPLETADO (personal): ${profile?.first_name || 'Personal'} confirmó la entrega de ${fullName} directamente desde En Tránsito, sin esperar la confirmación del padre.`,
+      profile?.first_name || 'Personal',
+      { student_id: pickup.student_id, pickup_event_id: pickup.id, staff_confirmed: true },
+      profile?.tenant_id
+    );
+  };
+
+  const handleStaffComplete = async (pickup: any) => {
+    setCompletingId(pickup.id);
+    try {
+      await completePickup(pickup);
       setPickups(prev => prev.filter(p => p.id !== pickup.id));
+    } catch {
+      alert(t('transit.staffCompleteError'));
+    }
+    setCompletingId(null);
+  };
+
+  // Confirma a todo un grupo (típicamente un bus) de una sola vez.
+  const handleStaffCompleteGroup = async (groupPickups: any[]) => {
+    const groupId = `group:${groupPickups[0]?.parent_id}`;
+    setCompletingId(groupId);
+    const results = await Promise.allSettled(groupPickups.map(completePickup));
+    const completedIds = new Set(
+      groupPickups.filter((_, i) => results[i].status === 'fulfilled').map(p => p.id),
+    );
+    setPickups(prev => prev.filter(p => !completedIds.has(p.id)));
+    const failedCount = results.filter(r => r.status === 'rejected').length;
+    if (failedCount > 0) {
+      alert(`${failedCount} de ${groupPickups.length} no se pudieron confirmar. Intenta de nuevo con los que falten.`);
     }
     setCompletingId(null);
   };
@@ -280,7 +334,20 @@ export function TransitMonitor() {
             <p className="text-slate-400 font-medium mt-2">{t('transit.emptySubtitle')}</p>
           </div>
         ) : (
-          groups.map(group => (
+          groups.map(group => {
+            // Mismo criterio que Mi Salón: 2+ en tránsito con el mismo
+            // parent_id (típicamente un bus) se agrupan en una sola
+            // tarjeta con botón de confirmar a todos de una.
+            const byParent = new Map<string, any[]>();
+            group.items.forEach(p => {
+              const key = p.parent_id;
+              if (!byParent.has(key)) byParent.set(key, []);
+              byParent.get(key)!.push(p);
+            });
+            const busSubGroups = Array.from(byParent.entries()).filter(([, items]) => items.length > 1);
+            const individualItems = group.items.filter(p => (byParent.get(p.parent_id)?.length || 0) <= 1);
+
+            return (
             <section key={group.doorId} className="space-y-3">
               {!selectedDoorId && (
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
@@ -288,8 +355,63 @@ export function TransitMonitor() {
                   <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full">{group.items.length}</span>
                 </h3>
               )}
+
+              {busSubGroups.map(([parentId, busItems]) => {
+                const busName = `${busItems[0]?.profiles?.first_name || ''} ${busItems[0]?.profiles?.last_name || ''}`.trim() || 'Bus';
+                const dayStats = busGroupDayStats[parentId];
+                const isCompletingGroup = completingId === `group:${parentId}`;
+                return (
+                  <div key={parentId} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
+                    <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-800">{busName}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {busItems.length} {t('transit.inTransitLabel')}
+                          {dayStats && ` · ${dayStats.completed}/${dayStats.total} ${t('transit.confirmedTodayLabel')}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleStaffCompleteGroup(busItems)}
+                        disabled={isCompletingGroup}
+                        className="px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isCompletingGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        {t('transit.confirmAllBtn')} ({busItems.length})
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {busItems.map((pickup: any) => (
+                        <div key={pickup.id} className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-slate-200">
+                              <img
+                                src={pickup.students?.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=100"}
+                                alt="Alumno"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-slate-800 truncate">{pickup.students?.first_name} {pickup.students?.last_name}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{pickup.students?.grade} · {pickup.students?.section || '—'}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleStaffComplete(pickup)}
+                            disabled={completingId === pickup.id || isCompletingGroup}
+                            title={t('transit.staffCompleteBtn')}
+                            className="shrink-0 w-8 h-8 rounded-xl bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all active:scale-90 disabled:opacity-50 flex items-center justify-center"
+                          >
+                            {completingId === pickup.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {group.items.map((pickup: any) => {
+                {individualItems.map((pickup: any) => {
                   const doorIndex = group.items.findIndex(p => p.id === pickup.id);
                   const priority = priorityClass(doorIndex);
                   const replacementName = getReplacementNameFromNotes(pickup.notes);
@@ -370,7 +492,8 @@ export function TransitMonitor() {
                 })}
               </div>
             </section>
-          ))
+            );
+          })
         )}
       </div>
     </div>

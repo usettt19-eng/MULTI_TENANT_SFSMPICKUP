@@ -43,6 +43,9 @@ export const translations = {
     'transit.audioActivationDesc': 'This screen announces by voice, in Spanish and English, when a student is approved and heading to the exit — for the final hand-off staff.',
     'transit.staffCompleteBtn': 'Confirm hand-off and remove from transit (if the parent can\'t confirm in their app)',
     'transit.staffCompleteError': 'Could not confirm the hand-off. Please try again.',
+    'transit.inTransitLabel': 'in transit',
+    'transit.confirmedTodayLabel': 'confirmed today',
+    'transit.confirmAllBtn': 'Confirm All',
     'nav.staff': 'Staff Management',
     'nav.statistics': 'Statistics',
 
@@ -1265,6 +1268,9 @@ export const translations = {
     'transit.audioActivationDesc': 'Esta pantalla avisa por voz, en español e inglés, cuando un alumno queda aprobado y viene hacia la salida — para el personal de entrega final.',
     'transit.staffCompleteBtn': 'Confirmar entrega y sacar de tránsito (si el padre no puede confirmar en su app)',
     'transit.staffCompleteError': 'No se pudo confirmar la entrega. Intenta de nuevo.',
+    'transit.inTransitLabel': 'en tránsito',
+    'transit.confirmedTodayLabel': 'confirmados hoy',
+    'transit.confirmAllBtn': 'Confirmar a Todos',
     'nav.staff': 'Gestión de Staff',
     'nav.statistics': 'Estadísticas',
 
