@@ -867,8 +867,17 @@ export function ParentDashboard() {
       } else {
         alert(t('parent.replacement.shareFallbackAlert'));
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Error al compartir el reemplazo:', err);
+      // AbortError = el usuario cerró la hoja de compartir sin elegir nada
+      // (navigator.share y el plugin de Capacitor lo reportan igual) — no es
+      // un error, no hay que avisar nada. Cualquier otra cosa (el plugin no
+      // está disponible, falla el intent nativo, etc.) antes quedaba
+      // totalmente silenciosa — el botón "no hacía nada" sin dejar rastro
+      // para quien lo reportaba. Ahora al menos se avisa que falló.
+      if (err?.name !== 'AbortError') {
+        alert(t('parent.replacement.shareErrorAlert'));
+      }
     }
   };
 
