@@ -1,5 +1,6 @@
 import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
@@ -1191,12 +1192,23 @@ export function GuardiansRegistry() {
                   
                   <div className="space-y-3 mb-4">
                     {replacements.map((rep, idx) => (
-                      <div key={idx} className="bg-white p-3 rounded-2xl border border-emerald-100 flex justify-between items-center">
-                        <div>
+                      <div key={idx} className="bg-white p-3 rounded-2xl border border-emerald-100 flex justify-between items-center gap-3">
+                        <div className="bg-slate-50 p-2 rounded-xl shrink-0">
+                          <QRCodeSVG
+                            value={JSON.stringify({
+                              type: 'replacement_pickup',
+                              parent_id: editingGuardianId,
+                              token: rep.token,
+                              replacement_name: rep.name,
+                            })}
+                            size={48}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <p className="text-xs font-black text-slate-800">{rep.name}</p>
                           <p className="text-[10px] text-slate-400 font-bold">{rep.phone}</p>
                         </div>
-                        <button 
+                        <button
                           type="button"
                           onClick={() => setReplacements(prev => prev.filter((_, i) => i !== idx))}
                           className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
