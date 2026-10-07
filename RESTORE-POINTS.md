@@ -24,6 +24,55 @@ docker compose up -d
 
 ---
 
+## 2026-10-07 — `39732fdfabe48c15b43081b99b48295b0c155e97`
+
+**Fotos de Students.tsx sin comprimir, roster de Salida Autónoma en cada poll, Mi Salón sin sonido, zoom de Android, y QR de reemplazo visible/ampliable para el colegio**
+
+Desplegado y verificado contra el respaldo local (`backup.safesmartpickup.com`).
+Tomado justo antes de agregar la columna `released_by` a `pickup_events`
+(para el próximo widget de "staff logueado/solicitudes/autorizadas" del
+Dashboard) — por si esa migración necesita revertirse. Incluye todo lo del
+punto anterior (2026-10-01) más:
+
+- **Fix**: `RequestsCenter.tsx` — las solicitudes `pending` de más de 2
+  semanas quedaban ocultas por la ventana de fecha del Inbox, aunque la
+  insignia del Dashboard las siguiera contando. Ahora el recorte de fecha
+  solo aplica a las ya resueltas.
+- **Investigación + fix**: el Inbox se sentía lento pese a que las fotos
+  de reemplazo ya se comprimían. Causa real: `Students.tsx` era el único
+  formulario de foto que subía sin comprimir al bucket `avatars` de
+  Storage (en vez de base64 inline como el resto de la app), y el roster
+  completo de Salida Autónoma de `OperationsDashboard.tsx` se
+  re-pedía/re-renderizaba en cada poll de 10s. `Students.tsx` ahora usa
+  `photoCompression.ts` igual que el resto; el roster se trae una sola
+  vez al montar, con `loading="lazy"`. Fotos ya subidas antes de este fix
+  no se migraron.
+- **Investigación**: Ingrid Carrasco (TCS Albrook, grado 10/sección YEAR
+  10) no veía a nadie en "Mi Salón". Su asignación y notificaciones están
+  correctas — la causa real es que recepción/el timeout de 20
+  min/la autorización automática de cierre resuelven los pickups antes de
+  que ella llegue a verlos en pantalla. Confirmado el mismo patrón para
+  otro grupo de staff (Maria Ducreux, Mayvis Rodriguez, Carolina Fajardo,
+  Mary Jane Thorwaldson) vía el Reporte del Día.
+- **Feature**: aviso de voz agregado a "Mi Salón" (único panel de este
+  tipo sin audio) — mismo patrón de `OperationsDashboard.tsx`, mitiga la
+  investigación de arriba.
+- **Fix**: `MainActivity.java` (Android) fija `setTextZoom(100)` — la app
+  heredaba el escalado de accesibilidad del sistema y empujaba íconos
+  fuera de pantalla. **Pendiente de desplegar**: requiere build nativa
+  nueva vía `android-deploy.yml` (no se aplica con el deploy normal del
+  sitio), todavía sin disparar.
+- **Fix**: `handleShareQR` (`ParentDashboard.tsx`) ya no traga errores en
+  silencio — solo `AbortError` (cancelación) queda sin aviso; cualquier
+  otro error real ahora le muestra una alerta al padre. A raíz de un
+  reporte de un padre de TCS Albrook a quien "Enviar" no le hacía nada.
+- **Feature**: el colegio ahora puede ver (y ampliar/copiar/descargar/
+  imprimir) el QR de cada reemplazo autorizado desde `GuardiansRegistry.tsx`
+  — antes solo se veía nombre/teléfono en texto; el padre era el único que
+  podía ver/compartir el QR real.
+
+---
+
 ## 2026-10-01 — `3b1d210b6dd685d8a3d6c1970d0a1f47fd1e2fd4`
 
 **Fotos sin comprimir en solicitudes de reemplazo + `additional_tutor_name` descontrolado + índices de `pickup_events`/`notifications`**
