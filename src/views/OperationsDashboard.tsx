@@ -1087,12 +1087,14 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
             </div>
           </section>
 
-          {/* Staff Dismissal Activity */}
-          {staffActivity.length > 0 && (
+          {/* Staff Dismissal Activity — solo a quien le llegó al menos una
+              solicitud hoy, para no llenar la lista con todo el staff que
+              ni siquiera tuvo oportunidad de autorizar a nadie. */}
+          {staffActivity.filter((s) => s.requests_received_today > 0).length > 0 && (
             <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <h3 className="text-[12px] font-black text-[#1e293b] uppercase tracking-wider mb-5">{t('dashboard.staffActivityTitle')}</h3>
               <div className="space-y-3">
-                {staffActivity.map((s) => (
+                {staffActivity.filter((s) => s.requests_received_today > 0).map((s) => (
                   <div key={s.id} className="flex items-center justify-between gap-3 p-3 bg-[#f8fafc] rounded-lg border border-slate-100">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${s.logged_in_today ? 'bg-emerald-500' : 'bg-slate-300'}`} title={s.logged_in_today ? t('dashboard.staffActivityLoggedIn') : t('dashboard.staffActivityNotLoggedIn')} />
