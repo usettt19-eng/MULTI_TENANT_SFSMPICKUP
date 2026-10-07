@@ -3274,6 +3274,124 @@ mano (nube + respaldo local): se comprimió cualquier foto embebida todavía
 pesada (>100KB) y se aplicó la misma poda — el peor caso bajó de 19.5MB a
 69KB.
 
+### Fix: solicitudes pendientes ocultas por la ventana de 2 semanas del Inbox (2026-10-06)
+
+La ventana de 14 días agregada el 2026-10-01 para limitar el peso del
+Inbox (`RECENT_WINDOW_DAYS`, ver "Fix: el mismo problema de fotos sin
+comprimir... "/commits `cb0f65d`/`2ea0d3f`) se aplicaba sobre **todas**
+las solicitudes, incluidas las que seguían `pending` — así que una
+solicitud pendiente de más de 2 semanas desaparecía del Inbox aunque la
+insignia del Dashboard (que cuenta pendientes sin límite de fecha) siguiera
+mostrándola. **Fix**: `fetchRequests()` en `RequestsCenter.tsx` ahora solo
+aplica el recorte de fecha a las ya resueltas (`approved`/`rejected`); las
+`pending` siempre se traen, sin importar su antigüedad.
+
+### Investigación: el Inbox seguía "lento" pese a que las fotos de reemplazo ya se comprimían — el peso real eran los avatares de alumnos (2026-10-06)
+
+Reporte: "se están compactando las imágenes al crear el reemplazo, pero
+el Inbox sigue tardando en cargar, como si tuviera que bajar algo muy
+grande". Se descartó uno por uno: volumen de pendientes (solo 3, sin
+foto), volumen de carpools, y latencia pura de las queries de PostgREST
+(70-90ms desde el propio servidor). El Network tab del navegador (con
+caché deshabilitada) mostró la causa real: **277-361 requests, hasta
+~194MB transferidos**, la mayoría imágenes `.jpeg` con nombre de alumno
+(`MARTIN-CARO.jpeg`, `LEO-HENRY-MAU.jpeg`...) servidas desde
+`fvzhfzogigewsvcyopel.supabase.co/storage/v1/object/public/avatars/...`
+— la nube, no el stack de respaldo (el Storage nunca se migró al
+self-host, solo la API/DB).
+
+Causa raíz: `Students.tsx` era el único formulario de foto de toda la app
+que **no** pasaba por `src/lib/photoCompression.ts` — subía el archivo o
+el frame de cámara crudo (sin resize, sin compresión real en el caso de
+"Subir archivo") directo al bucket `avatars` de Storage, a diferencia de
+Padres/Staff/Guardianes, que comprimen a ~480px/calidad 0.72 y guardan
+base64 inline. Encima, el roster completo de "Salida Autónoma" de
+`OperationsDashboard.tsx` (`fetchSelfDismissalsToday`, con el `photo_url`
+de cada alumno habilitado, sin límite) se volvía a pedir y renderizar en
+**cada ciclo del polling de 10s** del dashboard — que queda montado de
+fondo mientras se mira el Inbox, aunque son pantallas distintas.
+
+**Fix**: `Students.tsx` ahora usa `compressImageFile`/
+`captureVideoFrameCompressed` de `photoCompression.ts` igual que el resto
+de la app (ya no sube nada a Storage, guarda base64 comprimido inline).
+`OperationsDashboard.tsx` separa `fetchSelfDismissalsToday` en dos: el
+roster de alumnos habilitados (`fetchSelfDismissalAuthorizedRoster`) se
+trae una sola vez al montar, no en cada poll; solo los eventos del día
+siguen refrescándose cada 10s. Se agregó `loading="lazy"` a los avatares
+del roster. Las fotos de alumnos que ya estaban subidas a Storage antes de
+este fix **no se migraron** — siguen pesadas hasta que alguien vuelva a
+guardar/editar a ese alumno.
+
+### Investigación: Ingrid Carrasco (TCS Albrook, Year 10) no veía a nadie en "Mi Salón" (2026-10-07)
+
+Se verificó toda la cadena y estaba correcta: perfil de Ingrid con
+`tenant_id` de TCS Albrook, grado `10`/sección `YEAR 10` configurados en
+Ajustes con ella como slot1 lunes a viernes (`dismissal_assignments`), y
+`/api/pickup/notify-staff` efectivamente le insertaba notificaciones
+válidas (con `pickup_event_id`) cada vez que llegaba un padre de su
+sección — confirmado con 161 avisos históricos, el último el día previo.
+
+La causa real no es de configuración sino operativa: los 4 pickups de
+Year 10 revisados del 2026-10-06 terminaron todos en `status = completed`
+**sin que Ingrid los liberara** — el log de auditoría muestra que
+"Beatriz" (recepción/seguridad) los completó directo desde la pantalla
+"En Tránsito" minutos después de anunciados, o el timeout automático de
+20 minutos los cerró solo, o quedaron en el lote de "AUTORIZACIÓN
+AUTOMÁTICA POR HORARIO" de las 9:30pm que libera a todos los pendientes
+del día **"sin pasar por un maestro"** (72 alumnos ese día). "Mi Salón"
+solo muestra pickups en `announced`/`in_queue`, así que una vez
+completados por cualquiera de esas tres vías, desaparecen de su pantalla
+— aunque el aviso sí le había llegado. Confirmado también que los buses
+notifican por el mismo camino (`/api/pickup/notify-staff`, misma pantalla
+de "Anunciar Llegada" que usan los padres), pero se auto-completan casi
+al instante al detectar que el bus salió del perímetro.
+
+**Pendiente de decisión del colegio** (no es un bug de código): si
+recepción debe seguir liberando directo para secciones con maestro
+asignado, o si se le debe dar prioridad al maestro antes de que recepción
+pueda hacerlo. Ver también la entrada de abajo (aviso de voz), que ataca
+la causa más alcanzable sin cambiar el proceso del colegio.
+
+### Aviso de voz agregado a "Mi Salón" (2026-10-07)
+
+A raíz de la investigación de arriba: "Mi Salón" (`MyClassroom.tsx`) era
+la única pantalla de este tipo en toda la app sin ningún aviso sonoro —
+Dashboard, Monitor Externo, Tránsito y las pantallas de verificación sí
+anuncian por voz vía `src/lib/audioManager.ts`. En la práctica, el único
+modo de que un maestro se enterara de que llegó un padre de su sección
+era tener la pantalla abierta y mirarla justo en ese momento — y
+recepción (o el timeout de 20 min) casi siempre llegaba primero.
+
+**Fix**: mismo patrón que `OperationsDashboard.tsx` — un `Set` en un ref
+(`announcedPickupIds`) para no repetir avisos, la primera carga solo
+siembra el set sin anunciar, cada poll de 10s posterior anuncia por voz
+bilingüe los pickups nuevos en `announced`, más el banner de "Activar
+Altavoces" (los navegadores exigen un clic real del usuario para
+desbloquear audio).
+
+### Fix: la app de Android se veía agrandada, con íconos cortados fuera de pantalla (2026-10-07)
+
+Reporte con capturas: la misma pantalla (`ParentDashboard.tsx`) se veía
+mucho más grande en la app nativa de Android que en el navegador móvil,
+al punto de empujar la campanita de notificaciones y el botón de salir
+fuera del borde derecho. Causa: `MainActivity.java` no tenía ninguna
+configuración del `WebView` — por defecto hereda el escalado de
+accesibilidad (tamaño de fuente/pantalla) del sistema Android vía
+`textZoom`, algo que Chrome no aplica de la misma forma al mismo sitio
+(la app nativa carga el sitio en vivo, no un bundle, igual que el fix de
+zoom de iOS del 2026-09-02 — pero esa vez el síntoma era otro y no
+afectaba a Android).
+
+**Fix**: `MainActivity.onCreate()` ahora fija
+`getBridge().getWebView().getSettings().setTextZoom(100)`, ignorando el
+tamaño de fuente del sistema. A diferencia de los demás fixes de este
+documento, este **no** se aplica solo con el deploy del sitio — es código
+nativo, necesita una build nueva vía `android-deploy.yml` (workflow
+manual, consume un número de build de Play Store por corrida). Disparo
+pendiente de decisión: ¿contra la rama de trabajo actual
+(`claude/tenant-isolation-rls`, +20 commits sobre `main`) o mergear a
+`main` primero? Sin decidir todavía.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -3728,3 +3846,12 @@ relevantes de cara a producción:
   frente al manual en español~~ **Resuelto 2026-09-28**: se tradujeron y
   agregaron "Autonomous Exit at Check-In" e "Your screen's language" —
   ver §3.
+- **Disparar `android-deploy.yml`** para publicar el fix de zoom de texto
+  (`MainActivity.java`, ver §3 2026-10-07) — pendiente de decidir si corre
+  contra `claude/tenant-isolation-rls` directo o si primero se mergea esa
+  rama a `main` (le faltan +20 commits).
+- **Decisión operativa de TCS Albrook**: ¿recepción debe seguir liberando
+  pickups directo desde "En Tránsito" para secciones con maestro asignado,
+  o darle prioridad al maestro primero? (ver "Investigación: Ingrid
+  Carrasco..." en §3, 2026-10-07) — se agregó aviso de voz a "Mi Salón"
+  como mitigación, pero la decisión de proceso sigue sin tomarse.
