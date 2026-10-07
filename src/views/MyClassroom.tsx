@@ -421,6 +421,12 @@ export function MyClassroom() {
               <div className="space-y-4 mb-6">
                 {Array.from(busGroups.entries()).map(([parentId, group]) => {
                   const busName = `${group[0]?.profiles?.first_name || ''} ${group[0]?.profiles?.last_name || ''}`.trim() || 'Bus';
+                  let isRealBus = false;
+                  try {
+                    isRealBus = JSON.parse(group[0]?.profiles?.additional_tutor_name || '{}')?.is_bus_route === true;
+                  } catch {
+                    isRealBus = false;
+                  }
                   const isAuthorizingGroup = authorizingId === `group:${parentId}`;
                   return (
                     <div key={parentId} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
@@ -430,7 +436,12 @@ export function MyClassroom() {
                             <Bus className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="text-sm font-black text-slate-800">{busName}</h3>
+                            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                              {busName}
+                              {isRealBus && (
+                                <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-md text-[8px] font-black border border-amber-100">BUS</span>
+                              )}
+                            </h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group.length} {group.length === 1 ? t('myClassroom.busStudentSingular') : t('myClassroom.busStudentPlural')}</p>
                           </div>
                         </div>

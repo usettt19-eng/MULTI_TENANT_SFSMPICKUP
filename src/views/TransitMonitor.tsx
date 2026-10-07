@@ -358,13 +358,24 @@ export function TransitMonitor() {
 
               {busSubGroups.map(([parentId, busItems]) => {
                 const busName = `${busItems[0]?.profiles?.first_name || ''} ${busItems[0]?.profiles?.last_name || ''}`.trim() || 'Bus';
+                let isRealBus = false;
+                try {
+                  isRealBus = JSON.parse(busItems[0]?.profiles?.additional_tutor_name || '{}')?.is_bus_route === true;
+                } catch {
+                  isRealBus = false;
+                }
                 const dayStats = busGroupDayStats[parentId];
                 const isCompletingGroup = completingId === `group:${parentId}`;
                 return (
                   <div key={parentId} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                       <div>
-                        <h4 className="text-sm font-black text-slate-800">{busName}</h4>
+                        <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                          {busName}
+                          {isRealBus && (
+                            <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-md text-[8px] font-black border border-amber-100">BUS</span>
+                          )}
+                        </h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                           {busItems.length} {t('transit.inTransitLabel')}
                           {dayStats && ` · ${dayStats.completed}/${dayStats.total} ${t('transit.confirmedTodayLabel')}`}

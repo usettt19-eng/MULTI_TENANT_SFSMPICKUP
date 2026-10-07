@@ -1118,6 +1118,29 @@ app.delete(
  * admin.auth.admin.createUser(), que NO manda correo (a diferencia de
  * inviteUserByEmail) pero sí deja una fila real en auth.users.
  */
+/**
+ * Para cuando el encargado del bus inicia sesión directo como el perfil de
+ * la ruta (ver /api/bus-routes/:id/credentials) y anuncia desde
+ * ParentDashboard.tsx como cualquier padre: la puerta ya está fija en la
+ * configuración de la ruta (bus_routes.door_id, Rutas de Bus), así que no
+ * debería tener que elegirla de nuevo cada vez como un padre real —
+ * ParentDashboard no puede leer bus_routes directo (RLS de esa tabla es
+ * solo para staff), de ahí este endpoint de solo lectura de su propia
+ * ruta.
+ */
+app.get(
+  '/api/bus-routes/my-door',
+  requireAuth,
+  wrap(async (req, res) => {
+    const {data: route} = await admin
+      .from('bus_routes')
+      .select('door_id')
+      .eq('profile_id', req.caller!.id)
+      .maybeSingle();
+    return ok(res, {door_id: route?.door_id ?? null});
+  }),
+);
+
 app.post(
   '/api/bus-routes',
   requireAuth,

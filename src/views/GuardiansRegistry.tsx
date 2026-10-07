@@ -11,7 +11,7 @@ import {
   Shield, Trash2, Edit2, CheckCircle2, UserPlus, Plus,
   ExternalLink, Key, X, Camera, Upload, Link,
   Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download, RefreshCw,
-  Maximize2, Copy, Printer,
+  Maximize2, Copy, Printer, Bus,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -415,6 +415,17 @@ export function GuardiansRegistry() {
       printWindow.focus();
       printWindow.print();
     };
+  };
+
+  // Un bus es, por dentro, un perfil de padre fantasma (ver
+  // BusRoutesPanel.tsx) — sin esto se mezcla indistinguible de un padre
+  // real en esta lista, como ya estaba documentado como pendiente ahí.
+  const isBusRouteGuardian = (g: any) => {
+    try {
+      return JSON.parse(g.additional_tutor_name || '{}')?.is_bus_route === true;
+    } catch {
+      return false;
+    }
   };
 
   const handleEdit = (guardian: any) => {
@@ -851,6 +862,11 @@ export function GuardiansRegistry() {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-lg font-black text-slate-900 truncate leading-none mb-1">{guardian.first_name} {guardian.last_name}</h3>
                     <div className="flex flex-wrap gap-1 mt-2">
+                      {isBusRouteGuardian(guardian) && (
+                        <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg text-[9px] font-black flex items-center gap-1 border border-amber-100">
+                          <Bus className="w-3 h-3" /> BUS
+                        </span>
+                      )}
                       <span className="bg-primary/5 text-primary px-2 py-0.5 rounded-lg text-[9px] font-black flex items-center gap-1">
                         PIN: {guardian.pin_code || '---'}
                       </span>
@@ -908,7 +924,16 @@ export function GuardiansRegistry() {
               <tbody className="divide-y divide-slate-100">
                 {filteredGuardians.map(g => (
                   <tr key={g.id} className="hover:bg-slate-50/50">
-                    <td className="p-4 font-bold text-slate-900">{g.first_name} {g.last_name}</td>
+                    <td className="p-4 font-bold text-slate-900">
+                      <div className="flex items-center gap-2">
+                        {g.first_name} {g.last_name}
+                        {isBusRouteGuardian(g) && (
+                          <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-md text-[8px] font-black flex items-center gap-1 border border-amber-100 shrink-0">
+                            <Bus className="w-2.5 h-2.5" /> BUS
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4 text-slate-500">{g.email}</td>
                     <td className="p-4 text-slate-500">{g.phone}</td>
                     <td className="p-4 font-black text-emerald-600">{g.pin_code}</td>
