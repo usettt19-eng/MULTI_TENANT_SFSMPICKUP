@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
-import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock, UserX } from 'lucide-react';
+import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock, UserX, Bus } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
 import { resolveMyGradeSectionsToday } from '../lib/dismissalSchedule';
 import { subscribeToAudioState, enableGlobalAudio, announceBilingual } from '../lib/audioManager';
@@ -209,47 +209,74 @@ export function MyClassroom() {
   }, [profile?.tenant_id, profile?.id]);
 
   // Mismo efecto que handleConfirmRelease en VerificationDisplay.tsx
-  // (pickup_events -> 'released', log de auditoría, aviso al padre) — se
-  // reusa el criterio, no el código, porque acá se autoriza una tarjeta
-  // puntual de una lista, no "la actual" de una cola con un solo foco.
+  // (pickup_events -> 'released', log de auditoría, aviso al padre) —
+  // extraído de handleAuthorize para poder reusarlo tanto para una tarjeta
+  // suelta como para autorizar un grupo de bus completo de una sola vez.
+  const releasePickup = async (pickup: any) => {
+    const studentName = pickup.students?.first_name;
+    const { error: updateError } = await supabase
+      .from('pickup_events')
+      .update({ status: 'released', released_by: profile?.id })
+      .eq('id', pickup.id);
+    if (updateError) throw updateError;
+
+    await supabase.from('audit_logs').insert({
+      event_type: 'SECURITY',
+      description: `AUTORIZACIÓN (Mi Salón): ${profile?.first_name || 'Personal'} validó la salida de ${studentName || 'el alumno'}.`,
+      actor_name: profile?.first_name || 'Personal',
+      metadata: { pickup_id: pickup.id },
+      tenant_id: pickup.tenant_id,
+    });
+
+    // Con un reemplazo autorizado (abuela, niñera, etc.) el titular no va
+    // a estar en el vehículo — decirle "reúnete con él" es instrucción
+    // para algo que no le corresponde hacer. Se le avisa en modo
+    // informativo: ya lo retiraron, y quién.
+    const replacementName = getReplacementNameFromNotes(pickup.notes);
+    await supabase.from('notifications').insert({
+      user_id: pickup.parent_id,
+      title: replacementName ? `¡${studentName || 'Tu hijo'} ya fue retirado!` : '¡Saliendo por Puerta!',
+      message: replacementName
+        ? `El Personal validó la salida de ${studentName || 'tu hijo'} con ${replacementName}, la persona que autorizaste.`
+        : `El Personal ha validado la salida de ${studentName || 'tu hijo'}. Reúnete con él en el vehículo.`,
+      type: 'success',
+      tenant_id: pickup.tenant_id,
+    });
+  };
+
   const handleAuthorize = async (pickup: any) => {
     setAuthorizingId(pickup.id);
-    const studentName = pickup.students?.first_name;
     try {
-      const { error: updateError } = await supabase
-        .from('pickup_events')
-        .update({ status: 'released', released_by: profile?.id })
-        .eq('id', pickup.id);
-      if (updateError) throw updateError;
-
-      await supabase.from('audit_logs').insert({
-        event_type: 'SECURITY',
-        description: `AUTORIZACIÓN (Mi Salón): ${profile?.first_name || 'Personal'} validó la salida de ${studentName || 'el alumno'}.`,
-        actor_name: profile?.first_name || 'Personal',
-        metadata: { pickup_id: pickup.id },
-        tenant_id: pickup.tenant_id,
-      });
-
-      // Con un reemplazo autorizado (abuela, niñera, etc.) el titular no va
-      // a estar en el vehículo — decirle "reúnete con él" es instrucción
-      // para algo que no le corresponde hacer. Se le avisa en modo
-      // informativo: ya lo retiraron, y quién.
-      const replacementName = getReplacementNameFromNotes(pickup.notes);
-      await supabase.from('notifications').insert({
-        user_id: pickup.parent_id,
-        title: replacementName ? `¡${studentName || 'Tu hijo'} ya fue retirado!` : '¡Saliendo por Puerta!',
-        message: replacementName
-          ? `El Personal validó la salida de ${studentName || 'tu hijo'} con ${replacementName}, la persona que autorizaste.`
-          : `El Personal ha validado la salida de ${studentName || 'tu hijo'}. Reúnete con él en el vehículo.`,
-        type: 'success',
-        tenant_id: pickup.tenant_id,
-      });
-
+      await releasePickup(pickup);
       setPickups(prev => prev.filter(p => p.id !== pickup.id));
     } catch (error: any) {
       console.error('Error authorizing pickup:', error);
       alert(t('monitor.releaseErrorPrefix') + error.message);
       fetchMyPickups();
+    } finally {
+      setAuthorizingId(null);
+    }
+  };
+
+  // Autoriza a todo un grupo (típicamente un bus) de una sola vez, en vez
+  // de uno por uno — a quien no vino se le saca antes con handleMarkAbsent,
+  // así que para cuando se toca este botón el grupo ya refleja a quién sí
+  // hay que autorizar.
+  const handleAuthorizeGroup = async (groupPickups: any[]) => {
+    const groupId = `group:${groupPickups[0]?.parent_id}`;
+    setAuthorizingId(groupId);
+    try {
+      const results = await Promise.allSettled(groupPickups.map(releasePickup));
+      const failed = results.filter(r => r.status === 'rejected');
+      const releasedIds = new Set(
+        groupPickups.filter((_, i) => results[i].status === 'fulfilled').map(p => p.id),
+      );
+      setPickups(prev => prev.filter(p => !releasedIds.has(p.id)));
+      if (failed.length > 0) {
+        console.error('Error autorizando grupo:', failed);
+        alert(`${failed.length} de ${groupPickups.length} no se pudieron autorizar. Intenta de nuevo con los que falten.`);
+        fetchMyPickups();
+      }
     } finally {
       setAuthorizingId(null);
     }
@@ -292,6 +319,30 @@ export function MyClassroom() {
       setAuthorizingId(null);
     }
   };
+
+  // Varios alumnos del mismo bus llegan juntos y comparten parent_id (el
+  // perfil-contenedor de la ruta, ver BusRoutesPanel.tsx) — agruparlos deja
+  // autorizarlos todos de un clic en vez de uno por uno, con
+  // handleMarkAbsent disponible por alumno para sacar del grupo a quien no
+  // vino antes de autorizar al resto.
+  const isBusRoutePickup = (pickup: any) => {
+    try {
+      return JSON.parse(pickup.profiles?.additional_tutor_name || '{}')?.is_bus_route === true;
+    } catch {
+      return false;
+    }
+  };
+  const busGroups = new Map<string, any[]>();
+  const individualPickups: any[] = [];
+  for (const p of pickups) {
+    if (isBusRoutePickup(p)) {
+      const key = p.parent_id;
+      if (!busGroups.has(key)) busGroups.set(key, []);
+      busGroups.get(key)!.push(p);
+    } else {
+      individualPickups.push(p);
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50 relative">
@@ -363,8 +414,69 @@ export function MyClassroom() {
             </p>
           </div>
         ) : (
+          <>
+            {busGroups.size > 0 && (
+              <div className="space-y-4 mb-6">
+                {Array.from(busGroups.entries()).map(([parentId, group]) => {
+                  const busName = `${group[0]?.profiles?.first_name || ''} ${group[0]?.profiles?.last_name || ''}`.trim() || 'Bus';
+                  const isAuthorizingGroup = authorizingId === `group:${parentId}`;
+                  return (
+                    <div key={parentId} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
+                      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                            <Bus className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-800">{busName}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group.length} {group.length === 1 ? t('myClassroom.busStudentSingular') : t('myClassroom.busStudentPlural')}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleAuthorizeGroup(group)}
+                          disabled={isAuthorizingGroup}
+                          className="px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          {t('myClassroom.authorizeAllBtn')} ({group.length})
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {group.map((pickup: any) => (
+                          <div key={pickup.id} className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-slate-200">
+                                <img
+                                  src={pickup.students?.photo_url || "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=100"}
+                                  alt="Alumno"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-slate-800 truncate">{pickup.students?.first_name} {pickup.students?.last_name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">{pickup.students?.grade} · {pickup.students?.section || 'A'}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleMarkAbsent(pickup)}
+                              disabled={authorizingId === pickup.id || isAuthorizingGroup}
+                              title="El alumno no asistió a clases hoy"
+                              className="shrink-0 px-3 py-2 rounded-xl font-bold text-[10px] shadow-sm transition-all bg-white border border-rose-200 text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center gap-1.5 uppercase tracking-widest disabled:opacity-50"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                              {t('myClassroom.didNotComeBtn')}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {pickups.map((pickup: any) => {
+            {individualPickups.map((pickup: any) => {
               const notesReplacementName = getReplacementNameFromNotes(pickup.notes);
               const isReplacement = !!notesReplacementName;
               const displayName = notesReplacementName || `${pickup.profiles?.first_name || ''} ${pickup.profiles?.last_name || ''}`.trim();
@@ -495,6 +607,7 @@ export function MyClassroom() {
               );
             })}
           </div>
+          </>
         )}
       </div>
     </div>
