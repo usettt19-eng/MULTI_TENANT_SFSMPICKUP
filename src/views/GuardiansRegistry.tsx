@@ -1,6 +1,6 @@
 import {apiFetch} from '../lib/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TopNav } from '../components/TopNav';
@@ -10,7 +10,8 @@ import {
   Users, Search, Filter, Mail, Phone,
   Shield, Trash2, Edit2, CheckCircle2, UserPlus, Plus,
   ExternalLink, Key, X, Camera, Upload, Link,
-  Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download, RefreshCw
+  Loader2, AlertCircle, FileSpreadsheet, LayoutGrid, List, Download, RefreshCw,
+  Maximize2, Copy, Printer,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -71,6 +72,13 @@ export function GuardiansRegistry() {
   const [replacements, setReplacements] = useState<any[]>([]);
   const [newRepName, setNewRepName] = useState('');
   const [newRepPhone, setNewRepPhone] = useState('');
+  // Mismo patrón que el modal de QR de Salida Autónoma en Students.tsx:
+  // guarda el reemplazo que se está previsualizando (null = modal cerrado),
+  // para poder agrandarlo/descargarlo/imprimirlo/copiarlo sin depender de
+  // que el padre logre compartirlo desde su teléfono.
+  const [qrPreviewRep, setQrPreviewRep] = useState<any | null>(null);
+  const [qrCopyFeedback, setQrCopyFeedback] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -353,6 +361,60 @@ export function GuardiansRegistry() {
       fetchGuardians();
     };
     reader.readAsText(file, 'UTF-8');
+  };
+
+  // Mismo trío de acciones que el QR de Salida Autónoma en Students.tsx —
+  // usa QRCodeCanvas (no el SVG chico de la lista) porque el canvas es lo
+  // que permite sacarle un PNG con toDataURL().
+  const downloadQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrPreviewRep) return;
+    const link = document.createElement('a');
+    link.download = `qr-reemplazo-${qrPreviewRep.name || 'autorizado'}`.trim().replace(/\s+/g, '-').toLowerCase() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  const copyQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !navigator.clipboard || !(window as any).ClipboardItem) {
+      alert('Tu navegador no permite copiar imágenes al portapapeles. Usa Descargar o Imprimir.');
+      return;
+    }
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new (window as any).ClipboardItem({ 'image/png': blob })]);
+        setQrCopyFeedback(true);
+        setTimeout(() => setQrCopyFeedback(false), 2000);
+      } catch (e) {
+        console.error('Error copiando el QR:', e);
+        alert('No se pudo copiar el código. Usa Descargar o Imprimir.');
+      }
+    }, 'image/png');
+  };
+
+  const printQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrPreviewRep) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head><title>Código QR — ${qrPreviewRep.name}</title></head>
+        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;">
+          <img src="${dataUrl}" style="width:320px;height:320px;" />
+          <p style="font-weight:bold;margin-top:16px;">${qrPreviewRep.name}</p>
+          <p style="color:#666;">Reemplazo Autorizado de Recogida</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
   };
 
   const handleEdit = (guardian: any) => {
@@ -1193,7 +1255,12 @@ export function GuardiansRegistry() {
                   <div className="space-y-3 mb-4">
                     {replacements.map((rep, idx) => (
                       <div key={idx} className="bg-white p-3 rounded-2xl border border-emerald-100 flex justify-between items-center gap-3">
-                        <div className="bg-slate-50 p-2 rounded-xl shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setQrPreviewRep(rep)}
+                          className="relative bg-slate-50 p-2 rounded-xl shrink-0 group/qr"
+                          title={t('guardiansPage.qrEnlargeTitle')}
+                        >
                           <QRCodeSVG
                             value={JSON.stringify({
                               type: 'replacement_pickup',
@@ -1203,7 +1270,10 @@ export function GuardiansRegistry() {
                             })}
                             size={48}
                           />
-                        </div>
+                          <span className="absolute inset-0 bg-black/0 group-hover/qr:bg-black/40 rounded-xl flex items-center justify-center transition-colors">
+                            <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover/qr:opacity-100 transition-opacity" />
+                          </span>
+                        </button>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-black text-slate-800">{rep.name}</p>
                           <p className="text-[10px] text-slate-400 font-bold">{rep.phone}</p>
@@ -1284,6 +1354,65 @@ export function GuardiansRegistry() {
         id="fileInput" type="file" accept="image/*"
         className="hidden" onChange={handleFileUpload}
       />
+
+      {/* QR Preview / Export / Print Modal — mismo patrón que el QR de
+          Salida Autónoma en Students.tsx. Pensado para recepción: si el
+          padre no logra usar el botón "Enviar" de su app (share nativo
+          fallando en su teléfono puntual), acá se puede agrandar, copiar,
+          descargar o imprimir el mismo código sin depender de eso. */}
+      {qrPreviewRep && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="p-8 text-center border-b border-slate-100 space-y-4">
+              <h3 className="text-lg font-black text-emerald-600 flex items-center justify-center gap-2">
+                <Shield className="w-5 h-5" /> {t('guardiansPage.qrModalTitle')}
+              </h3>
+              <p className="text-sm text-slate-500 font-medium">{qrPreviewRep.name}</p>
+              <div className="flex justify-center bg-slate-50 rounded-2xl p-6">
+                <QRCodeCanvas
+                  ref={qrCanvasRef}
+                  value={JSON.stringify({
+                    type: 'replacement_pickup',
+                    parent_id: editingGuardianId,
+                    token: qrPreviewRep.token,
+                    replacement_name: qrPreviewRep.name,
+                  })}
+                  size={240}
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 grid grid-cols-3 gap-3">
+              <button
+                onClick={downloadQrCode}
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-emerald-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
+              >
+                <Download className="w-4 h-4" /> {t('students.qrDownloadBtn')}
+              </button>
+              <button
+                onClick={copyQrCode}
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-emerald-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
+              >
+                {qrCopyFeedback ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                {qrCopyFeedback ? t('students.qrCopiedFeedback') : t('students.qrCopyBtn')}
+              </button>
+              <button
+                onClick={printQrCode}
+                className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs"
+              >
+                <Printer className="w-4 h-4" /> {t('students.qrPrintBtn')}
+              </button>
+            </div>
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => setQrPreviewRep(null)}
+                className="w-full text-center text-slate-400 font-bold text-sm hover:text-emerald-600 transition-colors py-2"
+              >
+                {t('students.qrCloseBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
