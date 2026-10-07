@@ -384,26 +384,23 @@ export function ParentDashboard() {
     const list = data || [];
     setDoors(list);
 
-    // La ruta de este bus ya tiene puerta fija en Rutas de Bus — no tiene
-    // sentido pedirle al encargado que la elija de nuevo cada vez que
-    // anuncia, como si fuera un padre real sin puerta habitual guardada.
-    let isBusRoute = false;
+    // Si esta cuenta es la de un bus, su ruta ya tiene puerta fija en
+    // Rutas de Bus — no tiene sentido pedirle al encargado que la elija de
+    // nuevo cada vez, como si fuera un padre real sin puerta habitual
+    // guardada. No se filtra por additional_tutor_name.is_bus_route antes
+    // de preguntar — perfiles de bus creados fuera del flujo oficial
+    // pueden no tenerlo seteado (visto en producción) — en cambio se
+    // consulta siempre: para un padre real `my-door` no encuentra
+    // ninguna ruta y no hace nada, consulta liviana e inofensiva.
     try {
-      isBusRoute = JSON.parse(profile.additional_tutor_name || '{}')?.is_bus_route === true;
-    } catch {
-      isBusRoute = false;
-    }
-    if (isBusRoute) {
-      try {
-        const res = await apiJson('/api/bus-routes/my-door');
-        const routeDoorId = res?.data?.door_id;
-        if (routeDoorId && list.some(d => d.id === routeDoorId)) {
-          setSelectedDoorId(routeDoorId);
-          return;
-        }
-      } catch (e) {
-        console.error('Error cargando la puerta de la ruta:', e);
+      const res = await apiJson('/api/bus-routes/my-door');
+      const routeDoorId = res?.data?.door_id;
+      if (routeDoorId && list.some(d => d.id === routeDoorId)) {
+        setSelectedDoorId(routeDoorId);
+        return;
       }
+    } catch (e) {
+      console.error('Error cargando la puerta de la ruta:', e);
     }
 
     const savedDoorId = localStorage.getItem(`preferred_door_${profile.id}`);
