@@ -324,23 +324,25 @@ export function MyClassroom() {
   // perfil-contenedor de la ruta, ver BusRoutesPanel.tsx) — agruparlos deja
   // autorizarlos todos de un clic en vez de uno por uno, con
   // handleMarkAbsent disponible por alumno para sacar del grupo a quien no
-  // vino antes de autorizar al resto.
-  const isBusRoutePickup = (pickup: any) => {
-    try {
-      return JSON.parse(pickup.profiles?.additional_tutor_name || '{}')?.is_bus_route === true;
-    } catch {
-      return false;
-    }
-  };
+  // vino antes de autorizar al resto. Se agrupa por cantidad real (2+
+  // pendientes con el mismo parent_id), no por el flag is_bus_route —
+  // perfiles de bus creados fuera del flujo oficial de Rutas de Bus pueden
+  // no tenerlo seteado, pero igual comparten parent_id de verdad. De paso
+  // cubre cualquier otro caso de una misma persona anunciando a varios
+  // hijos juntos, no solo buses.
+  const byParent = new Map<string, any[]>();
+  for (const p of pickups) {
+    const key = p.parent_id;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key)!.push(p);
+  }
   const busGroups = new Map<string, any[]>();
   const individualPickups: any[] = [];
-  for (const p of pickups) {
-    if (isBusRoutePickup(p)) {
-      const key = p.parent_id;
-      if (!busGroups.has(key)) busGroups.set(key, []);
-      busGroups.get(key)!.push(p);
+  for (const [parentId, group] of byParent.entries()) {
+    if (group.length > 1) {
+      busGroups.set(parentId, group);
     } else {
-      individualPickups.push(p);
+      individualPickups.push(group[0]);
     }
   }
 
