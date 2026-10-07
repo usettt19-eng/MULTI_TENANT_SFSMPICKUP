@@ -6,6 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { School, User, ShieldCheck, CheckCircle2, AlertTriangle, Bell, Clock, Car, Lock, UserX } from 'lucide-react';
 import { getReplacementNameFromNotes, formatAnnouncedAt, isStaleAnnouncement } from '../lib/pickupHelpers';
 import { resolveMyGradeSectionsToday } from '../lib/dismissalSchedule';
+import { subscribeToAudioState, enableGlobalAudio, announceBilingual } from '../lib/audioManager';
 
 /**
  * Vista privada por staff: a diferencia de Monitor Externo (que a propósito
@@ -40,7 +41,13 @@ export function MyClassroom() {
   // padre, solo evita la duda de "¿no tengo nada asignado, o es que
   // todavía no llegó nadie?".
   const [myAssignments, setMyAssignments] = useState<Array<{ gradeName: string; section: string }>>([]);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const channelRef = useRef<any>(null);
+  // Mismo patrón que OperationsDashboard: la primera carga solo siembra el
+  // set (son pickups que ya estaban ahí, no hay que anunciarlos), los polls
+  // siguientes anuncian solo los `id` que no estaban antes.
+  const announcedPickupIds = useRef<Set<string>>(new Set());
+  const isFirstFetch = useRef(true);
 
   const fetchDoors = async () => {
     if (!profile?.tenant_id) return;
@@ -69,6 +76,7 @@ export function MyClassroom() {
       setPickups([]);
       setNotifiedStaffByPickup({});
       setLoading(false);
+      isFirstFetch.current = false;
       return;
     }
 
@@ -110,12 +118,52 @@ export function MyClassroom() {
       setNotifiedStaffByPickup({});
     }
 
-    if (data) setPickups(data);
+    if (data) {
+      setPickups(data);
+
+      // Sin este aviso de voz, el único modo de enterarse de que llegó un
+      // padre de la propia sección era tener la pantalla abierta y mirarla
+      // justo en ese momento — en la práctica recepción (u otro staff)
+      // siempre llega primero a liberar al alumno desde Monitor
+      // Externo/En Tránsito, o lo hace el timeout automático de 20
+      // minutos, antes de que el maestro llegue a verlo acá. Mismo patrón
+      // que OperationsDashboard: la primera carga solo siembra el set.
+      if (isFirstFetch.current) {
+        data.forEach(p => announcedPickupIds.current.add(p.id));
+        isFirstFetch.current = false;
+      } else {
+        data.forEach(pickup => {
+          if (pickup.status === 'announced' && !announcedPickupIds.current.has(pickup.id)) {
+            announcedPickupIds.current.add(pickup.id);
+            const fullName = `${pickup.students?.first_name || ''} ${pickup.students?.last_name || ''}`.trim();
+            const parentName = `${pickup.profiles?.first_name || ''} ${pickup.profiles?.last_name || ''}`.trim();
+            announceBilingual(
+              `Atención, el padre o tutor de ${fullName} ha llegado.`,
+              `Attention, the parent or guardian of ${fullName} has arrived.`,
+            );
+            console.log(`MyClassroom Auto-announcing: ${fullName} (${parentName})`);
+          }
+        });
+      }
+    }
     setLoading(false);
   };
 
   const fetchRef = useRef(fetchMyPickups);
   fetchRef.current = fetchMyPickups;
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAudioState((enabled) => {
+      setAudioEnabled(enabled);
+    });
+    return unsubscribe;
+  }, []);
+
+  const enableAudio = () => {
+    enableGlobalAudio().then(() => {
+      announceBilingual('Audio activado correctamente', 'Audio activated successfully');
+    });
+  };
 
   useEffect(() => {
     if (!profile?.tenant_id || !profile?.id) return;
@@ -248,6 +296,21 @@ export function MyClassroom() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50 relative">
       <TopNav title={t('myClassroom.title')} subtitle={t('myClassroom.subtitle')} />
+
+      {!audioEnabled && (
+        <div className="bg-indigo-600 text-white px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-3">
+            <Bell className="w-5 h-5 animate-pulse shrink-0" />
+            <p className="text-xs font-bold uppercase tracking-widest">{t('dashboard.audioActivationBanner')}</p>
+          </div>
+          <button
+            onClick={enableAudio}
+            className="bg-white text-indigo-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-50 transition-colors shadow-lg shrink-0"
+          >
+            {t('dashboard.activateSpeakersBtn')}
+          </button>
+        </div>
+      )}
 
       {lockdownActive && (
         <div className="absolute inset-0 z-[100] bg-red-600/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center overflow-hidden">
