@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft, Instagram, Facebook, Globe } from 'lucide-react';
+import { Shield, User as UserIcon, Lock, Loader2, ArrowLeft, Instagram, Facebook, Globe, Eye, EyeOff } from 'lucide-react';
 import { MobileAppBanner } from '../components/MobileAppBanner';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -8,6 +8,7 @@ export function Login() {
   const { t, language, setLanguage } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Todas las cuentas se crean por invitación del colegio (sin autoregistro
@@ -288,13 +289,21 @@ export function Login() {
                   <Lock className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-11 pr-5 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-11 pr-11 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-500 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
