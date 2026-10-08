@@ -3392,6 +3392,90 @@ pendiente de decisión: ¿contra la rama de trabajo actual
 (`claude/tenant-isolation-rls`, +20 commits sobre `main`) o mergear a
 `main` primero? Sin decidir todavía.
 
+### Causa real de "Mi Salón no muestra nada" — 502 disfrazado de error de CORS (2026-10-08)
+
+Mismo síntoma que la investigación de Ingrid Carrasco del día anterior,
+pero esta vez reproducido en vivo con otra cuenta de salón
+("Enfermera test"/bus2): Monitor Externo y En Tránsito sí veían los
+pickups, "Mi Salón" no veía ninguno. Se descartaron, en orden: condición
+de carrera con recepción liberando primero (parcialmente cierto para el
+caso de Ingrid, no explica este caso), bug en `is_staff_of()` (la
+definición de la función era correcta, y Monitor/Tránsito usan la misma
+RLS), cuentas "Enfermera test" duplicadas (solo existía una), y
+`tenant_id` desalineado por impersonación/`staff_school_access` (su
+tenant de origen ya coincidía). La causa real apareció al revisar la
+pestaña Network del navegador directamente: un `net::ERR_FAILED 502
+(Bad Gateway)` escondido debajo del error de CORS que mostraba la
+consola — el stack de respaldo (PostgREST/Envoy) devuelve 502 sin
+headers de CORS, y el navegador reporta eso como si fuera un bloqueo de
+CORS, no como el 502 real que es. `fetchMyPickups` en `MyClassroom.tsx`
+armaba la URL `notifications?pickup_event_id=in.(...)` con **todo el
+historial** de notificaciones del maestro, sin límite de fecha — con el
+tiempo la lista de UUIDs crece lo suficiente para que la URL dispare el
+502. **Fix** (`1718520`): la consulta de notificaciones ahora se limita
+a `created_at >= inicio de hoy`. Este fix probablemente resuelve todos
+los casos históricos de esta queja en la app, no solo los dos
+investigados.
+
+### Agrupación de alumnos de bus para autorizar/completar de un toque, y UX de cuentas de bus (2026-10-08)
+
+Pedido: si varios hermanos (o varios alumnos de la misma ruta) llegan en
+el mismo bus, el maestro/recepción tenía que autorizar o completar cada
+fila por separado aunque sea obviamente el mismo grupo. **Fix**: tanto
+`MyClassroom.tsx` ("Mi Salón") como `TransitMonitor.tsx` ("En Tránsito")
+agrupan ahora por `parent_id` compartido (no por el flag
+`is_bus_route`, que resultó no ser confiable/estar ausente en cuentas
+reales — commit `191d264`) y agregan un botón de autorizar/completar
+todo el grupo de una vez (`handleAuthorizeGroup`/
+`handleStaffCompleteGroup`, con `Promise.allSettled`). Se agregó un
+badge ámbar "BUS" junto al nombre del grupo cuando corresponde, y en "En
+Tránsito" un contador de cuántos del grupo ya se completaron hoy.
+
+De paso, dos fixes relacionados a cuentas de bus:
+- Renombrar una ruta de bus desde `BusRoutesPanel.tsx` actualizaba
+  `bus_routes.name` pero nunca el `first_name` del perfil-fantasma usado
+  para loguearse — el login seguía mostrando el nombre viejo aunque la
+  sesión fuera genuinamente de la cuenta nueva (confirmado por logs del
+  contenedor de Auth, no era un problema de sesión pegada). Fix:
+  `handleSaveRoute` ahora sincroniza también `profiles.first_name` al
+  editar.
+- La app de padres (`ParentDashboard.tsx`) ya consultaba la puerta fija
+  de la ruta de bus vía `GET /api/bus-routes/my-door` (nuevo endpoint,
+  ya que `bus_routes` tiene RLS solo para personal) y la aplicaba sola,
+  pero el panel de selección de puerta seguía **visible** igual —
+  `doorSelectionRequired` solo controlaba el estilo de "obligatorio", no
+  si el panel se mostraba. Fix: nuevo estado `isBusWithFixedDoor` oculta
+  el panel completo cuando la ruta ya tiene puerta fija asignada.
+
+### Fix: iconos del encabezado de la app de padres se salían de pantalla (2026-10-08)
+
+Reporte con captura: Instagram, Facebook y el resto de los íconos del
+encabezado no cabían todos en una fila en pantallas angostas. Fix:
+Instagram y Facebook se agruparon en un solo botón con menú desplegable
+(`showSocialMenu`), liberando espacio en la fila.
+
+### Idea pendiente, no implementada: excluir automáticamente al hermano que no le toca salir todavía al anunciar llegada (2026-10-08)
+
+Caso real reportado: una mamá llegó a las 12:00 (hora Panamá) por su
+hijo de RC/NR, pero también anunció a su hijo de 3er grado al mismo
+tiempo porque la app anuncia a todos los hijos juntos salvo que el
+padre haya configurado manualmente "¿salen juntos?" — el de 3er grado
+en realidad salía horas después (tenía post-school). La idea discutida:
+usar `school_grades.exit_time` (ya existe y es configurable en Ajustes
+→ Estructura del Colegio, pero hoy no se usa en ningún lado del flujo de
+"Anunciar Llegada") para excluir solo de ese anuncio puntual al hermano
+cuyo grado todavía no llega a su hora de salida, sin tocar la
+agrupación manual "salen juntos" que ya existe y algunos padres prefieren
+usar a propósito.
+
+Se evaluaron variantes (selector adicional para activar/desactivar por
+hijo, solo advertencia sin bloquear) pero **no se implementó nada
+todavía** — el riesgo de romper el flujo de anuncio de llegada (uno de
+los más usados de toda la app) para un caso que ya tiene mitigaciones
+parciales (el límite fijo de las 11am, la agrupación manual) no se
+consideró justificado sin antes decidir bien el diseño exacto. Queda
+como pendiente de diseño, no de código roto.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -3855,3 +3939,10 @@ relevantes de cara a producción:
   o darle prioridad al maestro primero? (ver "Investigación: Ingrid
   Carrasco..." en §3, 2026-10-07) — se agregó aviso de voz a "Mi Salón"
   como mitigación, pero la decisión de proceso sigue sin tomarse.
+- **Diseñar (no implementar todavía) el filtro por `school_grades.exit_time`
+  en "Anunciar Llegada"** (ver §3, 2026-10-08) — excluir del anuncio
+  automático al hermano cuyo grado todavía no llega a su hora de salida,
+  sin tocar la agrupación manual "salen juntos". Se discutieron varias
+  variantes (selector on/off por hijo, solo advertencia sin bloquear) sin
+  cerrar ninguna; no se tocó código de `ParentDashboard.tsx` por el riesgo
+  de romper el flujo de anuncio de llegada en producción.
