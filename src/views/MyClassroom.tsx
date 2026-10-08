@@ -58,12 +58,24 @@ export function MyClassroom() {
   const fetchMyPickups = async () => {
     if (!profile?.tenant_id || !profile?.id) return;
 
+    // Sin límite de fecha, esta consulta traía TODAS las notificaciones
+    // históricas de esta persona (cientos, con el tiempo) y las metía
+    // todas en un `id=in.(...)` para pickup_events — la URL crecía hasta
+    // que el servidor la rechazaba con 502 (que el navegador disfraza
+    // como error de CORS, porque una respuesta 5xx a veces no trae los
+    // headers de CORS). "Mi Salón" solo necesita lo de hoy: un pickup
+    // pendiente de ayer ya se resolvió solo (timeout de 20 min, cierre de
+    // fin de día), así que recortar a hoy no pierde nada real.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const { data: notifRows, error: notifError } = await supabase
       .from('notifications')
       .select('pickup_event_id')
       .eq('user_id', profile.id)
       .eq('tenant_id', profile.tenant_id)
-      .not('pickup_event_id', 'is', null);
+      .not('pickup_event_id', 'is', null)
+      .gte('created_at', startOfToday.toISOString());
 
     if (notifError) {
       console.error('Error cargando mis avisos:', notifError);
