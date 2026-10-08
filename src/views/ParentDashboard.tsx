@@ -877,6 +877,15 @@ export function ParentDashboard() {
       + '/external?parent=' + encodeURIComponent(profile.id)
       + '&token=' + encodeURIComponent(replacement.token);
 
+    // navigator.share() (y el plugin de Capacitor, que lo envuelve) tira
+    // InvalidStateError si se llama de nuevo mientras la hoja de compartir
+    // anterior sigue abierta/resolviéndose — confirmado en consola real de
+    // un iPhone (2026-10-08): un doble toque sobre el botón bastaba para
+    // que la segunda llamada chocara con la primera y mostrara el error
+    // genérico "Could not open the share sheet" sin ninguna pista real.
+    if (isSharingQRRef.current) return;
+    isSharingQRRef.current = true;
+
     // En apps nativas (Android/iOS) el WebView no siempre implementa la Web
     // Share API del navegador, así que el share.can().value salía en false
     // y no pasaba nada al tocar "Enviar". El plugin de Capacitor sí abre la
@@ -902,13 +911,17 @@ export function ParentDashboard() {
       console.error('Error al compartir el reemplazo:', err);
       // AbortError = el usuario cerró la hoja de compartir sin elegir nada
       // (navigator.share y el plugin de Capacitor lo reportan igual) — no es
-      // un error, no hay que avisar nada. Cualquier otra cosa (el plugin no
-      // está disponible, falla el intent nativo, etc.) antes quedaba
-      // totalmente silenciosa — el botón "no hacía nada" sin dejar rastro
-      // para quien lo reportaba. Ahora al menos se avisa que falló.
-      if (err?.name !== 'AbortError') {
+      // un error, no hay que avisar nada. InvalidStateError = un doble toque
+      // chocó con una llamada anterior todavía en curso (ver guard arriba) —
+      // tampoco hace falta avisar, la primera llamada sigue su curso normal.
+      // Cualquier otra cosa antes quedaba totalmente silenciosa — el botón
+      // "no hacía nada" sin dejar rastro para quien lo reportaba. Ahora al
+      // menos se avisa que falló.
+      if (err?.name !== 'AbortError' && err?.name !== 'InvalidStateError') {
         alert(t('parent.replacement.shareErrorAlert'));
       }
+    } finally {
+      isSharingQRRef.current = false;
     }
   };
 
@@ -1502,6 +1515,7 @@ export function ParentDashboard() {
   // se actualiza de inmediato (a diferencia de useState), así que sí alcanza
   // a bloquear la reentrada.
   const isAnnouncingRef = useRef(false);
+  const isSharingQRRef = useRef(false);
   useEffect(() => {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
