@@ -18,6 +18,17 @@ const toDateOnlyValue = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
+// Suma días a un "yyyy-mm-dd" en aritmética de calendario pura (UTC), sin
+// pasar por la hora local del navegador — evita que sumar 1 día cerca de
+// medianoche en una zona horaria con offset raro devuelva la misma fecha
+// o se salte un día.
+const addDaysToDateOnly = (dateOnly: string, days: number) => {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+};
+
 interface DailyReportModalProps {
   onClose: () => void;
 }
@@ -67,13 +78,15 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
   const loadData = async () => {
     if (!profile?.tenant_id) return;
     setLoading(true);
-    // Límites del día elegido en hora LOCAL del navegador (no UTC) — mismo
-    // patrón que el selector de fecha de VisitorsLog.tsx.
-    const startOfDay = new Date(`${selectedDate}T00:00:00`);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-    const startIso = startOfDay.toISOString();
-    const endIso = endOfDay.toISOString();
+    // Límites del día elegido en hora FIJA de Panamá (UTC-5, sin horario de
+    // verano), no la hora local del dispositivo que genera el reporte —
+    // antes usaba `new Date(...)` (hora local del navegador), así que un
+    // reloj/zona horaria distinta a Panamá en el dispositivo armaba un
+    // rango que no coincidía con los datos reales del día y el reporte
+    // mostraba 0 en todo aunque sí hubiera actividad ese día. Mismo
+    // criterio que `startOfTodayInPanamaUTC()` en server/src/index.ts.
+    const startIso = new Date(`${selectedDate}T00:00:00-05:00`).toISOString();
+    const endIso = new Date(`${addDaysToDateOnly(selectedDate, 1)}T00:00:00-05:00`).toISOString();
 
     const [
       { data: school },
