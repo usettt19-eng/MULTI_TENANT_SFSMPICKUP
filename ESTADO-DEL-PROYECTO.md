@@ -3476,6 +3476,58 @@ parciales (el límite fijo de las 11am, la agrupación manual) no se
 consideró justificado sin antes decidir bien el diseño exacto. Queda
 como pendiente de diseño, no de código roto.
 
+### Regresión: `pickup_events.released_by` (agregado el mismo 2026-10-07) rompió en silencio todo `select` que embebiera `profiles` sin indicar cuál FK (2026-10-08)
+
+Reporte: el Daily Report mostraba "Announced Pickups: 0" para el 7-oct
+en TCS Albrook pese a que sí hubo 109 pickups anunciados ese día
+(confirmado por SQL directo). Primer intento fallido: se sospechó un
+problema de zona horaria (`loadData()` en `DailyReportModal.tsx` armaba
+el rango del día con `new Date(...)`, hora LOCAL del navegador, no la
+de Panamá) y se corrigió para usar un offset fijo `-05:00` — mejora
+real, pero **no era la causa**: después de desplegarla el reporte
+seguía en 0, y además ningún día anterior con datos reales los mostraba
+tampoco, descartando que fuera un problema de rango de fechas.
+
+Causa real: `pickup_events` tiene dos foreign keys hacia `profiles` —
+`parent_id` (de siempre) y `released_by` (agregada el 2026-10-07 en el
+commit `2eeb030`, misma sesión). Cualquier `select` que embebiera la
+relación como `parent:profiles(...)` (nombrando solo la tabla, sin
+decir cuál columna) quedó **ambiguo** para PostgREST en cuanto existió
+una segunda FK hacia la misma tabla — y PostgREST rechaza la consulta
+en vez de adivinar. Como ninguno de esos `select` revisaba `error`
+(solo usaba `data`), el fallo fue completamente silencioso: `data`
+llegaba `null`/`undefined` y el código lo trataba como "sin resultados"
+en vez de mostrar que algo se rompió.
+
+Encontrados y corregidos 3 call sites reales con este patrón roto
+(`parent:profiles(...)`): `DailyReportModal.tsx`, y **el más grave,
+`OperationsDashboard.tsx`** — `fetchPickups()` solo llama
+`setPickups(data)` dentro de un `if (data)`, así que desde que se
+desplegó `released_by` (noche del 7-oct) la lista de pickups
+pendientes del Dashboard principal de staff se quedó **congelada** en
+lo último que tenía antes del deploy, sin refrescar más con cada poll,
+sin ningún error visible. Se corrigieron también 2 funciones sin usar
+en `src/lib/queries.ts` (`getActivePickups`/`getPickupById`, no
+llamadas desde ningún lado hoy, pero mismo patrón roto).
+
+**Fix**: cambiar `parent:profiles(...)` por `parent:parent_id(...)` —
+nombrar la columna FK en vez de la tabla desambigua automáticamente
+para PostgREST, sin importar cuántas FKs tenga la tabla destino. Es el
+mismo patrón que ya usaban (sin saberlo, por otra razón) `MyClassroom.tsx`,
+`TransitMonitor.tsx`, `VerificationDisplay.tsx` y
+`GuardianVerification.tsx` (`profiles:parent_id(...)`,
+`students:student_id(...)`) — esas cuatro pantallas nunca se rompieron
+porque ya especificaban la columna, pura casualidad de cómo estaban
+escritas, no una decisión consciente de evitar este problema.
+
+**Pendiente de verificar en este mismo documento**: si agregamos alguna
+otra foreign key nueva hacia `profiles` (o hacia cualquier tabla que
+ya tenga una FK existente desde el mismo origen) en el futuro, revisar
+a mano todos los `embed:tabla(...)` sin columna explícita contra esa
+tabla antes de desplegar — PostgREST no avisa en el build, solo falla
+en producción, y el código de esta app rara vez revisa `error` en estas
+consultas de lectura.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
