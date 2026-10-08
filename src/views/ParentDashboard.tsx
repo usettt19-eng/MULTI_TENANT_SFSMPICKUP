@@ -143,6 +143,11 @@ export function ParentDashboard() {
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  // Instagram + Facebook colapsados en un solo botón — con EN/Ayuda/
+  // Campana/Salir en la misma fila (sin wrap), 6 íconos sueltos no entraban
+  // bien en pantallas angostas. Un desplegable chico cuesta lo mismo en
+  // clics y libera un ícono entero de la fila principal.
+  const [showSocialMenu, setShowSocialMenu] = useState(false);
   const [showReplacementModal, setShowReplacementModal] = useState(false);
   const [replacementName, setReplacementName] = useState('');
   const [replacementPhone, setReplacementPhone] = useState('');
@@ -1869,7 +1874,7 @@ export function ParentDashboard() {
               <h1 className="text-2xl font-black">{profile?.first_name} {profile?.last_name}</h1>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
             <button
               onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
               title={t('parent.language.toggleLabel')}
@@ -1886,24 +1891,38 @@ export function ParentDashboard() {
             >
               <HelpCircle className="w-5 h-5 text-white" />
             </a>
-            <a
-              href="https://www.instagram.com/safesmartpickup/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Instagram de Safe Smart Pickup"
-              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
-            >
-              <Instagram className="w-5 h-5 text-white" />
-            </a>
-            <a
-              href="https://www.facebook.com/people/Safe-Smart-Pickup/61594088620118"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Facebook de Safe Smart Pickup"
-              className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
-            >
-              <Facebook className="w-5 h-5 text-white" />
-            </a>
+            <div className="relative">
+              <button
+                onClick={() => setShowSocialMenu(!showSocialMenu)}
+                aria-label="Redes sociales de Safe Smart Pickup"
+                className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center"
+              >
+                <Instagram className="w-5 h-5 text-white" />
+              </button>
+              {showSocialMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowSocialMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-2 flex flex-col gap-1 z-20 min-w-[11rem]">
+                    <a
+                      href="https://www.instagram.com/safesmartpickup/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-slate-700 text-sm font-bold"
+                    >
+                      <Instagram className="w-4 h-4 text-slate-500" /> Instagram
+                    </a>
+                    <a
+                      href="https://www.facebook.com/people/Safe-Smart-Pickup/61594088620118"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-slate-700 text-sm font-bold"
+                    >
+                      <Facebook className="w-4 h-4 text-slate-500" /> Facebook
+                    </a>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 relative transition-all active:scale-95"
