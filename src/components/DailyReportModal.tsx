@@ -106,7 +106,7 @@ export function DailyReportModal({ onClose }: DailyReportModalProps) {
       supabase.from('school_settings').select('school_name').eq('tenant_id', profile.tenant_id).maybeSingle(),
       supabase
         .from('pickup_events')
-        .select('id, announced_at, completed_at, location_verified, notes, student:students(first_name, last_name, grade, section), parent:profiles(first_name, last_name)')
+        .select('id, announced_at, completed_at, location_verified, notes, student:students(first_name, last_name, grade, section), parent:parent_id(first_name, last_name)')
         .eq('tenant_id', profile.tenant_id)
         .gte('announced_at', startIso)
         .lt('announced_at', endIso)

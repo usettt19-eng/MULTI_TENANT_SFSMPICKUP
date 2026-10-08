@@ -101,7 +101,7 @@ export async function getParents(): Promise<Profile[]> {
 export async function getActivePickups(): Promise<PickupEvent[]> {
   const { data, error } = await supabase
     .from('pickup_events')
-    .select('*, student:students(first_name, last_name, grade, photo_url), parent:profiles(first_name, last_name, pin_code, photo_url)')
+    .select('*, student:students(first_name, last_name, grade, photo_url), parent:parent_id(first_name, last_name, pin_code, photo_url)')
     .in('status', ['announced', 'in_queue'])
     .order('announced_at', { ascending: true });
 
@@ -112,7 +112,7 @@ export async function getActivePickups(): Promise<PickupEvent[]> {
 export async function getPickupById(id: string): Promise<PickupEvent | null> {
   const { data, error } = await supabase
     .from('pickup_events')
-    .select('*, student:students(*), parent:profiles(*)')
+    .select('*, student:students(*), parent:parent_id(*)')
     .eq('id', id)
     .single();
 

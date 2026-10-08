@@ -184,7 +184,7 @@ export function OperationsDashboard({ setCurrentView }: { setCurrentView: (view:
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from('pickup_events')
-      .select('*, student:students(first_name, last_name, grade, tenant_id), parent:profiles(first_name, last_name, pin_code)')
+      .select('*, student:students(first_name, last_name, grade, tenant_id), parent:parent_id(first_name, last_name, pin_code)')
       .eq('tenant_id', profile.tenant_id)
       .in('status', ['announced', 'in_queue'])
       .order('announced_at', { ascending: true });
