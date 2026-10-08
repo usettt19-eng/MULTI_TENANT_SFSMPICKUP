@@ -239,6 +239,12 @@ export function ParentDashboard() {
   // hermanos de distinto grado que salen juntos por la misma puerta).
   const [doors, setDoors] = useState<{ id: string; name: string }[]>([]);
   const [selectedDoorId, setSelectedDoorId] = useState<string>('');
+  // true solo cuando esta cuenta es la de un bus Y su ruta tiene puerta fija
+  // configurada (ver fetchDoors / GET /api/bus-routes/my-door) — oculta el
+  // panel de elegir puerta entero, no tiene sentido que el encargado del
+  // bus pueda cambiarla desde acá si ya está fija en Rutas de Bus. Si el
+  // bus no tiene puerta configurada todavía, se deja el panel normal.
+  const [isBusWithFixedDoor, setIsBusWithFixedDoor] = useState(false);
   // Si el padre marcó "guardar como mi puerta habitual" la vez anterior —
   // controla si handleSelectDoor sigue escribiendo en localStorage o no.
   const [saveDoorPreference, setSaveDoorPreference] = useState(false);
@@ -402,6 +408,7 @@ export function ParentDashboard() {
       const routeDoorId = res?.data?.door_id;
       if (routeDoorId && list.some(d => d.id === routeDoorId)) {
         setSelectedDoorId(routeDoorId);
+        setIsBusWithFixedDoor(true);
         return;
       }
     } catch (e) {
@@ -2017,7 +2024,7 @@ export function ParentDashboard() {
           </div>
         )}
 
-        {doors.length > 1 && (
+        {doors.length > 1 && !isBusWithFixedDoor && (
           <div className={`p-4 rounded-2xl border mt-3 transition-colors ${doorSelectionRequired ? 'bg-amber-500/20 border-amber-400/40' : 'bg-white/10 border-white/10'}`}>
             <div className="flex items-center gap-3 mb-3">
               <div className={`p-2 rounded-lg ${doorSelectionRequired ? 'bg-amber-500 text-white' : 'bg-white/20'}`}>
