@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
@@ -21,7 +21,7 @@ import {
   Clock, User, LogOut, ChevronRight, Bell, ShieldCheck,
   Eye, EyeOff, Map as MapIcon, Loader2, FileText, X, Send, UserCheck,
   UserPlus, QrCode, Share2, Trash2, MessageSquare, Car, CalendarDays, Search, Camera, Pencil,
-  HelpCircle, Check, Bus, Users, KeyRound, Instagram, Facebook
+  HelpCircle, Check, Bus, Users, KeyRound, Instagram, Facebook, Download, Copy, Printer
 } from 'lucide-react';
 
 // Hasta esta hora (local del dispositivo) no se deja anunciar la llegada,
@@ -925,6 +925,62 @@ export function ParentDashboard() {
     }
   };
 
+  // Respaldo cuando compartir falla (el plugin nativo de iOS no siempre
+  // abre la hoja de compartir — ver handleShareQR arriba): mismo patrón que
+  // ya usa GuardiansRegistry.tsx del lado del colegio, un modal para
+  // agrandar el QR y descargarlo/copiarlo/imprimirlo directo, sin depender
+  // de la Web Share API ni del plugin.
+  const downloadQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrPreviewRep) return;
+    const link = document.createElement('a');
+    link.download = `qr-reemplazo-${qrPreviewRep.name || 'autorizado'}`.trim().replace(/\s+/g, '-').toLowerCase() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  const copyQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !navigator.clipboard || !(window as any).ClipboardItem) {
+      alert(t('parent.replacement.qrCopyUnsupportedAlert'));
+      return;
+    }
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new (window as any).ClipboardItem({ 'image/png': blob })]);
+        setQrCopyFeedback(true);
+        setTimeout(() => setQrCopyFeedback(false), 2000);
+      } catch (e) {
+        console.error('Error copiando el QR:', e);
+        alert(t('parent.replacement.qrCopyErrorAlert'));
+      }
+    }, 'image/png');
+  };
+
+  const printQrCode = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrPreviewRep) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head><title>${t('parent.replacement.qrModalTitle')} — ${qrPreviewRep.name}</title></head>
+        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;">
+          <img src="${dataUrl}" style="width:320px;height:320px;" />
+          <p style="font-weight:bold;margin-top:16px;">${qrPreviewRep.name}</p>
+          <p style="color:#666;">${t('parent.replacement.qrModalTitle')}</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+  };
+
   const fetchSchoolSettings = async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
@@ -1516,6 +1572,9 @@ export function ParentDashboard() {
   // a bloquear la reentrada.
   const isAnnouncingRef = useRef(false);
   const isSharingQRRef = useRef(false);
+  const [qrPreviewRep, setQrPreviewRep] = useState<any | null>(null);
+  const [qrCopyFeedback, setQrCopyFeedback] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!isNative || !isBackgroundTrackingActive) return;
     const justEntered = isInside && !wasInsideRef.current;
@@ -2370,7 +2429,11 @@ export function ParentDashboard() {
             <div className="grid grid-cols-1 gap-4">
               {authorizedReplacements.map((rep: any, idx: number) => (
                 <div key={idx} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6">
-                  <div className="bg-slate-50 p-3 rounded-2xl">
+                  <button
+                    onClick={() => setQrPreviewRep(rep)}
+                    className="bg-slate-50 p-3 rounded-2xl shrink-0"
+                    title={t('parent.replacement.qrEnlargeHint')}
+                  >
                     <QRCodeSVG
                       value={JSON.stringify({
                         type: 'replacement_pickup',
@@ -2380,7 +2443,7 @@ export function ParentDashboard() {
                       })}
                       size={64}
                     />
-                  </div>
+                  </button>
                   {rep.photo_url && (
                     <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
                       <img src={rep.photo_url} alt={rep.name} className="w-full h-full object-cover" />
@@ -2410,6 +2473,62 @@ export function ParentDashboard() {
               ))}
             </div>
           </section>
+        )}
+
+        {/* Respaldo cuando "Enviar" (handleShareQR) falla — ver el comentario
+            junto a downloadQrCode arriba. */}
+        {qrPreviewRep && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+              <div className="p-8 text-center border-b border-slate-100 space-y-4">
+                <h3 className="text-lg font-black text-indigo-600 flex items-center justify-center gap-2">
+                  <ShieldCheck className="w-5 h-5" /> {t('parent.replacement.qrModalTitle')}
+                </h3>
+                <p className="text-sm text-slate-500 font-medium">{qrPreviewRep.name}</p>
+                <div className="flex justify-center bg-slate-50 rounded-2xl p-6">
+                  <QRCodeCanvas
+                    ref={qrCanvasRef}
+                    value={JSON.stringify({
+                      type: 'replacement_pickup',
+                      parent_id: profile.id,
+                      token: qrPreviewRep.token,
+                      replacement_name: qrPreviewRep.name,
+                    })}
+                    size={240}
+                  />
+                </div>
+              </div>
+              <div className="p-6 bg-slate-50 grid grid-cols-3 gap-3">
+                <button
+                  onClick={downloadQrCode}
+                  className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-indigo-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
+                >
+                  <Download className="w-4 h-4" /> {t('students.qrDownloadBtn')}
+                </button>
+                <button
+                  onClick={copyQrCode}
+                  className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-indigo-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-xs"
+                >
+                  {qrCopyFeedback ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  {qrCopyFeedback ? t('students.qrCopiedFeedback') : t('students.qrCopyBtn')}
+                </button>
+                <button
+                  onClick={printQrCode}
+                  className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-xs"
+                >
+                  <Printer className="w-4 h-4" /> {t('students.qrPrintBtn')}
+                </button>
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => setQrPreviewRep(null)}
+                  className="w-full text-center text-slate-400 font-bold text-sm hover:text-indigo-600 transition-colors py-2"
+                >
+                  {t('students.qrCloseBtn')}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Vehicle Section — visible en la tarjeta de verificación de la puerta */}

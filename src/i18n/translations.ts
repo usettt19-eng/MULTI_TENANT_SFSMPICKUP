@@ -1011,6 +1011,10 @@ export const translations = {
     'parent.pickup.announceErrorPrefix': 'Error announcing: ',
     'parent.replacement.shareTitle': 'Pickup Pass - Safe SmartPickUP',
     'parent.replacement.shareTextTemplate': 'Hi {name}, here is your QR code to pick up the children today.',
+    'parent.replacement.qrEnlargeHint': 'Tap to enlarge, download or print this code',
+    'parent.replacement.qrModalTitle': 'Authorized Replacement Code',
+    'parent.replacement.qrCopyUnsupportedAlert': 'Your browser does not support copying images. Use Download or Print instead.',
+    'parent.replacement.qrCopyErrorAlert': 'Could not copy the code. Use Download or Print instead.',
 
     // Shared QR pass page (SharedQRDisplay)
     'qr.invalidFormat': 'Invalid QR code format.',
@@ -2236,6 +2240,10 @@ export const translations = {
     'parent.pickup.announceErrorPrefix': 'Error al anunciar: ',
     'parent.replacement.shareTitle': 'Pase de Recogida - Safe SmartPickUP',
     'parent.replacement.shareTextTemplate': 'Hola {name}, aquí tienes tu código QR para recoger a los niños hoy.',
+    'parent.replacement.qrEnlargeHint': 'Toca para agrandar, descargar o imprimir este código',
+    'parent.replacement.qrModalTitle': 'Código de Reemplazo Autorizado',
+    'parent.replacement.qrCopyUnsupportedAlert': 'Tu navegador no permite copiar imágenes. Usa Descargar o Imprimir.',
+    'parent.replacement.qrCopyErrorAlert': 'No se pudo copiar el código. Usa Descargar o Imprimir.',
 
     // Shared QR pass page (SharedQRDisplay)
     'qr.invalidFormat': 'Formato de código QR no válido.',
