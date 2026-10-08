@@ -236,6 +236,13 @@ export function BusRoutesPanel() {
           .eq('id', editingRoute.id);
         if (updateError) throw updateError;
 
+        // El nombre de la ruta y el del perfil-contenedor (lo que se ve al
+        // loguearse como el bus) se setean juntos solo al crear la ruta
+        // (ver POST /api/bus-routes, user_metadata.first_name) — nunca se
+        // habían vuelto a sincronizar acá, así que renombrar una ruta ya
+        // existente dejaba el login mostrando el nombre viejo para siempre.
+        await supabase.from('profiles').update({ first_name: name, last_name: '' }).eq('id', editingRoute.profile_id);
+
         await supabase.from('parent_students').delete().eq('parent_id', editingRoute.profile_id);
         if (selectedStudents.length > 0) {
           await supabase.from('parent_students').insert(
