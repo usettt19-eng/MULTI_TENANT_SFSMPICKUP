@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Search, Filter, X,
   GraduationCap, BookOpen, Layers, Camera,
   Upload, Download, Trash2, Edit2, CheckCircle2, Image as ImageIcon, Footprints,
-  Printer, Maximize2, Copy
+  Printer, Maximize2, Copy, Phone, Mail
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -43,6 +43,11 @@ export function Students() {
   const [showQrPreviewModal, setShowQrPreviewModal] = useState(false);
   const [qrCopyFeedback, setQrCopyFeedback] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Padres/guardianes vinculados a este alumno — antes no había forma de
+  // verlo desde el perfil del alumno, había que buscar al revés desde el
+  // Directorio de Padres adivinando quién podía ser.
+  const [linkedParents, setLinkedParents] = useState<any[]>([]);
+  const [loadingLinkedParents, setLoadingLinkedParents] = useState(false);
 
   const csvRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -255,6 +260,22 @@ export function Students() {
     setCurrentStudentId(student.id);
     setIsEditing(true);
     setShowModal(true);
+    fetchLinkedParents(student.id);
+  };
+
+  const fetchLinkedParents = async (studentId: string) => {
+    setLoadingLinkedParents(true);
+    const { data, error } = await supabase
+      .from('parent_students')
+      .select('relationship, parent:parent_id(id, first_name, last_name, email, phone)')
+      .eq('student_id', studentId);
+    if (error) {
+      console.error('Error cargando los padres vinculados:', error);
+      setLinkedParents([]);
+    } else {
+      setLinkedParents(data || []);
+    }
+    setLoadingLinkedParents(false);
   };
 
   const handleDelete = async (student: any) => {
@@ -347,6 +368,7 @@ export function Students() {
     setShowQrPreviewModal(false);
     setQrCopyFeedback(false);
     setCurrentStudentId(null);
+    setLinkedParents([]);
     stopCamera();
   };
 
@@ -871,6 +893,48 @@ export function Students() {
                     })()}
                   </div>
                 </div>
+
+                {isEditing && (
+                  <div className="bg-surface-container-low rounded-[1.5rem] p-6 space-y-3">
+                    <span className="block font-bold text-primary text-sm flex items-center gap-2">
+                      <Users className="w-4 h-4" /> {t('students.linkedParentsTitle')}
+                    </span>
+                    {loadingLinkedParents ? (
+                      <p className="text-xs text-slate-400 font-medium italic">{t('students.linkedParentsLoading')}</p>
+                    ) : linkedParents.length === 0 ? (
+                      <p className="text-xs text-slate-400 font-medium italic">{t('students.linkedParentsEmpty')}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {linkedParents.map((link: any, idx: number) => (
+                          <div key={link.parent?.id || idx} className="bg-white rounded-2xl p-4 border border-slate-100">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-bold text-sm text-primary">
+                                {link.parent?.first_name} {link.parent?.last_name}
+                              </p>
+                              {link.relationship && (
+                                <span className="bg-primary/5 text-primary px-2 py-0.5 rounded-lg text-[8px] font-black uppercase">
+                                  {link.relationship}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                              {link.parent?.phone && (
+                                <span className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                                  <Phone className="w-3 h-3" /> {link.parent.phone}
+                                </span>
+                              )}
+                              {link.parent?.email && (
+                                <span className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                                  <Mail className="w-3 h-3" /> {link.parent.email}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="bg-surface-container-low rounded-[1.5rem] p-6 space-y-4">
                   <label className="flex items-start gap-3 cursor-pointer">
