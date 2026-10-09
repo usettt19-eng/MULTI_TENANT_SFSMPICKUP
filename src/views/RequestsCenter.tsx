@@ -5,7 +5,7 @@ import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   UserPlus, Check, X, Loader2, MessageSquare,
-  Clock, Shield, UserCheck, Trash2, Bell, Car
+  Clock, Shield, UserCheck, Trash2, Bell, Car, Send
 } from 'lucide-react';
 
 const CARPOOL_DAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -28,6 +28,13 @@ export function RequestsCenter() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [showOlder, setShowOlder] = useState(false);
+  // Responder a un "[MENSAJE]" del padre — antes esto era de una sola vía,
+  // sin forma de contestarle desde la app (ver ESTADO-DEL-PROYECTO.md). Se
+  // manda como una notificación normal, igual que "Reemplazo Autorizado"/
+  // "Rechazado" más abajo, para que le llegue a la campanita del padre.
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   const playArrivalSound = () => {
     try {
@@ -289,6 +296,39 @@ export function RequestsCenter() {
     }
   };
 
+  const handleSendReply = async (req: any) => {
+    if (!replyText.trim() || !req.parent_id) return;
+    setSendingReply(true);
+    try {
+      await supabase.from('notifications').insert({
+        user_id: req.parent_id,
+        title: t('requests.replyNotificationTitle'),
+        message: replyText.trim(),
+        type: 'info',
+        tenant_id: req.tenant_id,
+      });
+      // El mensaje original también se marca leído — responder ya cubre la
+      // intención de "me enteré y atendí esto", no tiene sentido que siga
+      // pendiente en el Inbox después de contestarle al padre.
+      await supabase.from('replacement_requests').update({ status: 'approved' }).eq('id', req.id);
+      await logActivity(
+        'SECURITY',
+        `RESPUESTA A MENSAJE: a ${req.parent?.first_name || 'un padre'} — "${replyText.trim()}"`,
+        'Recepcionista',
+        {},
+        req.parent?.tenant_id
+      );
+      setReplyingToId(null);
+      setReplyText('');
+      fetchRequests();
+    } catch (error) {
+      console.error('Error enviando la respuesta:', error);
+      alert(t('requests.replySendErrorAlert'));
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <TopNav title={t('requests.title')} subtitle={t('requests.subtitle')} />
@@ -466,14 +506,23 @@ export function RequestsCenter() {
                     {isPending && (
                       <div className="flex items-center gap-3 shrink-0">
                         {req.replacement_name?.startsWith('[MENSAJE]') ? (
-                          <button 
-                            onClick={() => handleProcessRequest(req, 'approved')}
-                            disabled={processingId === req.id}
-                            className="px-6 py-3 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 flex items-center gap-2"
-                          >
-                            {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            {t('requests.markAsRead')}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => { setReplyingToId(replyingToId === req.id ? null : req.id); setReplyText(''); }}
+                              disabled={processingId === req.id}
+                              className="px-6 py-3 bg-indigo-50 text-indigo-600 font-black text-xs rounded-xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2"
+                            >
+                              <Send className="w-4 h-4" /> {t('requests.replyBtn')}
+                            </button>
+                            <button
+                              onClick={() => handleProcessRequest(req, 'approved')}
+                              disabled={processingId === req.id}
+                              className="px-6 py-3 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 flex items-center gap-2"
+                            >
+                              {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              {t('requests.markAsRead')}
+                            </button>
+                          </>
                         ) : (
                           <>
                             <button
@@ -497,6 +546,27 @@ export function RequestsCenter() {
                       </div>
                     )}
                   </div>
+
+                  {replyingToId === req.id && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-start gap-3">
+                      <textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder={t('requests.replyPlaceholder')}
+                        rows={2}
+                        autoFocus
+                        className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none"
+                      />
+                      <button
+                        onClick={() => handleSendReply(req)}
+                        disabled={sendingReply || !replyText.trim()}
+                        className="px-5 py-3 bg-indigo-600 text-white font-black text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 disabled:opacity-50 shrink-0"
+                      >
+                        {sendingReply ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {t('requests.replySendBtn')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
