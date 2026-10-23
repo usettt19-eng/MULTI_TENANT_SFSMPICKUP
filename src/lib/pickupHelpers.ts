@@ -59,11 +59,24 @@ export async function resolveArrivalLabel(
 // antes de que el primer anuncio se resuelva. Se usa como guardia ANTES de
 // insertar, en cada lugar del código que crea un pickup_events nuevo.
 export async function hasActivePickupEvent(supabase: any, studentId: string): Promise<boolean> {
+  // Sin límite de fecha, un pickup que se quedó atascado en 'released' (ej.
+  // nadie tuvo el Dashboard abierto para que corriera el auto-completado de
+  // 20 min, caso real visto en un colegio con poco uso) bloquea en silencio
+  // CUALQUIER anuncio futuro para ese alumno, para siempre — el padre toca
+  // "Anunciar llegada" y no pasa nada, sin ningún error visible. Se limita
+  // la ventana a las últimas 24h corridas (no un límite de "hoy" por
+  // calendario, para no depender de la zona horaria del dispositivo ni
+  // comportarse raro justo después de medianoche): suficiente para seguir
+  // evitando el doble anuncio real (toque doble, geocerca repetida, QR
+  // escaneado dos veces), sin dejar que un pickup de hace semanas bloquee
+  // todo indefinidamente.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from('pickup_events')
     .select('id')
     .eq('student_id', studentId)
     .in('status', ['announced', 'in_queue', 'released'])
+    .gte('announced_at', since)
     .limit(1);
   return !!data && data.length > 0;
 }
