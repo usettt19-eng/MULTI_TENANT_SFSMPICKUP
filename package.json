@@ -16,9 +16,9 @@
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor-community/text-to-speech": "^8.0.2",
-    "@capacitor/android": "^8.5.0",
-    "@capacitor/core": "^8.5.0",
-    "@capacitor/ios": "^8.5.0",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@capacitor/local-notifications": "^8.3.0",
     "@capacitor/share": "^8.0.1",
     "@supabase/supabase-js": "^2.101.1",
@@ -27,7 +27,7 @@
     "@types/multer": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "face-api.js": "^0.22.2",
     "framer-motion": "^12.38.0",
     "html5-qrcode": "^2.3.8",
@@ -45,7 +45,7 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.0",
+    "@capacitor/cli": "^8.5.3",
     "@iflow-mcp/selfhosted-supabase-mcp": "^1.0.4",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
