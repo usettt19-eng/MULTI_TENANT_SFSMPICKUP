@@ -123,6 +123,13 @@ export interface ReplacementAuthorization {
   // Solo aplica si is_recurring es false: fecha en que se consumió el
   // único uso permitido.
   used_at?: string | null;
+  // Solo aplica si is_recurring es false. "yyyy-mm-dd" — el reemplazo solo
+  // es válido ESE día exacto (ej. "mi cuñada recoge solo el 5 de
+  // noviembre"), a diferencia de "de un solo uso" (válido cualquier día,
+  // hasta que alguien lo use una vez). No necesita revocarse a mano: deja
+  // de servir solo al pasar la fecha, igual que ya pasa con los días de la
+  // semana en modo recurrente.
+  specific_date?: string | null;
   // A cuáles hijos del padre aplica. null/undefined/[] (registros de antes
   // de este campo) se trata como "todos los hijos del padre", igual que el
   // comportamiento original — importa sobre todo para un padre con hijos en
@@ -144,6 +151,12 @@ export function isReplacementAuthorizedNow(r: ReplacementAuthorization): boolean
   if (isRecurring) {
     if (!Array.isArray(r.days_of_week) || r.days_of_week.length === 0) return true;
     return r.days_of_week.includes(new Date().getDay());
+  }
+  if (r.specific_date) {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return r.specific_date === todayLocal;
   }
   return !r.used_at;
 }

@@ -2285,6 +2285,16 @@ app.post(
       return fail(res, 400, 'Selecciona al menos un día de la semana, o márcalo como de un solo uso.');
     }
 
+    // Tercer modo (no recurrente): válido solo un día exacto en vez de "de
+    // un solo uso" sin fecha — ver isReplacementAuthorizedNow en
+    // pickupHelpers.ts. "yyyy-mm-dd" simple, sin hora/zona — ignorado si el
+    // llamante manda cualquier otra cosa en vez de dejar pasar basura a la
+    // columna `date`.
+    const rawSpecificDate = req.body?.specific_date;
+    const specificDate = typeof rawSpecificDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSpecificDate)
+      ? rawSpecificDate
+      : null;
+
     // El padre sólo puede solicitar por sí mismo; el personal, por cualquiera
     // de su colegio.
     const requestedFor = req.body?.parent_id ?? req.caller!.id;
@@ -2333,6 +2343,7 @@ app.post(
         tenant_id: req.caller!.tenantId,
         is_recurring: isRecurring,
         days_of_week: daysOfWeek,
+        specific_date: specificDate,
         student_ids: studentIds,
       })
       .select()

@@ -221,14 +221,25 @@ export function RequestsCenter() {
           // ESTADO-DEL-PROYECTO.md, 2026-10-01). Las recurrentes no se podan
           // acá: no tienen vencimiento y seguir activas es responsabilidad
           // del colegio, no de esta limpieza automática.
+          // Una de fecha específica ya pasada está tan muerta como una de un
+          // solo uso ya consumida — se poda igual, en vez de dejarla ahí
+          // creciendo el array para siempre.
+          const todayLocalStr = (() => {
+            const d = new Date();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          })();
           additionalData.replacements = additionalData.replacements.filter(
             (r: any) => !(r.is_recurring === false && r.used_at)
+              && !(r.is_recurring === false && r.specific_date && r.specific_date < todayLocalStr)
           );
 
           // Add the new replacement — recurrente = queda autorizado
           // indefinidamente pero solo los días marcados; de un solo uso
-          // (is_recurring false) se consume la primera vez que se escanea
-          // (ver isReplacementAuthorizedNow en lib/pickupHelpers.ts).
+          // (is_recurring false) se consume la primera vez que se escanea;
+          // de fecha específica (is_recurring false + specific_date), solo
+          // ese día exacto, sin necesidad de "consumirlo" (ver
+          // isReplacementAuthorizedNow en lib/pickupHelpers.ts).
           const newReplacement = {
             name: req.replacement_name,
             phone: req.replacement_phone,
@@ -237,6 +248,7 @@ export function RequestsCenter() {
             created_at: new Date().toISOString(),
             is_recurring: req.is_recurring !== false,
             days_of_week: req.is_recurring !== false ? (req.days_of_week ?? null) : null,
+            specific_date: req.is_recurring === false ? (req.specific_date ?? null) : null,
             used_at: null,
             // null/ausente = todos los hijos (solicitudes de antes de este
             // campo) — ver ESTADO-DEL-PROYECTO.md sobre por qué esto importa
@@ -479,7 +491,11 @@ export function RequestsCenter() {
                               })()}
                             </p>
                             <p className="text-[10px] font-bold uppercase tracking-widest mt-1">
-                              {req.is_recurring === false ? (
+                              {req.is_recurring === false && req.specific_date ? (
+                                <span className="text-amber-600">
+                                  {t('requests.specificDateLabel')} {new Date(`${req.specific_date}T00:00:00`).toLocaleDateString()}
+                                </span>
+                              ) : req.is_recurring === false ? (
                                 <span className="text-amber-600">{t('requests.oneTimeUse')}</span>
                               ) : Array.isArray(req.days_of_week) && req.days_of_week.length > 0 ? (
                                 <span className="text-indigo-600">

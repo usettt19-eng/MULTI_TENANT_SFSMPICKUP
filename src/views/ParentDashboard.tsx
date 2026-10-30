@@ -159,6 +159,10 @@ export function ParentDashboard() {
   // consume al escanearse en la puerta.
   const [isReplacementRecurring, setIsReplacementRecurring] = useState(true);
   const [replacementDays, setReplacementDays] = useState<number[]>([]);
+  // Solo aplica cuando !isReplacementRecurring — "" = de un solo uso (sin
+  // fecha, válido hasta que alguien lo use); con fecha = válido solo ese
+  // día exacto. Ver isReplacementAuthorizedNow en lib/pickupHelpers.ts.
+  const [replacementSpecificDate, setReplacementSpecificDate] = useState('');
   // A cuáles hijos aplica — importa sobre todo para un padre con hijos en
   // dos colegios (parent_school_access): sin elegir, el permiso quedaba
   // válido para TODOS sus hijos, incluso los del otro colegio.
@@ -780,6 +784,7 @@ export function ParentDashboard() {
           tenant_id: profile?.tenant_id,
           is_recurring: isReplacementRecurring,
           days_of_week: isReplacementRecurring ? replacementDays : null,
+          specific_date: !isReplacementRecurring && replacementSpecificDate ? replacementSpecificDate : null,
           student_ids: replacementStudentIds,
         })
       });
@@ -806,6 +811,7 @@ export function ParentDashboard() {
       setReplacementPhotoPreview(null);
       setIsReplacementRecurring(true);
       setReplacementDays([]);
+      setReplacementSpecificDate('');
       setReplacementStudentIds([]);
     } catch (err: any) {
       console.error(err);
@@ -2454,7 +2460,11 @@ export function ParentDashboard() {
                     <p className="text-[10px] text-slate-400 font-bold uppercase">{rep.phone}</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-emerald-100">{t('parent.replacement.activeBadge')}</span>
-                      {rep.is_recurring === false ? (
+                      {rep.is_recurring === false && rep.specific_date ? (
+                        <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-amber-100">
+                          {new Date(`${rep.specific_date}T00:00:00`).toLocaleDateString()}
+                        </span>
+                      ) : rep.is_recurring === false ? (
                         <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-amber-100">{t('parent.replacement.oneTimeOption')}</span>
                       ) : Array.isArray(rep.days_of_week) && rep.days_of_week.length > 0 ? (
                         <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-indigo-100">
@@ -2978,6 +2988,20 @@ export function ParentDashboard() {
                         {t('parent.replacement.oneTimeOption')}
                       </button>
                     </div>
+                    {!isReplacementRecurring && (
+                      <div className="mb-3">
+                        <input
+                          type="date"
+                          value={replacementSpecificDate}
+                          min={(() => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()}
+                          onChange={(e) => setReplacementSpecificDate(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                        />
+                        <p className="text-[10px] text-slate-400 font-medium mt-1.5 ml-1">
+                          {t('parent.replacement.specificDateFieldHelp')}
+                        </p>
+                      </div>
+                    )}
                     {isReplacementRecurring ? (
                       <>
                         <div className="flex flex-wrap gap-2">
@@ -3002,7 +3026,7 @@ export function ParentDashboard() {
                       </>
                     ) : (
                       <p className="text-[10px] text-slate-400 font-medium ml-1">
-                        {t('parent.replacement.oneTimeHelp')}
+                        {replacementSpecificDate ? t('parent.replacement.specificDateHelp') : t('parent.replacement.oneTimeHelp')}
                       </p>
                     )}
                   </div>
