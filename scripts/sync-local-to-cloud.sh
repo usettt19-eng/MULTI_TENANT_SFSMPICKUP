@@ -50,14 +50,29 @@ echo "== 2/4: volcando datos del local =="
 # corre DENTRO del contenedor de la base (docker exec), igual que ya se
 # hacía con psql en las sesiones de mantenimiento. El stdout del exec sí
 # llega normal al archivo del host.
+#
+# SIN --disable-triggers: el rol "postgres" de la nube no es dueño de
+# auth.users/identities (son de supabase_auth_admin) ni puede desactivar
+# los disparadores internos de llaves foráneas uno por uno -- el primer
+# intento falló con "must be owner of table users" / "permission denied:
+# ... is a system trigger" en CADA tabla, y dejó auth.users/identities en
+# 0 filas (el trigger on_auth_user_created se disparó sin poder
+# desactivarse, y falló porque tenants todavía no estaba cargado en ese
+# punto del dump). Se desactivan TODOS los disparadores de una sola vez a
+# nivel de sesión más abajo (session_replication_role), que sí está
+# permitido sin ser dueño de nada.
 docker exec "$LOCAL_DB_CONTAINER" pg_dump -U postgres -d postgres \
-  --data-only --no-owner --no-acl --disable-triggers \
+  --data-only --no-owner --no-acl \
   -t 'auth.users' -t 'auth.identities' \
   -t 'public.*' \
   > /tmp/local_to_cloud.dump
 
-echo "== 3/4: cargando en la nube =="
-psql "$CLOUD_URL" -f /tmp/local_to_cloud.dump
+echo "== 3/4: cargando en la nube (disparadores desactivados a nivel de sesión) =="
+{
+  echo "SET session_replication_role = replica;"
+  cat /tmp/local_to_cloud.dump
+  echo "SET session_replication_role = DEFAULT;"
+} | psql "$CLOUD_URL"
 
 echo "== 4/4: arreglando columnas de token NULL en auth.users =="
 # Lección ya aprendida la vez pasada (nube->local, 2026-10-01): pg_dump
