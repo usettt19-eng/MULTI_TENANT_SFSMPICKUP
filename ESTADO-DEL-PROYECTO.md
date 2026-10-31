@@ -3617,6 +3617,79 @@ no por adivinar:
    token, y notifica tanto al padre (mismo mensaje que una aprobación
    manual) como a todo el staff `role='admin'` del colegio.
 
+### Homologación completa nube ← local (2026-10-31)
+
+Desde el corte real del 2026-10-01, el local (respaldo self-hosted,
+`backup.safesmartpickup.com`) venía siendo el que manda, pero la nube
+(proyecto Supabase `fvzhfzogigewsvcyopel`) solo se reconciliaba a mano
+de vez en cuando (ver "Incidente de red en la nube..." más arriba) —
+quedó desactualizada. Se pidió homologarla por completo: la nube debía
+terminar **idéntica** al local, no una fusión.
+
+**Antes de borrar nada**: se compararon conteos de fila tabla por tabla
+entre los dos lados. En casi todas el local tenía más (lógico, es el
+que ha estado creciendo), excepto dos con una fila de más en la nube:
+- `exit_doors`: una puerta vieja de TCS Albrook ("MAIN DOOR (WALKING /
+  BUS PICKUP)") que el colegio renombró/reemplazó en el local a
+  propósito — confirmado con el colegio, segura de perder.
+- `parent_students`: 5 vínculos de más en la nube (no solo 1 — la
+  diferencia neta de conteo escondía 5 vínculos que le faltaban al
+  local contra 4 que el local tenía de más y la nube no). Para
+  encontrarlos sin pasar 976 filas por el chat, se generó una consulta
+  con los 976 pares de la nube embebidos como `VALUES` y se corrió
+  contra el local para encontrar el `LEFT JOIN ... WHERE ps.parent_id
+  IS NULL`. Resultado: 4 eran del perfil fantasma "bus 1" de The Casco
+  School que ya se había eliminado del local (confirmado, basura vieja
+  de antes del borrado) y 1 era un vínculo nunca real (alumna que nunca
+  usó ese bus). Ninguno valía la pena conservar — vía libre para
+  reemplazar todo.
+
+**Script**: `scripts/sync-local-to-cloud.sh` — `TRUNCATE` de
+`auth.users`/`auth.identities` + las 40 tablas de `public.*` en la
+nube, `pg_dump --data-only` del local, restore directo a la nube. La
+contraseña de la base de la nube se pasa por variable de entorno
+(`CLOUD_DB_PASSWORD=...`), nunca queda escrita en el archivo que sí
+vive en git. Mismo patrón ya documentado arriba (`pg_dump --data-only
+-t auth.users -t auth.identities` + restore) que se usó la vez pasada,
+pero esta vez en la dirección contraria (local → nube) y con dos
+problemas nuevos encontrados y corregidos sobre la marcha:
+
+1. `active_critical_medications` es una **vista** sobre
+   `medication_schedule`, no una tabla — `TRUNCATE` la rechaza. Se
+   sacó de la lista (se vacía sola al truncar la tabla real debajo).
+2. `localhost:5432` en el servidor de respaldo habla con **Supavisor**
+   (el pooler), no directo con Postgres — `pg_dump` ahí daba `FATAL:
+   no tenant identifier provided`. Se corrige corriendo `pg_dump`
+   **dentro** del contenedor (`docker exec sfsmpickup-db pg_dump ...`),
+   igual que ya se hacía con `psql` en las sesiones de mantenimiento.
+3. El rol `postgres` de la nube **no es superusuario real** — no es
+   dueño de `auth.users`/`auth.identities` (son de
+   `supabase_auth_admin`) ni puede desactivar los disparadores
+   internos de llave foránea (`RI_ConstraintTrigger_*`) tabla por
+   tabla. El primer intento con `pg_dump --disable-triggers` falló en
+   **todas** las tablas (`must be owner of table ...` / `permission
+   denied: ... is a system trigger`) y dejó `auth.users`/`identities`
+   en 0 filas — el trigger `on_auth_user_created` se disparó sin poder
+   desactivarse y falló porque `tenants` todavía no estaba cargado en
+   ese punto del dump (la mayoría de `public.*` sí cargó bien pese al
+   ruido de errores). **Fix real**: en vez de `--disable-triggers`, se
+   envuelve toda la carga en `SET session_replication_role = replica;`
+   / `... DEFAULT;` — desactiva TODOS los disparadores de una sola vez
+   a nivel de sesión, sin necesitar ser dueño de nada. El rol
+   `postgres` de Supabase sí tiene permiso para ese `SET` puntual.
+4. Igual que la vez pasada (nube→local, 2026-10-01): las columnas de
+   token de `auth.users` (`confirmation_token`, `recovery_token`,
+   etc.) quedan en `NULL` tras el restore en vez de `''`, y GoTrue no
+   puede escanear `NULL` ahí. El script ya incluye el `UPDATE ...
+   COALESCE(..., '')` al final, sin esperar a que se vuelva a
+   descubrir con un 500 real.
+
+**Resultado verificado**: las 31 tablas (`auth.users`/`identities` +
+29 de `public`) quedaron con conteos **exactamente iguales** en los
+dos lados (841 usuarios, 719 identities, 842 profiles, 5765
+pickup_events, 32294 notifications, etc.) — homologación completa
+confirmada, no solo "aproximada".
+
 ---
 
 ## 4. Modelo de permisos (resumen)
