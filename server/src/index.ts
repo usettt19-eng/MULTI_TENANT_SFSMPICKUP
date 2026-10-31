@@ -3474,10 +3474,151 @@ setInterval(() => {
   autoReleaseAfterHours().catch((err) => console.error('Error en autoReleaseAfterHours:', err));
 }, 60_000);
 
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Auto-aprobación de solicitudes de reemplazo: NO autoriza la recogida en
+ * sí — solo genera el QR que la persona debe presentar en recepción, donde
+ * se valida en persona igual que cualquier otro reemplazo (mismo criterio
+ * que "Autorización Automática por Horario" arriba: el riesgo real está en
+ * la recogida física, no en que exista un comprobante). Pensado para
+ * colegios donde recepción se queda sin revisar el Inbox y las solicitudes
+ * quedan pendientes sin responder — reporte real, 2026-10-31. Apagado por
+ * defecto (school_settings.auto_approve_replacements_enabled).
+ */
+async function autoApproveReplacementRequests() {
+  const {data: settings, error: settingsError} = await admin
+    .from('school_settings')
+    .select('tenant_id, auto_approve_replacements_after_minutes')
+    .eq('auto_approve_replacements_enabled', true);
+
+  if (settingsError) {
+    console.error('Error buscando colegios con auto-aprobación de reemplazos:', settingsError);
+    return;
+  }
+  if (!settings || settings.length === 0) return;
+
+  for (const setting of settings as any[]) {
+    const minutes = Number(setting.auto_approve_replacements_after_minutes) || 15;
+    const cutoffIso = new Date(Date.now() - minutes * 60_000).toISOString();
+
+    // El "[MENSAJE]" (texto libre del padre) reusa esta misma tabla solo
+    // para aparecer en el Inbox — no es una solicitud de reemplazo real, no
+    // debe auto-aprobarse como si lo fuera (ver RequestsCenter.tsx).
+    const {data: pending, error: pendingError} = await admin
+      .from('replacement_requests')
+      .select('id, parent_id, replacement_name, replacement_phone, photo_url, is_recurring, days_of_week, specific_date, student_ids, tenant_id')
+      .eq('tenant_id', setting.tenant_id)
+      .eq('status', 'pending')
+      .not('replacement_name', 'ilike', '[MENSAJE]%')
+      .lt('created_at', cutoffIso);
+
+    if (pendingError) {
+      console.error(`Error buscando reemplazos pendientes del colegio ${setting.tenant_id}:`, pendingError);
+      continue;
+    }
+    if (!pending || pending.length === 0) continue;
+
+    for (const req of pending as any[]) {
+      const {data: parentProfile} = await admin
+        .from('profiles')
+        .select('additional_tutor_name, first_name, last_name')
+        .eq('id', req.parent_id)
+        .maybeSingle();
+      if (!parentProfile) continue;
+
+      let additionalData: any = {};
+      try {
+        additionalData = JSON.parse(parentProfile.additional_tutor_name || '{}');
+      } catch {
+        additionalData = {is_staff: false, replacements: []};
+      }
+      if (!additionalData.replacements) additionalData.replacements = [];
+
+      // Misma poda que RequestsCenter.tsx al aprobar a mano: de un solo uso
+      // ya consumido, o de fecha específica ya pasada.
+      const todayLocalStr = todayStr();
+      additionalData.replacements = additionalData.replacements.filter(
+        (r: any) => !(r.is_recurring === false && r.used_at)
+          && !(r.is_recurring === false && r.specific_date && r.specific_date < todayLocalStr),
+      );
+
+      const newReplacement = {
+        name: req.replacement_name,
+        phone: req.replacement_phone,
+        photo_url: req.photo_url ?? null,
+        token: randomUUID().slice(0, 8),
+        created_at: new Date().toISOString(),
+        is_recurring: req.is_recurring !== false,
+        days_of_week: req.is_recurring !== false ? (req.days_of_week ?? null) : null,
+        specific_date: req.is_recurring === false ? (req.specific_date ?? null) : null,
+        used_at: null,
+        student_ids: req.student_ids ?? null,
+      };
+      additionalData.replacements.push(newReplacement);
+
+      const {error: profileError} = await admin
+        .from('profiles')
+        .update({additional_tutor_name: JSON.stringify(additionalData)})
+        .eq('id', req.parent_id);
+      if (profileError) {
+        console.error(`Error auto-aprobando reemplazo ${req.id}:`, profileError);
+        continue;
+      }
+
+      await admin
+        .from('replacement_requests')
+        .update({status: 'approved'})
+        .eq('id', req.id)
+        .eq('status', 'pending');
+
+      const parentName = `${parentProfile.first_name ?? ''} ${parentProfile.last_name ?? ''}`.trim() || 'un padre';
+
+      await admin.from('notifications').insert({
+        user_id: req.parent_id,
+        title: 'Reemplazo Autorizado',
+        message: `Tu solicitud para ${req.replacement_name} ha sido aprobada. El código QR ya está disponible en tu panel.`,
+        type: 'success',
+        tenant_id: req.tenant_id,
+      });
+
+      const {data: adminStaff} = await admin
+        .from('profiles')
+        .select('id')
+        .eq('tenant_id', req.tenant_id)
+        .eq('role', 'admin');
+      if (adminStaff && adminStaff.length > 0) {
+        await admin.from('notifications').insert(
+          adminStaff.map((s: any) => ({
+            user_id: s.id,
+            title: 'QR autorizado automáticamente',
+            message: `Recepción no respondió en ${minutes} min — se autorizó solo el QR de ${req.replacement_name} para ${parentName}. Debe presentarlo en recepción para validarlo.`,
+            type: 'info',
+            tenant_id: req.tenant_id,
+          })),
+        );
+      }
+
+      await admin.from('audit_logs').insert({
+        event_type: 'SECURITY',
+        description: `REEMPLAZO AUTORIZADO AUTOMÁTICAMENTE: ${minutes} min sin respuesta de recepción para la solicitud de ${parentName} (${req.replacement_name}).`,
+        actor_name: 'Sistema',
+        metadata: {auto_approved: true, replacement_request_id: req.id},
+        tenant_id: req.tenant_id,
+      });
+    }
+  }
+}
+
+setInterval(() => {
+  autoApproveReplacementRequests().catch((err) => console.error('Error en autoApproveReplacementRequests:', err));
+}, 60_000);
+
 app.use('/api', (_req, res) => fail(res, 404, 'Endpoint no encontrado.'));
 
 app.listen(PORT, () => {
   console.log(`API de Safe Smart Pickup escuchando en el puerto ${PORT}`);
   autoCompleteStalePickups().catch((err) => console.error('Error en autoCompleteStalePickups:', err));
   autoReleaseAfterHours().catch((err) => console.error('Error en autoReleaseAfterHours:', err));
+  autoApproveReplacementRequests().catch((err) => console.error('Error en autoApproveReplacementRequests:', err));
 });

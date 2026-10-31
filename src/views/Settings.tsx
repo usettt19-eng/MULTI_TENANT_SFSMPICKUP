@@ -6,7 +6,7 @@ import { TopNav } from '../components/TopNav';
 import {
   Settings as SettingsIcon, MapPin, Building, Shield,
   Map as MapIcon, Save, Navigation, RefreshCcw,
-  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users, BellRing, Volume2
+  Loader2, CheckCircle2, Globe, Ruler, DoorOpen, CalendarClock, Users, BellRing, Volume2, QrCode
 } from 'lucide-react';
 import { SchoolStructureSettings } from '../components/settings/SchoolStructureSettings';
 import { DismissalScheduleSettings } from '../components/settings/DismissalScheduleSettings';
@@ -31,6 +31,8 @@ export function Settings() {
     emergency_lockdown_enabled: true,
     auto_release_enabled: false,
     auto_release_after_time: '16:30',
+    auto_approve_replacements_enabled: false,
+    auto_approve_replacements_after_minutes: 15,
     voice_announcement_language: 'es' as 'es' | 'en' | 'both',
   });
   const [defaultLanguage, setDefaultLanguage] = useState<'es' | 'en'>('es');
@@ -450,6 +452,62 @@ export function Settings() {
                       <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
                         Se revisa cada minuto — no hace falta que nadie esté con la app abierta para que
                         funcione.
+                      </p>
+                    </div>
+                  )}
+                </section>
+
+                {/* Auto-aprobación de reemplazos */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <QrCode className="w-5 h-5 text-indigo-500" /> Auto-aprobación de Reemplazos
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    No autoriza la recogida en sí — solo genera el código QR que la persona debe presentar
+                    en recepción, donde se valida en persona igual que cualquier otro reemplazo. Pensado
+                    para cuando una solicitud de reemplazo se queda pendiente sin que nadie del colegio la
+                    responda.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, auto_approve_replacements_enabled: true })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        settings.auto_approve_replacements_enabled
+                          ? 'bg-indigo-600 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Activado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, auto_approve_replacements_enabled: false })}
+                      className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
+                        !settings.auto_approve_replacements_enabled
+                          ? 'bg-rose-600 text-white shadow-lg'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      Desactivado
+                    </button>
+                  </div>
+                  {settings.auto_approve_replacements_enabled && (
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                        Auto-aprobar si nadie responde en (minutos)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={settings.auto_approve_replacements_after_minutes}
+                        onChange={(e) => setSettings({ ...settings, auto_approve_replacements_after_minutes: parseInt(e.target.value, 10) || 15 })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                        Se revisa cada minuto. Recepción recibe una notificación avisando que el QR se
+                        generó solo, para que lo valide cuando la persona lo presente.
                       </p>
                     </div>
                   )}
