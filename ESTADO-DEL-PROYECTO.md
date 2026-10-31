@@ -3528,6 +3528,95 @@ tabla antes de desplegar — PostgREST no avisa en el build, solo falla
 en producción, y el código de esta app rara vez revisa `error` en estas
 consultas de lectura.
 
+### `npm audit`: 4 vulnerabilidades críticas, 2 en el backend real desplegado (2026-10-23/31)
+
+A raíz de la pregunta "¿cómo está esta app con el tema de vulnerabilidades?"
+se corrió `npm audit` en los dos árboles de dependencias (la raíz, y
+`server/` aparte — tiene su propio `package-lock.json`, es el que de
+verdad corre como `sfsmpickup-api`). Encontradas 4 críticas, 9 altas.
+Las dos relevantes:
+
+- **`@capacitor/android`/`@capacitor/ios` 8.5.0, CVSS 9.3**: contenido
+  remoto podía cargarse como si fuera del propio origen de la app, por
+  una ruta interna del proxy HTTP — afecta directo a las apps nativas de
+  iOS/Android (`GHSA-rvm3-566m-v7fv`). Arreglado subiendo a 8.5.3 (mismo
+  rango `^8.5.0` ya declarado).
+- **`proxy-addr` (spoofing de IP), crítica en AMBOS árboles** — incluido
+  el de `server/`, el backend real. Arreglada con un patch de `express`
+  (raíz) y `npm audit fix` sin cambios de rango (`server/`).
+
+Quedaron 6 hallazgos sin crítica, todos detrás de saltos de versión
+grandes en `@capacitor/cli` (herramienta de build, no se envía a los
+usuarios) o `face-api.js` (ya documentado como sin mantenimiento desde
+2020 más abajo en este mismo §3) — no se forzó el breaking change por
+severidad baja/moderada sin exposición real.
+
+**Importante, todavía sin resolver**: el fix de Capacitor vive en
+código nativo compilado dentro del `.apk`/`.ipa` — un `docker compose
+build` del sitio no lo activa. Se une al pendiente de la build de
+Android (`textZoom`, 2026-10-07) y de iOS (sin build nueva desde
+31-ago). Dependabot está **desactivado** en el repo de GitHub —
+ninguno de estos hallazgos se estaba avisando solo, hubo que correr
+`npm audit` a mano.
+
+### Reportes reales durante salida: pickup atascado bloqueando anuncios futuros, y bug de doble-toque al compartir (2026-10-23/31)
+
+Dos reportes en vivo de un padre probando en TCS Albrook/"Colegio
+Demo" (The Casco School), ambos con causa real encontrada por código,
+no por adivinar:
+
+1. **"El anuncio no avanzó"**: tres `pickup_events` de otro padre
+   (srubend@gmail.com) habían quedado en `released` desde el 8-oct, sin
+   `completed_at`, 15 días — nadie tuvo el Dashboard abierto para que
+   corriera el auto-completado de 20 min del lado del cliente.
+   `hasActivePickupEvent()` (guardia contra anuncios duplicados) no
+   tenía límite de fecha, así que esas tres filas viejas bloqueaban en
+   silencio cualquier anuncio nuevo para esos mismos alumnos, sin
+   ningún error visible — el botón "no hacía nada". Desatascado a mano
+   con un `UPDATE` puntual, y arreglado de raíz: la función ahora solo
+   cuenta como "activo" lo de las últimas 24h.
+2. **"Could not open the share sheet" al compartir el QR de un
+   reemplazo**: se investigó primero la teoría de una build de iOS
+   vieja sin el plugin de compartir (descartada — el historial de
+   GitHub Actions mostró que el plugin ya se había subido a TestFlight
+   el 21-ago, antes de la publicación pública del 9-sep). La consola
+   real de Safari conectada al iPhone (Desarrollo → dispositivo → la
+   pestaña de la app; el teléfono tiene que estar en Safari real, no en
+   la app instalada, que no es "inspeccionable" desde iOS 16.4+ si no
+   se activa `isInspectable` en el código nativo) mostró el error real:
+   `InvalidStateError: share() is already in progress` — un doble toque
+   sobre el botón de compartir chocaba con la llamada anterior.
+   Arreglado con un guard de reentrada. De paso, se agregó un respaldo
+   permanente: el QR de "Reemplazos Autorizados" ahora se puede tocar
+   para agrandarlo y descargar/copiar/imprimir, sin depender de que el
+   share nativo funcione.
+
+### Dos pedidos nuevos para "Solicitar Reemplazo": fecha específica, y auto-aprobación si recepción no responde (2026-10-31)
+
+1. **Fecha específica**: antes solo existían "de un solo uso" (válido
+   hasta que alguien lo use, sin fecha) o "recurrente" (días de la
+   semana, para siempre) — ningún modo cubría "mi cuñada recoge solo el
+   5 de noviembre". Se agregó `replacement_requests.specific_date`
+   (campo opcional dentro del modo "de un solo uso" en el formulario
+   del padre); `isReplacementAuthorizedNow()` en `pickupHelpers.ts`
+   ahora revisa la fecha local contra ese valor. Deja de servir solo al
+   pasar la fecha, sin que nadie tenga que revocarlo a mano.
+2. **Auto-aprobación si nadie responde**: reporte real con captura —
+   varias solicitudes "APPROVE AND GENERATE QR" quedaban pendientes en
+   el Inbox sin que nadie las tocara. Aclarado con el colegio: esto
+   **no** autoriza la recogida en sí, solo genera el QR que la persona
+   igual tiene que presentar en recepción para que se valide en
+   persona — mismo modelo de riesgo que "Autorización Automática por
+   Horario", que ya existía para pickups. Se agregó
+   `school_settings.auto_approve_replacements_enabled`/
+   `_after_minutes` (apagado por defecto, interruptor nuevo en
+   Ajustes), y un job en el backend (`autoApproveReplacementRequests`,
+   mismo patrón `setInterval` de 60s que `autoCompleteStalePickups`/
+   `autoReleaseAfterHours` — no depende de que nadie tenga la app
+   abierta) que aprueba solicitudes pendientes vencidas, genera el
+   token, y notifica tanto al padre (mismo mensaje que una aprobación
+   manual) como a todo el staff `role='admin'` del colegio.
+
 ---
 
 ## 4. Modelo de permisos (resumen)
@@ -3982,10 +4071,17 @@ relevantes de cara a producción:
   frente al manual en español~~ **Resuelto 2026-09-28**: se tradujeron y
   agregaron "Autonomous Exit at Check-In" e "Your screen's language" —
   ver §3.
-- **Disparar `android-deploy.yml`** para publicar el fix de zoom de texto
-  (`MainActivity.java`, ver §3 2026-10-07) — pendiente de decidir si corre
-  contra `claude/tenant-isolation-rls` directo o si primero se mergea esa
-  rama a `main` (le faltan +20 commits).
+- ~~Disparar `android-deploy.yml` para publicar el fix de zoom de texto~~
+  **Resuelto 2026-10-08**: build #16 corrida contra
+  `claude/tenant-isolation-rls` directo (track `production`), sin
+  mergear a `main` — confirmado que no importa, la app nativa carga el
+  sitio en vivo, no empaqueta código web.
+- **Build nativa nueva de Android Y de iOS** para el fix crítico de
+  `@capacitor/android`/`@capacitor/ios` (ver §3, 2026-10-23/31,
+  `npm audit`) — el parche vive en código nativo, no llega a los
+  teléfonos con un deploy del sitio. Android ya tuvo una build el
+  8-oct (con el fix de zoom, antes de este parche) — iOS no tiene build
+  nueva desde el 31-ago. Ambas pendientes de disparar.
 - **Decisión operativa de TCS Albrook**: ¿recepción debe seguir liberando
   pickups directo desde "En Tránsito" para secciones con maestro asignado,
   o darle prioridad al maestro primero? (ver "Investigación: Ingrid

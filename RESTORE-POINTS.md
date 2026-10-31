@@ -24,6 +24,65 @@ docker compose up -d
 
 ---
 
+## 2026-10-31 — `959a58e08c3aff7a3d6ac80de36fbaf5259f0266`
+
+**Fix de vulnerabilidades críticas (npm audit), bug del doble-toque al compartir, fecha específica para reemplazos, y auto-aprobación de reemplazos sin respuesta**
+
+Desplegado y verificado contra el respaldo local (`backup.safesmartpickup.com`),
+después de que terminara la salida del día. Requiere correr dos migraciones
+antes del deploy — ver `sql/add_replacement_specific_date.sql` y
+`sql/add_auto_approve_replacements.sql` (ambas ya aplicadas también en el
+proyecto Supabase de la nube, `fvzhfzogigewsvcyopel`, vía MCP). Incluye todo
+lo del punto anterior (2026-10-07) más:
+
+- **Fix de seguridad**: `npm audit` encontró 4 vulnerabilidades críticas —
+  la más relevante, `@capacitor/android`/`@capacitor/ios` 8.5.0 (CVSS 9.3,
+  contenido remoto podía cargarse como si fuera del propio origen de la
+  app vía una ruta interna del proxy HTTP), y `proxy-addr` (spoofing de
+  IP) en **ambos** árboles de dependencias, incluido el del backend real
+  desplegado (`server/`). Arregladas con bumps de patch
+  (`@capacitor/*` → 8.5.3, `express` → 4.22.3 en la raíz, `npm audit fix`
+  en `server/`) — quedan en 0 críticas. **Pendiente**: el fix de Capacitor
+  vive en código nativo, necesita una build nueva de Android/iOS para
+  llegar a los teléfonos reales (no basta el deploy del sitio).
+- **Fix**: un pickup atascado en `released` por 15 días (nadie tuvo el
+  Dashboard abierto para que corriera el auto-completado de 20 min)
+  bloqueaba en silencio **todo** anuncio futuro para ese alumno —
+  `hasActivePickupEvent()` no tenía límite de fecha. Ahora solo cuenta
+  como "activo" si es de las últimas 24h.
+- **Fix**: `Share.share()`/`navigator.share()` tiraba `InvalidStateError`
+  si se llamaba dos veces mientras la hoja de compartir anterior seguía
+  abierta (confirmado en consola real de iPhone) — un doble toque sobre
+  "Enviar" en el QR de reemplazo mostraba el error genérico "Could not
+  open the share sheet". Ahora un guard evita la doble llamada.
+- **Agregado**: el QR chico de "Reemplazos Autorizados" en la app del
+  padre ahora se puede tocar para agrandarlo y descargar/copiar/imprimir
+  directo — mismo patrón que ya existía del lado del colegio en
+  Guardianes — para cuando compartir falla por cualquier otra razón.
+- **Agregado**: ícono de ojo para mostrar/ocultar contraseña en Login y
+  en Crear/Restablecer contraseña.
+- **Agregado**: el perfil de un alumno (`Students.tsx`) ahora muestra una
+  sección de "Padres/Guardianes Vinculados" (nombre, relación, teléfono,
+  correo) — antes no había forma de verlo desde ahí.
+- **Agregado**: botón "Responder" en las tarjetas `[MENSAJE]` del Inbox —
+  antes eran de una sola vía, ahora la respuesta le llega al padre como
+  notificación normal.
+- **Agregado**: tercer modo al solicitar un reemplazo — "fecha
+  específica" (`replacement_requests.specific_date`), válido solo ese día
+  exacto en vez de "de un solo uso" sin fecha o recurrente por días de la
+  semana. Deja de servir solo al pasar la fecha, sin revocar a mano.
+- **Agregado**: auto-aprobación opcional de solicitudes de reemplazo
+  (`school_settings.auto_approve_replacements_enabled`/
+  `_after_minutes`, apagado por defecto, interruptor en Ajustes) —
+  después de N minutos sin respuesta de recepción, genera el QR solo y
+  avisa a todo el staff `role='admin'` del colegio. No autoriza la
+  recogida en sí, solo el comprobante — recepción sigue validando en
+  persona. Mismo patrón de job en backend (`setInterval` cada 60s,
+  independiente de que alguien tenga la app abierta) que ya usaban
+  `autoCompleteStalePickups`/`autoReleaseAfterHours`.
+
+---
+
 ## 2026-10-07 — `39732fdfabe48c15b43081b99b48295b0c155e97`
 
 **Fotos de Students.tsx sin comprimir, roster de Salida Autónoma en cada poll, Mi Salón sin sonido, zoom de Android, y QR de reemplazo visible/ampliable para el colegio**
