@@ -14,14 +14,21 @@ set -euo pipefail
 
 : "${CLOUD_DB_PASSWORD:?Falta CLOUD_DB_PASSWORD. Corre: CLOUD_DB_PASSWORD='...' bash $0}"
 
+# Nombre real del contenedor de Postgres en este stack (confirmado: el
+# mismo que ya se usa para psql manual en las sesiones de mantenimiento).
+LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-sfsmpickup-db}"
+
 CLOUD_URL="postgresql://postgres:${CLOUD_DB_PASSWORD}@db.fvzhfzogigewsvcyopel.supabase.co:5432/postgres"
 
-echo "== 1/3: vaciando las tablas destino en la nube =="
+echo "== 1/4: vaciando las tablas destino en la nube =="
+# active_critical_medications es una VISTA (sobre medication_schedule), no
+# una tabla — no se puede truncar, y no hace falta: se vacía sola al
+# truncar la tabla real debajo.
 psql "$CLOUD_URL" <<'SQL'
 TRUNCATE TABLE
   auth.identities,
   auth.users,
-  public._backfill_20260808, public.active_critical_medications, public.audit_logs,
+  public._backfill_20260808, public.audit_logs,
   public.bus_daily_exclusions, public.bus_routes, public.camera_detections,
   public.carpool_authorizations, public.carpool_overrides, public.compliance_action_items,
   public.compliance_resources, public.compliance_status, public.daily_reports,
@@ -37,15 +44,37 @@ TRUNCATE TABLE
 CASCADE;
 SQL
 
-echo "== 2/3: volcando datos del local =="
-pg_dump -h localhost -U postgres -d postgres \
+echo "== 2/4: volcando datos del local =="
+# localhost:5432 en este servidor habla con Supavisor (el pooler), no
+# directo con Postgres -- pg_dump necesita la conexión directa, así que
+# corre DENTRO del contenedor de la base (docker exec), igual que ya se
+# hacía con psql en las sesiones de mantenimiento. El stdout del exec sí
+# llega normal al archivo del host.
+docker exec "$LOCAL_DB_CONTAINER" pg_dump -U postgres -d postgres \
   --data-only --no-owner --no-acl --disable-triggers \
   -t 'auth.users' -t 'auth.identities' \
   -t 'public.*' \
-  -f /tmp/local_to_cloud.dump
+  > /tmp/local_to_cloud.dump
 
-echo "== 3/3: cargando en la nube =="
+echo "== 3/4: cargando en la nube =="
 psql "$CLOUD_URL" -f /tmp/local_to_cloud.dump
 
+echo "== 4/4: arreglando columnas de token NULL en auth.users =="
+# Lección ya aprendida la vez pasada (nube->local, 2026-10-01): pg_dump
+# deja estas columnas en NULL en vez de '', y GoTrue no puede escanear
+# NULL ahí -- rompe /admin/users con 500 ("Database error finding
+# users"). Se corrige antes de que nadie intente loguearse contra la nube.
+psql "$CLOUD_URL" <<'SQL'
+UPDATE auth.users SET
+  confirmation_token = COALESCE(confirmation_token, ''),
+  recovery_token = COALESCE(recovery_token, ''),
+  email_change_token_current = COALESCE(email_change_token_current, ''),
+  email_change_token_new = COALESCE(email_change_token_new, ''),
+  email_change = COALESCE(email_change, ''),
+  phone_change = COALESCE(phone_change, ''),
+  phone_change_token = COALESCE(phone_change_token, ''),
+  reauthentication_token = COALESCE(reauthentication_token, '');
+SQL
+
 echo "Listo. Verificando conteos..."
-psql "$CLOUD_URL" -c "select 'auth.users' as tabla, count(*) from auth.users union all select 'profiles', count(*) from public.profiles union all select 'tenants', count(*) from public.tenants union all select 'pickup_events', count(*) from public.pickup_events;"
+psql "$CLOUD_URL" -c "select 'auth.users' as tabla, count(*) from auth.users union all select 'auth.identities', count(*) from auth.identities union all select 'profiles', count(*) from public.profiles union all select 'tenants', count(*) from public.tenants union all select 'pickup_events', count(*) from public.pickup_events;"
